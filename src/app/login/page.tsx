@@ -1,0 +1,253 @@
+"use client";
+
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { IconEye, IconEyeOff } from "@/components/icons";
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+type Mode = "login" | "forgot-email" | "forgot-code";
+
+function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [mode, setMode] = useState<Mode>("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  function goNext() {
+    const next = searchParams.get("next") ?? "/";
+    router.push(next);
+    router.refresh();
+  }
+
+  async function onLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong");
+        return;
+      }
+      goNext();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onSendCode(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setInfo(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/forgot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Couldn't send the code");
+        return;
+      }
+      setInfo(`We sent a 6-digit code to ${email}. It expires in 10 minutes.`);
+      setMode("forgot-code");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onVerifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/verify-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Invalid code");
+        return;
+      }
+      goNext();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setError(null);
+    setInfo(null);
+    setPassword("");
+    setCode("");
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="w-full max-w-sm"
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl">Aina CRM</CardTitle>
+            <CardDescription>
+              {mode === "login"
+                ? "Sign in with your @ainatech.in account"
+                : mode === "forgot-email"
+                  ? "Enter your account email to receive a sign-in code"
+                  : "Enter the code we emailed you"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {mode === "login" && (
+              <form onSubmit={onLogin} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@ainatech.in"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <button
+                      type="button"
+                      onClick={() => switchMode("forgot-email")}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      className="pr-9"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+                <Button type="submit" disabled={loading} className="mt-2">
+                  {loading ? "Signing in..." : "Sign in"}
+                </Button>
+              </form>
+            )}
+
+            {mode === "forgot-email" && (
+              <form onSubmit={onSendCode} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="forgot-email">Email</Label>
+                  <Input
+                    id="forgot-email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@ainatech.in"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+                <Button type="submit" disabled={loading} className="mt-2">
+                  {loading ? "Sending code..." : "Send code"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => switchMode("login")}
+                  className="text-center text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Back to sign in
+                </button>
+              </form>
+            )}
+
+            {mode === "forgot-code" && (
+              <form onSubmit={onVerifyCode} className="flex flex-col gap-4">
+                {info && <p className="text-sm text-emerald-500">{info}</p>}
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="code">Verification code</Label>
+                  <Input
+                    id="code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="123456"
+                    maxLength={6}
+                    className="text-center text-lg tracking-[0.5em]"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                    required
+                  />
+                </div>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+                <Button type="submit" disabled={loading} className="mt-2">
+                  {loading ? "Verifying..." : "Verify & sign in"}
+                </Button>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <button type="button" onClick={() => switchMode("forgot-email")} className="hover:text-foreground">
+                    Change email
+                  </button>
+                  <button type="button" onClick={onSendCode} className="hover:text-foreground">
+                    Resend code
+                  </button>
+                </div>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          Access is invite-only. Contact your admin if you need an account.
+        </p>
+      </motion.div>
+    </div>
+  );
+}

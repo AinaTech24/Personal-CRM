@@ -1,0 +1,576 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ---------- Core / Auth ----------
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  DEPARTMENT_USER
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  users            User[]
+  leads            Lead[]
+  projects         Project[]
+  quotations       Quotation[]
+  invoices         Invoice[]
+  invites          Invite[]
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  surname       String?
+  mobile        String?
+  avatarDataUrl String?  @db.LongText
+  role          Role     @default(DEPARTMENT_USER)
+  departmentId  String?
+  department    Department? @relation(fields: [departmentId], references: [id])
+  isActive      Boolean  @default(true)
+  resetCode          String?   // bcrypt hash of the email login/reset code
+  resetCodeExpiresAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  invitesSent        Invite[]           @relation("InvitedBy")
+  notifications      Notification[]
+
+  leadsCreated       Lead[]             @relation("LeadCreatedBy")
+  leadsAssigned      Lead[]             @relation("LeadAssignedTo")
+  leadNotes          LeadNote[]
+  leadActivities     LeadActivity[]
+  leadReminders      LeadReminder[]
+
+  tasksCreated       Task[]             @relation("TaskCreatedBy")
+  tasksAssigned      Task[]             @relation("TaskAssignedTo")
+  taskComments       TaskComment[]
+  taskAttachments    TaskAttachment[]
+
+  projectsCreated    Project[]          @relation("ProjectCreatedBy")
+  projectsAssigned   Project[]          @relation("ProjectAssignedTo")
+  projectMemberships ProjectMember[]
+  projectDocuments   ProjectDocument[]
+  projectActivities  ProjectActivity[]
+  projectTasksAssigned ProjectTask[]    @relation("ProjectTaskAssignedTo")
+
+  quotationsCreated  Quotation[]        @relation("QuotationCreatedBy")
+  quotationApprovals QuotationApproval[]
+
+  invoicesCreated    Invoice[]          @relation("InvoiceCreatedBy")
+  paymentsRecorded   Payment[]
+}
+
+model Invite {
+  id           String     @id @default(cuid())
+  email        String
+  role         Role
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  token        String     @unique
+  invitedById  String
+  invitedBy    User       @relation("InvitedBy", fields: [invitedById], references: [id])
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  createdAt    DateTime   @default(now())
+
+  @@index([email])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  type      String
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+// ---------- Leads ----------
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL_SENT
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  DUE
+  COMPLETED
+}
+
+model Lead {
+  id              String         @id @default(cuid())
+  name            String
+  company         String?
+  email           String?
+  phone           String?
+  source          String?
+  product         String?
+  priority        Priority       @default(MEDIUM)
+  status          LeadStatus     @default(NEW)
+  leadArriveDate  DateTime?
+  meetingDate     DateTime?
+  meetingStatus   MeetingStatus?
+  assignedToId    String?
+  assignedTo      User?          @relation("LeadAssignedTo", fields: [assignedToId], references: [id])
+  departmentId    String?
+  department      Department?    @relation(fields: [departmentId], references: [id])
+  createdById     String
+  createdBy       User           @relation("LeadCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  notes       LeadNote[]
+  activities  LeadActivity[]
+  reminders   LeadReminder[]
+  quotations  Quotation[]
+
+  @@index([status])
+  @@index([departmentId])
+  @@index([assignedToId])
+}
+
+model LeadNote {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String   @db.Text
+  createdAt DateTime @default(now())
+}
+
+model LeadActivity {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id])
+  action    String
+  meta      Json?
+  createdAt DateTime @default(now())
+}
+
+model LeadReminder {
+  id          String    @id @default(cuid())
+  leadId      String
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  dueAt       DateTime
+  note        String?
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+// ---------- Tasks ----------
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+model Task {
+  id                 String     @id @default(cuid())
+  title              String
+  description        String?    @db.Text
+  status             TaskStatus @default(TODO)
+  priority           Priority   @default(MEDIUM)
+  dueDate            DateTime?
+  assignedToId       String?
+  assignedTo         User?      @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
+  createdById        String
+  createdBy          User       @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  projectTaskParentId String?   @unique
+  projectTaskParent  ProjectTask? @relation(fields: [projectTaskParentId], references: [id])
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  comments    TaskComment[]
+  attachments TaskAttachment[]
+
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String   @db.Text
+  createdAt DateTime @default(now())
+}
+
+model TaskAttachment {
+  id           String   @id @default(cuid())
+  taskId       String
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileName     String
+  filePath     String
+  data         String?  @db.LongText // base64-encoded file bytes stored in MySQL
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+// ---------- Projects ----------
+
+enum ProjectStatus {
+  PLANNED
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+model Project {
+  id           String        @id @default(cuid())
+  name         String
+  description  String?       @db.Text
+  departmentId String
+  department   Department    @relation(fields: [departmentId], references: [id])
+  status       ProjectStatus @default(PLANNED)
+  progress     Int           @default(0)
+  isActive     Boolean       @default(true)
+  startDate    DateTime?
+  endDate      DateTime?
+  createdById  String
+  createdBy    User          @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  assignedToId String?
+  assignedTo   User?         @relation("ProjectAssignedTo", fields: [assignedToId], references: [id])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  members     ProjectMember[]
+  milestones  Milestone[]
+  tasks       ProjectTask[]
+  documents   ProjectDocument[]
+  activities  ProjectActivity[]
+
+  @@index([departmentId])
+  @@index([status])
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  role      String   @default("member")
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+}
+
+enum MilestoneStatus {
+  PENDING
+  WORKING
+  DONE
+}
+
+model Milestone {
+  id          String          @id @default(cuid())
+  projectId   String
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  dueDate     DateTime?
+  status      MilestoneStatus @default(PENDING)
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+
+  tasks ProjectTask[]
+}
+
+model ProjectTask {
+  id           String     @id @default(cuid())
+  projectId    String
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestoneId  String?
+  milestone    Milestone? @relation(fields: [milestoneId], references: [id])
+  title        String
+  description  String?    @db.Text
+  status       TaskStatus @default(TODO)
+  dueDate      DateTime?
+  progressPct  Int        @default(0)
+  assignedToId String?
+  assignedTo   User?      @relation("ProjectTaskAssignedTo", fields: [assignedToId], references: [id])
+  parentTaskId String?
+  parentTask   ProjectTask?  @relation("SubTasks", fields: [parentTaskId], references: [id])
+  subTasks     ProjectTask[] @relation("SubTasks")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  linkedTask       Task?
+  dependsOn        ProjectTaskDependency[] @relation("DependentTask")
+  dependents       ProjectTaskDependency[] @relation("DependsOnTask")
+
+  @@index([projectId])
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model ProjectTaskDependency {
+  id            String      @id @default(cuid())
+  taskId        String
+  task          ProjectTask @relation("DependentTask", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnId   String
+  dependsOnTask ProjectTask @relation("DependsOnTask", fields: [dependsOnId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, dependsOnId])
+}
+
+model ProjectDocument {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fileName     String
+  filePath     String
+  data         String?  @db.LongText // base64-encoded file bytes stored in MySQL
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model ProjectActivity {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id])
+  action    String
+  meta      Json?
+  createdAt DateTime @default(now())
+}
+
+// ---------- Quotations ----------
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+model Quotation {
+  id               String          @id @default(cuid())
+  quotationNumber  String          @unique
+  clientName       String
+  clientEmail      String?
+  leadId           String?
+  lead             Lead?           @relation(fields: [leadId], references: [id])
+  status           QuotationStatus @default(DRAFT)
+  subtotal         Decimal         @default(0) @db.Decimal(12, 2)
+  gstAmount        Decimal         @default(0) @db.Decimal(12, 2)
+  discount         Decimal         @default(0) @db.Decimal(12, 2)
+  total            Decimal         @default(0) @db.Decimal(12, 2)
+  validUntil       DateTime?
+  clientAddress          String?  @db.Text
+  clientGstin            String?
+  shipToAddress          String?  @db.Text
+  shipToGstin            String?
+  placeOfSupply          String?
+  subject                String?
+  notes                  String?  @db.Text
+  sellerName             String?
+  sellerAddress          String?  @db.Text
+  sellerGstin            String?
+  sellerPhone            String?
+  sellerEmail            String?
+  sellerWebsite          String?
+  sellerSignatory        String?
+  sellerLogoDataUrl      String?  @db.LongText
+  sellerSignatureDataUrl String?  @db.LongText
+  createdById      String
+  createdBy        User            @relation("QuotationCreatedBy", fields: [createdById], references: [id])
+  departmentId     String?
+  department       Department?     @relation(fields: [departmentId], references: [id])
+  currentVersion   Int             @default(1)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  items      QuotationItem[]
+  versions   QuotationVersion[]
+  approvals  QuotationApproval[]
+  invoices   Invoice[]
+
+  @@index([status])
+  @@index([departmentId])
+}
+
+model QuotationItem {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  description String
+  hsnSac      String?
+  qty         Decimal   @default(1) @db.Decimal(10, 2)
+  unitPrice   Decimal   @db.Decimal(12, 2)
+  gstRate     Decimal   @default(18) @db.Decimal(5, 2)
+  lineTotal   Decimal   @db.Decimal(12, 2)
+}
+
+model QuotationVersion {
+  id            String    @id @default(cuid())
+  quotationId   String
+  quotation     Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  snapshot      Json
+  createdAt     DateTime  @default(now())
+
+  @@unique([quotationId, versionNumber])
+}
+
+model QuotationApproval {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  approverId  String
+  approver    User      @relation(fields: [approverId], references: [id])
+  decision    String
+  comment     String?   @db.Text
+  decidedAt   DateTime  @default(now())
+}
+
+// ---------- Invoices ----------
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  PARTIAL_PAYMENT
+  OVERDUE
+  CANCELLED
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  invoiceNumber  String        @unique
+  quotationId    String?
+  quotation      Quotation?    @relation(fields: [quotationId], references: [id])
+  clientName     String
+  clientEmail    String?
+  clientAddress  String?       @db.Text
+  clientGstin    String?
+  shipToAddress  String?       @db.Text
+  shipToGstin    String?
+  invoiceDate    DateTime      @default(now())
+  terms          String?
+  poNumber       String?
+  placeOfSupply  String?
+  subject        String?
+  notes          String?       @db.Text
+  sellerName             String?
+  sellerAddress          String?       @db.Text
+  sellerGstin            String?
+  sellerPhone            String?
+  sellerEmail            String?
+  sellerWebsite          String?
+  sellerSignatory        String?
+  sellerLogoDataUrl      String?       @db.LongText
+  sellerSignatureDataUrl String?       @db.LongText
+  status         InvoiceStatus @default(DRAFT)
+  subtotal       Decimal       @default(0) @db.Decimal(12, 2)
+  gstAmount      Decimal       @default(0) @db.Decimal(12, 2)
+  total          Decimal       @default(0) @db.Decimal(12, 2)
+  dueDate        DateTime?
+  createdById    String
+  createdBy      User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+  departmentId   String?
+  department     Department?   @relation(fields: [departmentId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  items    InvoiceItem[]
+  payments Payment[]
+
+  @@index([status])
+  @@index([departmentId])
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  hsnSac      String?
+  qty         Decimal @default(1) @db.Decimal(10, 2)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  gstRate     Decimal @default(18) @db.Decimal(5, 2)
+  lineTotal   Decimal @db.Decimal(12, 2)
+}
+
+/** Single-row seller profile used as the header on printed invoices/quotations. */
+model CompanyProfile {
+  id               String   @id @default("default")
+  name             String   @default("")
+  addressLines     String?  @db.Text
+  gstin            String?
+  phone            String?
+  email            String?
+  website          String?
+  signatoryName    String?
+  logoDataUrl      String?  @db.LongText
+  signatureDataUrl String?  @db.LongText
+  updatedAt        DateTime @updatedAt
+}
+
+/** Single-row SMTP configuration for outgoing mail (invites, etc.). */
+model SmtpSettings {
+  id        String   @id @default("default")
+  host      String?
+  port      Int      @default(587)
+  secure    Boolean  @default(false)
+  username  String?
+  password  String?
+  fromEmail String?
+  fromName  String?  @default("Aina CRM")
+  updatedAt DateTime @updatedAt
+}
+
+model Payment {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount       Decimal  @db.Decimal(12, 2)
+  method       String
+  paidAt       DateTime @default(now())
+  recordedById String
+  recordedBy   User     @relation(fields: [recordedById], references: [id])
+  note         String?
+}

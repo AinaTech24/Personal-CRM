@@ -1,0 +1,54 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import { canManageTask } from "@/lib/tasks";
+import { getProjectForUser } from "@/lib/projects";
+import { mimeTypeFor } from "@/lib/uploads";
+
+/** Serves task attachments and project documents straight from their base64 MySQL column. */
+export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { path: segments } = await params;
+  const relativePath = segments.join("/");
+  const inline = req.nextUrl.searchParams.get("mode") === "view";
+  const scope = segments[0];
+
+  let fileName: string;
+  let data: string | null;
+
+  if (scope === "tasks") {
+    const attachment = await db.taskAttachment.findFirst({
+      where: { filePath: relativePath },
+      include: { task: { select: { createdById: true, assignedToId: true } } },
+    });
+    if (!attachment) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!canManageTask(user, attachment.task)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    fileName = attachment.fileName;
+    data = attachment.data;
+  } else if (scope === "projects") {
+    const document = await db.projectDocument.findFirst({ where: { filePath: relativePath } });
+    if (!document) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const access = await getProjectForUser(user, document.projectId);
+    if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    fileName = document.fileName;
+    data = document.data;
+  } else {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  if (!data) return NextResponse.json({ error: "File data missing" }, { status: 404 });
+
+  const buffer = Buffer.from(data, "base64");
+  const disposition = inline ? "inline" : "attachment";
+  return new NextResponse(new Uint8Array(buffer), {
+    headers: {
+      "Content-Type": mimeTypeFor(fileName),
+      "Content-Disposition": `${disposition}; filename="${encodeURIComponent(fileName)}"`,
+    },
+  });
+}

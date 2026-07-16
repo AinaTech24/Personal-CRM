@@ -1,0 +1,102 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { IconBuildingCog, IconLogOut, IconSettings, IconUser } from "@/components/icons";
+import { CompanyProfileDialog } from "@/components/billing/company-profile-dialog";
+import { ProfileSettingsDialog } from "@/components/layout/profile-settings-dialog";
+import { Tooltip } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
+export function UserMenu({ name, email, isAdmin }: { name: string; email: string; isAdmin: boolean }) {
+  const router = useRouter();
+  const [companyOpen, setCompanyOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [avatar, setAvatar] = useState<string | null>(null);
+
+  // Load the current user's avatar for the menu button.
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setAvatar(d.user?.avatarDataUrl ?? null))
+      .catch(() => {});
+  }, []);
+
+  async function onLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
+
+  function refreshAvatar() {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setAvatar(d.user?.avatarDataUrl ?? null))
+      .catch(() => {});
+  }
+
+  return (
+    <>
+      <DropdownMenu.Root>
+        <Tooltip label="Account" side="bottom">
+          <DropdownMenu.Trigger asChild>
+            <button
+              aria-label="Account menu"
+              className={cn(
+                "flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border",
+                avatar ? "bg-transparent" : "bg-primary text-primary-foreground"
+              )}
+            >
+              {avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatar} alt="Profile" className="h-full w-full rounded-full object-contain" />
+              ) : (
+                <IconUser className="h-4 w-4" />
+              )}
+            </button>
+          </DropdownMenu.Trigger>
+        </Tooltip>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            align="end"
+            sideOffset={8}
+            className="z-50 w-56 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
+          >
+            <div className="px-2 py-1.5">
+              <p className="text-sm font-medium">{name}</p>
+              <p className="text-xs text-muted-foreground">{email}</p>
+            </div>
+            <DropdownMenu.Separator className="my-1 h-px bg-border" />
+            <DropdownMenu.Item
+              onSelect={() => setSettingsOpen(true)}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
+            >
+              <IconSettings className="h-3.5 w-3.5" />
+              Settings
+            </DropdownMenu.Item>
+            {isAdmin && (
+              <DropdownMenu.Item
+                onSelect={() => setCompanyOpen(true)}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
+              >
+                <IconBuildingCog className="h-3.5 w-3.5" />
+                Company profile
+              </DropdownMenu.Item>
+            )}
+            <DropdownMenu.Item
+              onSelect={onLogout}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
+            >
+              <IconLogOut className="h-3.5 w-3.5" />
+              Log out
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+
+      <ProfileSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={refreshAvatar} />
+      {isAdmin && <CompanyProfileDialog open={companyOpen} onOpenChange={setCompanyOpen} />}
+    </>
+  );
+}

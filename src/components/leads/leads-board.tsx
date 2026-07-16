@@ -1,0 +1,388 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
+import { AnimatePresence, motion } from "framer-motion";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Dropdown } from "@/components/ui/dropdown";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageLoader } from "@/components/ui/loader";
+import { HoverCheckbox } from "@/components/ui/checkbox";
+import { SelectionBar } from "@/components/ui/selection-bar";
+import { NewLeadDialog } from "@/components/leads/new-lead-dialog";
+import { LeadDetailDialog } from "@/components/leads/lead-detail-dialog";
+import { LeadsListView } from "@/components/leads/leads-list-view";
+import { useSearch } from "@/components/providers/search-provider";
+import { useSocket } from "@/components/providers/socket-provider";
+import {
+  LEAD_STATUSES,
+  type AssignableUser,
+  type LeadStatus,
+  type LeadSummary,
+} from "@/components/leads/types";
+import { cn } from "@/lib/utils";
+
+interface Department {
+  id: string;
+  name: string;
+}
+
+interface CurrentUser {
+  role: "SUPER_ADMIN" | "ADMIN" | "DEPARTMENT_USER";
+}
+
+type ViewMode = "pipeline" | "list";
+
+const VIEW_OPTIONS = [
+  { value: "pipeline", label: "Pipeline view" },
+  { value: "list", label: "List view" },
+];
+
+const PRIORITY_VARIANT = {
+  LOW: "secondary",
+  MEDIUM: "default",
+  HIGH: "warning",
+  URGENT: "destructive",
+} as const;
+
+export function LeadsBoard() {
+  const { query } = useSearch();
+  const { socket } = useSocket();
+  const [leads, setLeads] = useState<LeadSummary[]>([]);
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [selectedLead, setSelectedLead] = useState<LeadSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverStatus, setDragOverStatus] = useState<LeadStatus | null>(null);
+  const [view, setView] = useState<ViewMode>("pipeline");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const { containerRef: scrollContainerRef, onDragOver: handleBoardDragOver, stop: stopAutoScroll } =
+    useDragAutoScroll<HTMLDivElement>();
+
+  async function loadLeads() {
+    const res = await fetch("/api/leads");
+    const data = await res.json();
+    if (res.ok) setLeads(data.leads);
+  }
+
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const [leadsRes, usersRes, meRes] = await Promise.all([
+        fetch("/api/leads"),
+        fetch("/api/users/assignable"),
+        fetch("/api/auth/me"),
+      ]);
+      const [leadsData, usersData, meData] = await Promise.all([
+        leadsRes.json(),
+        usersRes.json(),
+        meRes.json(),
+      ]);
+      if (leadsRes.ok) setLeads(leadsData.leads);
+      if (usersRes.ok) setAssignableUsers(usersData.users);
+      if (meRes.ok) setCurrentUser(meData.user);
+
+      const isAdmin = meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN";
+      if (isAdmin) {
+        const deptRes = await fetch("/api/departments");
+        const deptData = await deptRes.json();
+        if (deptRes.ok) setDepartments(deptData.departments);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onLeadChange = () => loadLeads();
+    socket.on("lead_created", onLeadChange);
+    socket.on("lead_updated", onLeadChange);
+    socket.on("lead_deleted", onLeadChange);
+    return () => {
+      socket.off("lead_created", onLeadChange);
+      socket.off("lead_updated", onLeadChange);
+      socket.off("lead_deleted", onLeadChange);
+    };
+  }, [socket]);
+
+  const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
+
+  const filteredLeads = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return leads;
+    return leads.filter((lead) =>
+      [lead.name, lead.company, lead.email, lead.product]
+        .filter(Boolean)
+        .some((field) => field!.toLowerCase().includes(q))
+    );
+  }, [leads, query]);
+
+  async function moveLead(leadId: string, status: LeadStatus) {
+    const current = leads.find((l) => l.id === leadId);
+    if (!current || current.status === status) return;
+
+    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status } : l)));
+
+    const res = await fetch(`/api/leads/${leadId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+
+    if (!res.ok) {
+      setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status: current.status } : l)));
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllIds(ids: string[]) {
+    setSelectedIds((prev) => {
+      const allSelected = ids.every((id) => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) {
+        ids.forEach((id) => next.delete(id));
+      } else {
+        ids.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
+
+  function exitSelectionMode() {
+    setSelectedIds(new Set());
+  }
+
+  function handleLeadClick(lead: LeadSummary) {
+    if (selectedIds.size > 0) {
+      toggleSelected(lead.id);
+    } else {
+      setSelectedLead(lead);
+    }
+  }
+
+  async function handleBulkDelete() {
+    const res = await fetch("/api/leads", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    });
+    if (res.ok) {
+      exitSelectionMode();
+      await loadLeads();
+    }
+  }
+
+  const allFilteredSelected = filteredLeads.length > 0 && filteredLeads.every((l) => selectedIds.has(l.id));
+
+  return (
+    <div className="flex h-full flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Leads</h1>
+          <p className="text-sm text-muted-foreground">
+            {filteredLeads.length} lead{filteredLeads.length === 1 ? "" : "s"} in your pipeline
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <AnimatePresence initial={false}>
+            {selectedIds.size > 0 ? (
+              <SelectionBar
+                key="selection"
+                count={selectedIds.size}
+                allSelected={allFilteredSelected}
+                onSelectAll={() => toggleSelectAllIds(filteredLeads.map((l) => l.id))}
+                onCancel={exitSelectionMode}
+                onDelete={() => setConfirmOpen(true)}
+              />
+            ) : (
+              <motion.div
+                key="actions"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.12 }}
+                className="flex items-center gap-2"
+              >
+                <Dropdown
+                  size="sm"
+                  value={view}
+                  onChange={(v) => setView(v as ViewMode)}
+                  options={VIEW_OPTIONS}
+                  className="w-40"
+                />
+                <NewLeadDialog
+                  isAdmin={!!isAdmin}
+                  assignableUsers={assignableUsers}
+                  departments={departments}
+                  onCreated={loadLeads}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {loading && <PageLoader />}
+
+      {!loading && view === "list" && (
+        <LeadsListView
+          leads={filteredLeads}
+          onSelect={handleLeadClick}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelected}
+        />
+      )}
+
+      {!loading && view === "pipeline" && (
+        <div
+          ref={scrollContainerRef}
+          className="flex flex-1 gap-3 overflow-x-auto overflow-y-hidden pb-4 focus:outline-none"
+          onWheel={(e) => {
+            if (e.deltaY === 0) return;
+            e.currentTarget.scrollLeft += e.deltaY;
+          }}
+          onDragOver={handleBoardDragOver}
+        >
+          {LEAD_STATUSES.map((col) => {
+            const columnLeads = filteredLeads.filter((l) => l.status === col.value);
+            const isDragOver = dragOverStatus === col.value;
+            const allColumnSelected = columnLeads.length > 0 && columnLeads.every((l) => selectedIds.has(l.id));
+            return (
+              <div
+                key={col.value}
+                className={cn(
+                  "flex w-72 shrink-0 flex-col gap-2 rounded-lg p-1.5 transition-colors",
+                  isDragOver && "bg-accent/60"
+                )}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOverStatus(col.value);
+                }}
+                onDragLeave={() => setDragOverStatus((s) => (s === col.value ? null : s))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const leadId = e.dataTransfer.getData("text/plain");
+                  setDragOverStatus(null);
+                  setDraggingId(null);
+                  stopAutoScroll();
+                  if (leadId) moveLead(leadId, col.value);
+                }}
+              >
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {col.label}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {selectedIds.size > 0 && columnLeads.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSelectAllIds(columnLeads.map((l) => l.id))}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        {allColumnSelected ? "Clear" : "All"}
+                      </button>
+                    )}
+                    <span className="text-xs text-muted-foreground">{columnLeads.length}</span>
+                  </div>
+                </div>
+                <div className="flex min-h-8 flex-col gap-2">
+                  {columnLeads.map((lead) => (
+                    <motion.div
+                      key={lead.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <Card
+                        draggable={selectedIds.size === 0}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", lead.id);
+                          e.dataTransfer.effectAllowed = "move";
+                          setDraggingId(lead.id);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingId(null);
+                          setDragOverStatus(null);
+                          stopAutoScroll();
+                        }}
+                        className={cn(
+                          "group relative select-none p-3 transition-colors hover:border-primary/40",
+                          selectedIds.size === 0 && "cursor-grab active:cursor-grabbing",
+                          draggingId === lead.id && "opacity-30",
+                          selectedIds.has(lead.id) && "border-primary/60 bg-accent/40"
+                        )}
+                        onClick={() => handleLeadClick(lead)}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 items-start">
+                            <HoverCheckbox
+                              checked={selectedIds.has(lead.id)}
+                              onChange={() => toggleSelected(lead.id)}
+                              aria-label={`Select ${lead.name}`}
+                              wrapperClassName="mt-0.5"
+                            />
+                            <p className="text-sm font-medium">{lead.name}</p>
+                          </div>
+                          <Badge variant={PRIORITY_VARIANT[lead.priority]}>{lead.priority}</Badge>
+                        </div>
+                        {lead.company && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">{lead.company}</p>
+                        )}
+                        <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                          <span>{lead.assignedTo ? lead.assignedTo.name : "Unassigned"}</span>
+                          <span>
+                            {lead._count.notes > 0 && `${lead._count.notes} note${lead._count.notes === 1 ? "" : "s"}`}
+                          </span>
+                        </div>
+                      </Card>
+                    </motion.div>
+                  ))}
+                  {columnLeads.length === 0 && (
+                    <p className="px-1 text-xs text-muted-foreground/60">No leads</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <LeadDetailDialog
+        leadId={selectedLead?.id ?? null}
+        initialSummary={selectedLead}
+        assignableUsers={assignableUsers}
+        onClose={() => setSelectedLead(null)}
+        onChanged={loadLeads}
+        onDeleted={() => {
+          setSelectedLead(null);
+          loadLeads();
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`Delete ${selectedIds.size} lead${selectedIds.size === 1 ? "" : "s"}?`}
+        description="This will permanently delete the selected lead(s) along with their notes, reminders, and activity history. This action cannot be undone."
+        onConfirm={handleBulkDelete}
+      />
+    </div>
+  );
+}

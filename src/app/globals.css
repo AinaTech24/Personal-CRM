@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0c;
+  --foreground: #edeef2;
+  --card: #131318;
+  --card-foreground: #edeef2;
+  --popover: #131318;
+  --popover-foreground: #edeef2;
+  --primary: #dc2626;
+  --primary-foreground: #ffffff;
+  --secondary: #1c1c24;
+  --secondary-foreground: #edeef2;
+  --muted: #1a1a20;
+  --muted-foreground: #9a9aa6;
+  --accent: #1c1c24;
+  --accent-foreground: #edeef2;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #232329;
+  --input: #232329;
+  --ring: #dc2626;
+  --radius: 0.625rem;
+}
+
+:root[data-theme="light"] {
+  --background: #ffffff;
+  --foreground: #0f0f14;
+  --card: #ffffff;
+  --card-foreground: #0f0f14;
+  --popover: #ffffff;
+  --popover-foreground: #0f0f14;
+  --primary: #dc2626;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f6;
+  --secondary-foreground: #0f0f14;
+  --muted: #f4f4f6;
+  --muted-foreground: #6b6b76;
+  --accent: #f4f4f6;
+  --accent-foreground: #0f0f14;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e6e6ea;
+  --input: #e6e6ea;
+  --ring: #dc2626;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+* {
+  border-color: var(--border);
+}
+
+/* Hide scrollbars everywhere (horizontal + vertical) while keeping scroll functional. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Pointer cursor on every clickable control. */
+button:not(:disabled),
+a,
+[role="button"]:not([aria-disabled="true"]),
+summary,
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+
+/* Global red keyboard-focus ring (replaces the browser's default white/blue outline).
+   Elements with their own focus-visible ring (Tailwind's ring-ring) also set
+   outline-none, so this only fills the gap for plain elements like nav links. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
