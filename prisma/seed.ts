@@ -2,9 +2,10 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
+import { buildPoolConfig } from "../src/lib/mysql-pool-config";
 
 async function main() {
-  const adapter = new PrismaMariaDb(process.env.DATABASE_URL!);
+  const adapter = new PrismaMariaDb(buildPoolConfig(process.env.DATABASE_URL!));
   const prisma = new PrismaClient({ adapter });
 
   const email = process.env.SEED_ADMIN_EMAIL;
