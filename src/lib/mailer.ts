@@ -32,12 +32,20 @@ async function resolveConfig(): Promise<ResolvedConfig | null> {
 }
 
 function makeTransport(cfg: ResolvedConfig) {
-  return nodemailer.createTransport({
+  // Built as a variable (not an inline literal) so the extra `family` field —
+  // real nodemailer/Node option, just missing from @types/nodemailer — doesn't
+  // trip up createTransport's overload resolution via excess-property checks.
+  const options = {
     host: cfg.host,
     port: cfg.port,
     secure: cfg.secure,
     auth: { user: cfg.user, pass: cfg.password },
-  });
+    // Force IPv4 — some hosts (e.g. Render) resolve mail hosts like Gmail to an
+    // IPv6 address first but don't actually have outbound IPv6 routing, which
+    // fails with ENETUNREACH before the connection is even attempted.
+    family: 4,
+  };
+  return nodemailer.createTransport(options);
 }
 
 interface SendMailInput {
