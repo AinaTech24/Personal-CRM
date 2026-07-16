@@ -106,11 +106,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   transition={{ type: "spring", stiffness: 400, damping: 32 }}
                   style={{ zIndex: 100 - index }}
                   className={cn(
-                    "pointer-events-auto absolute left-0 right-0 top-0 flex items-start gap-3 rounded-lg border bg-popover px-3.5 py-3 text-popover-foreground shadow-lg",
+                    "pointer-events-auto absolute left-0 right-0 top-0 flex gap-3 rounded-lg border bg-popover px-3.5 py-3 text-popover-foreground shadow-lg",
+                    t.description ? "items-start" : "items-center",
                     style.ring
                   )}
                 >
-                  <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full", style.accent)}>
+                  <span
+                    className={cn(
+                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
+                      t.description && "mt-0.5",
+                      style.accent
+                    )}
+                  >
                     {style.icon}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -121,7 +128,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                     type="button"
                     onClick={() => dismiss(t.id)}
                     aria-label="Dismiss"
-                    className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                    className={cn(
+                      "shrink-0 text-muted-foreground transition-colors hover:text-foreground",
+                      t.description && "mt-0.5"
+                    )}
                   >
                     <IconX className="h-3.5 w-3.5" />
                   </button>
