@@ -157,7 +157,9 @@ export default function EmailSettingsPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium">Use TLS/SSL</p>
-                  <p className="text-xs text-muted-foreground">Secure connection — typically port 465.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Implicit TLS — for port 465. Leave this off for port 587/25 (they use STARTTLS instead).
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -177,6 +179,17 @@ export default function EmailSettingsPage() {
                   />
                 </button>
               </div>
+              {secure && port !== 465 && (
+                <p className="-mt-2 text-xs text-amber-500">
+                  Port {port} with TLS/SSL on will likely fail to connect — that combination needs port 465. Either
+                  switch the port to 465, or turn this toggle off to use STARTTLS on port {port}.
+                </p>
+              )}
+              {!secure && port === 465 && (
+                <p className="-mt-2 text-xs text-amber-500">
+                  Port 465 normally needs TLS/SSL turned on (implicit TLS) — connections without it usually fail.
+                </p>
+              )}
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
