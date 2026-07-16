@@ -8,6 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { IconEye, IconEyeOff } from "@/components/icons";
+import { useToast } from "@/components/providers/toast-provider";
+
+/** Parses a fetch Response as JSON, tolerating empty/non-JSON error bodies (e.g. a bare 500). */
+async function safeJson(res: Response): Promise<{ error?: string; [key: string]: unknown }> {
+  try {
+    return await res.json();
+  } catch {
+    return {};
+  }
+}
 
 export default function LoginPage() {
   return (
@@ -22,13 +32,13 @@ type Mode = "login" | "forgot-email" | "forgot-code";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const toast = useToast();
 
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +50,6 @@ function LoginForm() {
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
     setLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
@@ -48,12 +57,14 @@ function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) {
-        setError(data.error ?? "Something went wrong");
+        toast.error("Couldn't sign in", data.error ?? "Something went wrong. Please try again.");
         return;
       }
       goNext();
+    } catch {
+      toast.error("Couldn't sign in", "Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -61,7 +72,6 @@ function LoginForm() {
 
   async function onSendCode(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
     setInfo(null);
     setLoading(true);
     try {
@@ -70,13 +80,16 @@ function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) {
-        setError(data.error ?? "Couldn't send the code");
+        toast.error("Couldn't send the code", data.error ?? "Something went wrong. Please try again.");
         return;
       }
       setInfo(`We sent a 6-digit code to ${email}. It expires in 10 minutes.`);
+      toast.success("Code sent", `Check ${email}`);
       setMode("forgot-code");
+    } catch {
+      toast.error("Couldn't send the code", "Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -84,7 +97,6 @@ function LoginForm() {
 
   async function onVerifyCode(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
     setLoading(true);
     try {
       const res = await fetch("/api/auth/verify-code", {
@@ -92,12 +104,14 @@ function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, code }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) {
-        setError(data.error ?? "Invalid code");
+        toast.error("Couldn't verify code", data.error ?? "Invalid code");
         return;
       }
       goNext();
+    } catch {
+      toast.error("Couldn't verify code", "Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -105,7 +119,6 @@ function LoginForm() {
 
   function switchMode(next: Mode) {
     setMode(next);
-    setError(null);
     setInfo(null);
     setPassword("");
     setCode("");
@@ -176,7 +189,6 @@ function LoginForm() {
                     </button>
                   </div>
                 </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button type="submit" disabled={loading} className="mt-2">
                   {loading ? "Signing in..." : "Sign in"}
                 </Button>
@@ -197,7 +209,6 @@ function LoginForm() {
                     required
                   />
                 </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button type="submit" disabled={loading} className="mt-2">
                   {loading ? "Sending code..." : "Send code"}
                 </Button>
@@ -228,7 +239,6 @@ function LoginForm() {
                     required
                   />
                 </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
                 <Button type="submit" disabled={loading} className="mt-2">
                   {loading ? "Verifying..." : "Verify & sign in"}
                 </Button>

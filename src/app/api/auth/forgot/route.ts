@@ -12,24 +12,30 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Enter a valid email" }, { status: 400 });
 
   const email = parsed.data.email.toLowerCase();
-  const user = await db.user.findUnique({ where: { email } });
-  if (!user || !user.isActive) {
-    return NextResponse.json({ error: "No active account found with that email" }, { status: 404 });
+
+  try {
+    const user = await db.user.findUnique({ where: { email } });
+    if (!user || !user.isActive) {
+      return NextResponse.json({ error: "No active account found with that email" }, { status: 404 });
+    }
+
+    // 6-digit code, stored hashed with a 10-minute expiry.
+    const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    const resetCode = await hashPassword(code);
+    await db.user.update({
+      where: { id: user.id },
+      data: { resetCode, resetCodeExpiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+    });
+
+    await sendMail({
+      to: user.email,
+      subject: "Your Aina CRM sign-in code",
+      html: resetCodeEmailHtml({ name: user.name, code }),
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[api/auth/forgot] failed:", err);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
-
-  // 6-digit code, stored hashed with a 10-minute expiry.
-  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-  const resetCode = await hashPassword(code);
-  await db.user.update({
-    where: { id: user.id },
-    data: { resetCode, resetCodeExpiresAt: new Date(Date.now() + 10 * 60 * 1000) },
-  });
-
-  await sendMail({
-    to: user.email,
-    subject: "Your Aina CRM sign-in code",
-    html: resetCodeEmailHtml({ name: user.name, code }),
-  });
-
-  return NextResponse.json({ ok: true });
 }
