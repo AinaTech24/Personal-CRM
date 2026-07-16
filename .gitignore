@@ -44,3 +44,6 @@ next-env.d.ts
 
 # local file uploads (attachments, documents)
 /uploads
+
+# scratch/dev-only working files (may contain session cookies, temp scripts, logs)
+/scratchpad
