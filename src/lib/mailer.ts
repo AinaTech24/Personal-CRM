@@ -44,6 +44,12 @@ function makeTransport(cfg: ResolvedConfig) {
     // IPv6 address first but don't actually have outbound IPv6 routing, which
     // fails with ENETUNREACH before the connection is even attempted.
     family: 4,
+    // Without explicit timeouts, a hung/filtered connection falls back to the
+    // OS's default TCP timeout (can be a minute or more) before nodemailer
+    // gives up — bound every phase so a bad config fails back to the UI fast.
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 8000,
   };
   return nodemailer.createTransport(options);
 }
