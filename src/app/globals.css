@@ -105,10 +105,14 @@ input[type="radio"] {
 
 /* Global red keyboard-focus ring (replaces the browser's default white/blue outline).
    Elements with their own focus-visible ring (Tailwind's ring-ring) also set
-   outline-none, so this only fills the gap for plain elements like nav links. */
+   outline-none, so this only fills the gap for plain elements like nav links.
+   transition: none is required — inputs carry Tailwind's `transition-colors`
+   utility, which (unless excluded) animates outline-color too, so the browser's
+   own default outline briefly shows through before easing into red. */
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+  transition: none !important;
 }
 
 button:disabled,
