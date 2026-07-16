@@ -19,6 +19,12 @@ export function buildPoolConfig(databaseUrl: string) {
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
     database: url.pathname.replace(/^\//, ""),
+    // The driver's default connectTimeout is only 1000ms, which is too short for a
+    // managed DB in a different region than the app server (TLS handshake alone can
+    // exceed that). acquireTimeout must be raised too — the pool silently clamps
+    // connectTimeout down to acquireTimeout if the latter is smaller.
+    connectTimeout: 20000,
+    acquireTimeout: 20000,
     // rejectUnauthorized: false trusts the provider's cert without pinning its CA —
     // the connection is still encrypted, just not identity-verified. Fine for a
     // managed DB reached over its own private/TLS endpoint.
