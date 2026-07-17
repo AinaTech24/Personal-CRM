@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+import net from "node:net";
 import nodemailer from "nodemailer";
 import { db } from "@/lib/db";
 
@@ -31,27 +33,54 @@ async function resolveConfig(): Promise<ResolvedConfig | null> {
   return { host, port, secure, user, password, from };
 }
 
-function makeTransport(cfg: ResolvedConfig) {
-  // Built as a variable (not an inline literal) so the extra `family` field —
-  // real nodemailer/Node option, just missing from @types/nodemailer — doesn't
-  // trip up createTransport's overload resolution via excess-property checks.
-  const options = {
-    host: cfg.host,
+/**
+ * Resolves a mail host to an IPv4 address, or null if it has no A record.
+ *
+ * Passing `family: 4` to createTransport does nothing: nodemailer builds its own
+ * socket options and only forwards a fixed set of keys (host, port, localAddress,
+ * tls), so the option is silently dropped and never reaches net.connect.
+ *
+ * Its own resolver isn't a fix either. It keeps an AAAA address whenever
+ * shared.isFamilySupported() sees any non-internal IPv6 address on a network
+ * interface — but a link-local fe80:: address means an interface, not a route.
+ * Hosts with one but no outbound IPv6 (Render, plenty of ISPs) then connect to
+ * Gmail's IPv6 and fail with ENETUNREACH before sending a byte.
+ *
+ * Resolving here sidesteps all of it: nodemailer skips DNS entirely for a host
+ * that's already an IP literal (shared.resolveHostname short-circuits on
+ * net.isIP), so it connects to exactly the address we hand it.
+ */
+async function resolveIpv4(host: string): Promise<string | null> {
+  if (net.isIP(host)) return host;
+  try {
+    const { address } = await lookup(host, { family: 4 });
+    return address;
+  } catch {
+    // No A record, or DNS is down. Fall back to the hostname and let nodemailer
+    // try — an IPv6-only mail host should still work where IPv6 routing exists.
+    return null;
+  }
+}
+
+async function makeTransport(cfg: ResolvedConfig) {
+  const ipv4 = await resolveIpv4(cfg.host);
+  return nodemailer.createTransport({
+    host: ipv4 ?? cfg.host,
     port: cfg.port,
     secure: cfg.secure,
     auth: { user: cfg.user, pass: cfg.password },
-    // Force IPv4 — some hosts (e.g. Render) resolve mail hosts like Gmail to an
-    // IPv6 address first but don't actually have outbound IPv6 routing, which
-    // fails with ENETUNREACH before the connection is even attempted.
-    family: 4,
+    // Connecting by IP would make the certificate check fail (the cert names the
+    // host, not the address), so TLS is pointed back at the real hostname.
+    // Identity is verified against `servername`, so this keeps full validation
+    // rather than weakening it.
+    tls: { servername: cfg.host },
     // Without explicit timeouts, a hung/filtered connection falls back to the
     // OS's default TCP timeout (can be a minute or more) before nodemailer
     // gives up — bound every phase so a bad config fails back to the UI fast.
     connectionTimeout: 8000,
     greetingTimeout: 8000,
     socketTimeout: 8000,
-  };
-  return nodemailer.createTransport(options);
+  });
 }
 
 interface SendMailInput {
@@ -70,7 +99,8 @@ export async function sendMail({ to, subject, html }: SendMailInput) {
     return;
   }
 
-  await makeTransport(cfg).sendMail({ from: cfg.from, to, subject, html });
+  const transport = await makeTransport(cfg);
+  await transport.sendMail({ from: cfg.from, to, subject, html });
 }
 
 /** Verifies the current SMTP configuration by opening a connection. Returns an error message if it fails. */
@@ -78,7 +108,8 @@ export async function verifySmtp(): Promise<{ ok: boolean; error?: string }> {
   const cfg = await resolveConfig();
   if (!cfg) return { ok: false, error: "SMTP is not configured" };
   try {
-    await makeTransport(cfg).verify();
+    const transport = await makeTransport(cfg);
+    await transport.verify();
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Connection failed" };
