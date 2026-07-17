@@ -5,10 +5,12 @@ services:
     plan: starter
     region: singapore
     branch: main
-    # db push (not migrate) because this project has no migrations directory —
-    # schema.prisma is the source of truth. Deliberately no --accept-data-loss:
-    # a destructive schema change fails the build instead of dropping columns.
-    buildCommand: npm ci && npx prisma generate && npx prisma db push && npm run build
+    # Prisma generate + db push live in the "build" script rather than here, so
+    # they run even when this file isn't what drives the service. render.yaml
+    # only applies to Blueprint-linked services; a dashboard-created service
+    # ignores it and uses its own build command. Keeping the steps in the npm
+    # script means any host that runs `npm run build` gets a synced schema.
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /login
     envVars:

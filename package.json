@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node server.js",
-    "build": "next build",
+    "build": "prisma generate && prisma db push && next build",
     "start": "cross-env NODE_ENV=production node server.js",
     "lint": "eslint",
     "db:seed": "tsx prisma/seed.ts",
