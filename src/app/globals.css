@@ -103,16 +103,21 @@ input[type="radio"] {
   cursor: pointer;
 }
 
-/* Global red keyboard-focus ring (replaces the browser's default white/blue outline).
-   Elements with their own focus-visible ring (Tailwind's ring-ring) also set
-   outline-none, so this only fills the gap for plain elements like nav links.
-   transition: none is required — inputs carry Tailwind's `transition-colors`
-   utility, which (unless excluded) animates outline-color too, so the browser's
-   own default outline briefly shows through before easing into red. */
-:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-  transition: none !important;
+/* Global red keyboard-focus ring (replaces the browser's default white/blue outline)
+   for plain elements (nav links, etc.) that don't define their own focus style.
+   Scoped inside @layer base — unlayered CSS always beats Tailwind's utility
+   layer, which was clobbering inputs/buttons that intentionally opt out via
+   focus-visible:outline-none in favor of their own thin ring, producing a
+   double outline. Inside the layer, Tailwind's utilities (a later layer) win
+   as normal, so components that opt out stay opted out.
+   transition: none avoids the outline-color easing in from the browser's
+   default (Tailwind's transition-colors utility includes outline-color). */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    transition: none !important;
+  }
 }
 
 button:disabled,
