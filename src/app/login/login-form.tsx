@@ -43,6 +43,9 @@ function LoginFormInner() {
   const [loading, setLoading] = useState(false);
 
   function goNext() {
+    // The toast outlives the navigation: ToastProvider sits above the router in
+    // the root layout, and this is a client-side push rather than a reload.
+    toast.success("Signed in", `Welcome back, ${email}`);
     const next = searchParams.get("next") ?? "/";
     router.push(next);
     router.refresh();

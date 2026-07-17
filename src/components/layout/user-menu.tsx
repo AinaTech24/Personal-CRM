@@ -7,10 +7,12 @@ import { IconLogOut, IconSettings, IconUser } from "@/components/icons";
 import { SettingsDialog } from "@/components/layout/settings-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
+import { useToast } from "@/components/providers/toast-provider";
 import { cn } from "@/lib/utils";
 
 export function UserMenu({ name, email, isAdmin }: { name: string; email: string; isAdmin: boolean }) {
   const router = useRouter();
+  const toast = useToast();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
@@ -24,9 +26,17 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
   }, []);
 
   async function onLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      // Don't send them to /login on failure: the cookie would still be live, so
+      // they'd be bounced straight back and look logged in again for no reason.
+      if (!res.ok) return toast.error("Couldn't log out", "Please try again.");
+      toast.success("Signed out", "You've been signed out on this device.");
+      router.push("/login");
+      router.refresh();
+    } catch {
+      toast.error("Couldn't log out", "Check your connection and try again.");
+    }
   }
 
   function refreshAvatar() {
