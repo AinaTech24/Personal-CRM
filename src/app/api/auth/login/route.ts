@@ -27,12 +27,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    await createSessionCookie({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      departmentId: user.departmentId,
-    });
+    await createSessionCookie(
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        departmentId: user.departmentId,
+      },
+      req
+    );
 
     return NextResponse.json({
       user: { id: user.id, email: user.email, name: user.name, role: user.role },

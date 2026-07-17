@@ -57,12 +57,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     return created;
   });
 
-  await createSessionCookie({
-    userId: user.id,
-    email: user.email,
-    role: user.role,
-    departmentId: user.departmentId,
-  });
+  await createSessionCookie(
+    {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      departmentId: user.departmentId,
+    },
+    req
+  );
 
   emitToAdmins("user_created", { id: user.id });
 

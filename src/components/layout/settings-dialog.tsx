@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import * as Dialog from "@radix-ui/react-dialog";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,16 +15,43 @@ import { useToast } from "@/components/providers/toast-provider";
 import {
   IconBell,
   IconBuildingCog,
+  IconChevronDown,
   IconMoon,
+  IconPower,
   IconShield,
   IconSliders,
   IconSun,
+  IconTrash,
   IconUser,
   IconX,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 const MAX_IMAGE_BYTES = 1_000_000;
+
+const TIMEZONES = [
+  "Asia/Kolkata",
+  "Asia/Dubai",
+  "Asia/Singapore",
+  "Asia/Hong_Kong",
+  "Asia/Tokyo",
+  "Europe/London",
+  "Europe/Berlin",
+  "America/New_York",
+  "America/Chicago",
+  "America/Los_Angeles",
+  "Australia/Sydney",
+  "UTC",
+];
+
+const LANDING_PAGE_OPTIONS = [
+  { value: "", label: "Dashboard" },
+  { value: "/leads", label: "Leads" },
+  { value: "/tasks", label: "Tasks" },
+  { value: "/projects", label: "Projects" },
+  { value: "/quotations", label: "Quotations" },
+  { value: "/invoices", label: "Invoices" },
+];
 
 function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -33,6 +60,44 @@ function readAsDataUrl(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+function timeAgo(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function deviceLabel(userAgent: string | null): string {
+  if (!userAgent) return "Unknown device";
+  const ua = userAgent;
+  const browser = /Edg\//.test(ua)
+    ? "Edge"
+    : /Chrome\//.test(ua)
+      ? "Chrome"
+      : /Firefox\//.test(ua)
+        ? "Firefox"
+        : /Safari\//.test(ua)
+          ? "Safari"
+          : "Browser";
+  const os = /Windows/.test(ua)
+    ? "Windows"
+    : /Mac OS X/.test(ua)
+      ? "macOS"
+      : /Android/.test(ua)
+        ? "Android"
+        : /iPhone|iPad/.test(ua)
+          ? "iOS"
+          : /Linux/.test(ua)
+            ? "Linux"
+            : "";
+  return os ? `${browser} on ${os}` : browser;
 }
 
 /** Small reusable toggle switch, matching the one used on the SMTP settings page. */
@@ -59,6 +124,9 @@ function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange
   );
 }
 
+const selectClassName =
+  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+
 type SectionId = "profile" | "preferences" | "notifications" | "security" | "company";
 
 interface NavItem {
@@ -76,6 +144,98 @@ const PERSONAL_ITEMS: NavItem[] = [
 ];
 
 const WORKSPACE_ITEMS: NavItem[] = [{ id: "company", label: "Company profile", icon: IconBuildingCog, adminOnly: true }];
+
+function NavButton({
+  item,
+  active,
+  onSelect,
+}: {
+  item: NavItem;
+  active: boolean;
+  onSelect: (id: SectionId) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(item.id)}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors",
+        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+      )}
+    >
+      <item.icon className="h-4 w-4 shrink-0" />
+      {item.label}
+    </button>
+  );
+}
+
+/** A collapsible sidebar category. The height animation needs `auto`, so the
+    items live in an inner div — animating height on the padded wrapper itself
+    would jitter as the padding collapses. */
+function NavGroup({
+  title,
+  items,
+  isOpen,
+  onToggle,
+  section,
+  onSelect,
+}: {
+  title: string;
+  items: NavItem[];
+  isOpen: boolean;
+  onToggle: () => void;
+  section: SectionId;
+  onSelect: (id: SectionId) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+        className="flex w-full items-center justify-between rounded-md px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/70 transition-colors hover:text-muted-foreground"
+      >
+        {title}
+        <motion.span animate={{ rotate: isOpen ? 0 : -90 }} transition={{ duration: 0.2, ease: "easeInOut" }}>
+          <IconChevronDown className="h-3 w-3" />
+        </motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="flex flex-col gap-0.5 pt-0.5">
+              {items.map((item) => (
+                <NavButton key={item.id} item={item} active={section === item.id} onSelect={onSelect} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+interface NotificationPref {
+  category: string;
+  label: string;
+  description: string;
+  inApp: boolean;
+}
+
+interface SessionRow {
+  id: string;
+  userAgent: string | null;
+  ip: string | null;
+  lastSeenAt: string;
+  createdAt: string;
+  isCurrent: boolean;
+}
 
 export function SettingsDialog({
   open,
@@ -97,6 +257,9 @@ export function SettingsDialog({
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingSecurity, setSavingSecurity] = useState(false);
   const [savingCompany, setSavingCompany] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+
+  const [openGroups, setOpenGroups] = useState({ personal: true, workspace: true });
 
   // Profile
   const [name, setName] = useState("");
@@ -106,9 +269,22 @@ export function SettingsDialog({
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
+  // Preferences
+  const [timezone, setTimezone] = useState("Asia/Kolkata");
+  const [defaultLandingPage, setDefaultLandingPage] = useState("");
+  const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
+
+  // Notifications
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPref[]>([]);
+  const [loadingNotif, setLoadingNotif] = useState(false);
+
   // Security
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokingOthers, setRevokingOthers] = useState(false);
 
   // Company profile (admin)
   const [companyLoaded, setCompanyLoaded] = useState(false);
@@ -140,6 +316,9 @@ export function SettingsDialog({
           setMobile(u.mobile ?? "");
           setEmail(u.email ?? "");
           setAvatarDataUrl(u.avatarDataUrl ?? null);
+          setTimezone(u.timezone ?? "Asia/Kolkata");
+          setDefaultLandingPage(u.defaultLandingPage ?? "");
+          setDensity(u.density === "compact" ? "compact" : "comfortable");
         }
       })
       .catch(() => {})
@@ -168,6 +347,28 @@ export function SettingsDialog({
       .finally(() => setCompanyLoaded(true));
   }, [open, isAdmin, section, companyLoaded]);
 
+  // Notification preferences, loaded lazily.
+  useEffect(() => {
+    if (!open || section !== "notifications" || notifPrefs.length > 0) return;
+    setLoadingNotif(true);
+    fetch("/api/notification-preferences")
+      .then((r) => r.json())
+      .then((data) => setNotifPrefs(data.preferences ?? []))
+      .catch(() => {})
+      .finally(() => setLoadingNotif(false));
+  }, [open, section, notifPrefs.length]);
+
+  // Active sessions, loaded lazily.
+  useEffect(() => {
+    if (!open || section !== "security") return;
+    setLoadingSessions(true);
+    fetch("/api/sessions")
+      .then((r) => r.json())
+      .then((data) => setSessions(data.sessions ?? []))
+      .catch(() => {})
+      .finally(() => setLoadingSessions(false));
+  }, [open, section]);
+
   async function onPickImage(file: File | undefined, setter: (v: string | null) => void) {
     if (!file) return;
     if (!file.type.startsWith("image/")) return toast.error("Please choose an image file");
@@ -190,6 +391,37 @@ export function SettingsDialog({
       router.refresh();
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  async function savePreferences() {
+    setSavingPreferences(true);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timezone, defaultLandingPage: defaultLandingPage || null, density }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't save preferences", data.error);
+      document.documentElement.dataset.density = density;
+      toast.success("Preferences saved");
+    } finally {
+      setSavingPreferences(false);
+    }
+  }
+
+  // Optimistic — the toggle flips instantly and rolls back if the save fails.
+  async function toggleNotifPref(category: string, inApp: boolean) {
+    setNotifPrefs((prev) => prev.map((p) => (p.category === category ? { ...p, inApp } : p)));
+    const res = await fetch("/api/notification-preferences", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, inApp }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      setNotifPrefs((prev) => prev.map((p) => (p.category === category ? { ...p, inApp: !inApp } : p)));
+      toast.error("Couldn't update notification setting");
     }
   }
 
@@ -219,6 +451,35 @@ export function SettingsDialog({
     }
   }
 
+  async function revokeSession(id: string) {
+    setRevokingId(id);
+    try {
+      const res = await fetch("/api/sessions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) return toast.error("Couldn't sign out that device");
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      toast.success("Signed out");
+    } finally {
+      setRevokingId(null);
+    }
+  }
+
+  async function revokeOthers() {
+    setRevokingOthers(true);
+    try {
+      const res = await fetch("/api/sessions/revoke-others", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't sign out other devices");
+      setSessions((prev) => prev.filter((s) => s.isCurrent));
+      toast.success(data.revoked > 0 ? `Signed out ${data.revoked} other device${data.revoked === 1 ? "" : "s"}` : "No other devices to sign out");
+    } finally {
+      setRevokingOthers(false);
+    }
+  }
+
   async function saveCompany() {
     setSavingCompany(true);
     try {
@@ -245,23 +506,6 @@ export function SettingsDialog({
     }
   }
 
-  function NavButton({ item }: { item: NavItem }) {
-    const active = section === item.id;
-    return (
-      <button
-        type="button"
-        onClick={() => setSection(item.id)}
-        className={cn(
-          "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors",
-          active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"
-        )}
-      >
-        <item.icon className="h-4 w-4 shrink-0" />
-        {item.label}
-      </button>
-    );
-  }
-
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -275,19 +519,23 @@ export function SettingsDialog({
           {/* Sidebar */}
           <div className="flex w-52 shrink-0 flex-col gap-4 overflow-y-auto border-r border-border bg-card/40 p-3">
             <p className="px-2.5 pt-1 text-sm font-semibold">Settings</p>
-            <div className="flex flex-col gap-0.5">
-              <p className="px-2.5 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">Personal</p>
-              {PERSONAL_ITEMS.map((item) => (
-                <NavButton key={item.id} item={item} />
-              ))}
-            </div>
+            <NavGroup
+              title="Personal"
+              items={PERSONAL_ITEMS}
+              isOpen={openGroups.personal}
+              onToggle={() => setOpenGroups((prev) => ({ ...prev, personal: !prev.personal }))}
+              section={section}
+              onSelect={setSection}
+            />
             {isAdmin && (
-              <div className="flex flex-col gap-0.5">
-                <p className="px-2.5 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">Workspace</p>
-                {WORKSPACE_ITEMS.map((item) => (
-                  <NavButton key={item.id} item={item} />
-                ))}
-              </div>
+              <NavGroup
+                title="Workspace"
+                items={WORKSPACE_ITEMS}
+                isOpen={openGroups.workspace}
+                onToggle={() => setOpenGroups((prev) => ({ ...prev, workspace: !prev.workspace }))}
+                section={section}
+                onSelect={setSection}
+              />
             )}
           </div>
 
@@ -390,9 +638,63 @@ export function SettingsDialog({
                           label="Toggle dark mode"
                         />
                       </div>
-                      <ComingSoon
-                        items={["Timezone", "Language", "Default landing page", "Compact/comfortable density"]}
-                      />
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="set-timezone">Timezone</Label>
+                          <select
+                            id="set-timezone"
+                            className={selectClassName}
+                            value={timezone}
+                            onChange={(e) => setTimezone(e.target.value)}
+                          >
+                            {TIMEZONES.map((tz) => (
+                              <option key={tz} value={tz}>
+                                {tz}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="set-landing">Default landing page</Label>
+                          <select
+                            id="set-landing"
+                            className={selectClassName}
+                            value={defaultLandingPage}
+                            onChange={(e) => setDefaultLandingPage(e.target.value)}
+                          >
+                            {LANDING_PAGE_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="set-language">Language</Label>
+                          <Tooltip label="More languages coming soon">
+                            <select id="set-language" className={cn(selectClassName, "opacity-70")} value="en" disabled>
+                              <option value="en">English</option>
+                            </select>
+                          </Tooltip>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="set-density">Density</Label>
+                          <select
+                            id="set-density"
+                            className={selectClassName}
+                            value={density}
+                            onChange={(e) => setDensity(e.target.value as "comfortable" | "compact")}
+                          >
+                            <option value="comfortable">Comfortable</option>
+                            <option value="compact">Compact</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <Button type="button" onClick={savePreferences} disabled={savingPreferences} className="self-start">
+                        {savingPreferences ? "Saving..." : "Save preferences"}
+                      </Button>
                     </>
                   )}
 
@@ -401,17 +703,36 @@ export function SettingsDialog({
                       <div>
                         <h2 className="text-base font-semibold">Notifications</h2>
                         <p className="text-sm text-muted-foreground">
-                          Control which events notify you and how.
+                          Control which events notify you in-app.
                         </p>
                       </div>
-                      <ComingSoon
-                        items={[
-                          "Per-category toggles (Leads, Tasks, Projects, Quotations, Invoices)",
-                          "In-app vs. email delivery",
-                          "Daily digest mode",
-                          "Quiet hours",
-                        ]}
-                      />
+                      {loadingNotif ? (
+                        <div className="flex justify-center py-6">
+                          <EightDotsRotate className="h-7 w-7" />
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {notifPrefs.map((pref) => (
+                            <div
+                              key={pref.category}
+                              className="flex items-center justify-between gap-4 rounded-md border border-border p-3"
+                            >
+                              <div>
+                                <p className="text-sm font-medium">{pref.label}</p>
+                                <p className="text-xs text-muted-foreground">{pref.description}</p>
+                              </div>
+                              <ToggleSwitch
+                                checked={pref.inApp}
+                                onChange={(v) => toggleNotifPref(pref.category, v)}
+                                label={`Toggle ${pref.label} notifications`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground/70">
+                        Email delivery, digest mode, and quiet hours are coming soon.
+                      </p>
                     </>
                   )}
 
@@ -450,7 +771,64 @@ export function SettingsDialog({
                           {savingSecurity ? "Saving..." : "Change password"}
                         </Button>
                       </div>
-                      <ComingSoon items={["Two-factor authentication", "Active sessions", "Login history"]} />
+
+                      <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium">Active sessions</p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={revokeOthers}
+                            disabled={revokingOthers || sessions.length <= 1}
+                          >
+                            <IconPower className="h-3.5 w-3.5" />
+                            {revokingOthers ? "Signing out..." : "Sign out everywhere else"}
+                          </Button>
+                        </div>
+                        {loadingSessions ? (
+                          <div className="flex justify-center py-4">
+                            <EightDotsRotate className="h-6 w-6" />
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {sessions.map((s) => (
+                              <div
+                                key={s.id}
+                                className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2"
+                              >
+                                <div>
+                                  <p className="flex items-center gap-2 text-sm">
+                                    {deviceLabel(s.userAgent)}
+                                    {s.isCurrent && (
+                                      <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                                        This device
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {s.ip ? `${s.ip} · ` : ""}Active {timeAgo(s.lastSeenAt)}
+                                  </p>
+                                </div>
+                                {!s.isCurrent && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => revokeSession(s.id)}
+                                    disabled={revokingId === s.id}
+                                  >
+                                    <IconTrash className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground/70">
+                        Two-factor authentication is coming soon.
+                      </p>
                     </>
                   )}
 
@@ -576,21 +954,5 @@ export function SettingsDialog({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  );
-}
-
-function ComingSoon({ items }: { items: string[] }) {
-  return (
-    <div className="flex flex-col gap-2 rounded-md border border-dashed border-border p-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">Coming soon</p>
-      <ul className="flex flex-col gap-1">
-        {items.map((item) => (
-          <li key={item} className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/50" />
-            {item}
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }

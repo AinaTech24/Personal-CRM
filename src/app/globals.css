@@ -120,6 +120,16 @@ input[type="radio"] {
   }
 }
 
+/* Compact density — tightens table/card padding app-wide when a user opts in
+   from Settings → Preferences. Applied as a data attribute on <html> by
+   DensityInit (src/components/providers/density-init.tsx) since the value
+   lives on the user record, not something CSS alone can know at load time. */
+html[data-density="compact"] table th,
+html[data-density="compact"] table td {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+
 button:disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;

@@ -43,11 +43,20 @@ model User {
   isActive      Boolean  @default(true)
   resetCode          String?   // bcrypt hash of the email login/reset code
   resetCodeExpiresAt DateTime?
+
+  // Preferences
+  timezone           String?  // IANA timezone, e.g. "Asia/Kolkata"
+  locale             String   @default("en")
+  defaultLandingPage String?  // e.g. "/leads" — null means the Dashboard default
+  density            String   @default("comfortable") // "comfortable" | "compact"
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   invitesSent        Invite[]           @relation("InvitedBy")
   notifications      Notification[]
+  notificationPrefs  NotificationPreference[]
+  sessions           Session[]
 
   leadsCreated       Lead[]             @relation("LeadCreatedBy")
   leadsAssigned      Lead[]             @relation("LeadAssignedTo")
@@ -100,6 +109,33 @@ model Notification {
   createdAt DateTime  @default(now())
 
   @@index([userId, readAt])
+}
+
+/** Per-user, per-category in-app notification toggle. Missing row = enabled (default-on). */
+model NotificationPreference {
+  id       String  @id @default(cuid())
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category String // "leads" | "tasks" | "projects" | "quotations"
+  inApp    Boolean @default(true)
+
+  @@unique([userId, category])
+}
+
+/** A logged-in session/device. The JWT carries this row's id as its `sid` claim,
+    so revoking here (revokedAt) invalidates that cookie immediately, even before
+    it expires — otherwise a JWT has no server-side kill switch. */
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+
+  @@index([userId])
 }
 
 // ---------- Leads ----------

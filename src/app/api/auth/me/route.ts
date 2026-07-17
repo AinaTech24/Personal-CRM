@@ -16,6 +16,10 @@ export async function GET() {
       role: user.role,
       departmentId: user.departmentId,
       department: user.department,
+      timezone: user.timezone,
+      locale: user.locale,
+      defaultLandingPage: user.defaultLandingPage,
+      density: user.density,
     },
   });
 }

@@ -5,6 +5,11 @@ import { getCurrentUser, hashPassword, verifyPassword } from "@/lib/auth";
 
 const MAX_AVATAR = 1_500_000;
 
+/** The dashboard feeds this straight into redirect(), so it must be an allowlist:
+    an arbitrary string would let "/" loop forever and an absolute URL would be an
+    open redirect off-site. null means "the Dashboard", the default. */
+const LANDING_PAGES = ["/leads", "/tasks", "/projects", "/quotations", "/invoices"] as const;
+
 const bodySchema = z.object({
   name: z.string().min(1).max(120).optional(),
   surname: z.string().max(120).nullable().optional(),
@@ -17,6 +22,10 @@ const bodySchema = z.object({
     .optional(),
   currentPassword: z.string().optional(),
   newPassword: z.string().min(8).optional(),
+  timezone: z.string().max(80).nullable().optional(),
+  locale: z.string().max(10).optional(),
+  defaultLandingPage: z.enum(LANDING_PAGES).nullable().optional(),
+  density: z.enum(["comfortable", "compact"]).optional(),
 });
 
 export async function PUT(req: NextRequest) {
@@ -45,9 +54,24 @@ export async function PUT(req: NextRequest) {
       ...(data.surname !== undefined && { surname: data.surname || null }),
       ...(data.mobile !== undefined && { mobile: data.mobile || null }),
       ...(data.avatarDataUrl !== undefined && { avatarDataUrl: data.avatarDataUrl }),
+      ...(data.timezone !== undefined && { timezone: data.timezone }),
+      ...(data.locale !== undefined && { locale: data.locale }),
+      ...(data.defaultLandingPage !== undefined && { defaultLandingPage: data.defaultLandingPage }),
+      ...(data.density !== undefined && { density: data.density }),
       ...(passwordHash && { passwordHash }),
     },
-    select: { id: true, name: true, surname: true, mobile: true, avatarDataUrl: true, email: true },
+    select: {
+      id: true,
+      name: true,
+      surname: true,
+      mobile: true,
+      avatarDataUrl: true,
+      email: true,
+      timezone: true,
+      locale: true,
+      defaultLandingPage: true,
+      density: true,
+    },
   });
 
   return NextResponse.json({ user: updated });

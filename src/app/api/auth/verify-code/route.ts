@@ -31,12 +31,15 @@ export async function POST(req: NextRequest) {
 
     // Consume the code (single use) and sign the user in.
     await db.user.update({ where: { id: user.id }, data: { resetCode: null, resetCodeExpiresAt: null } });
-    await createSessionCookie({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      departmentId: user.departmentId,
-    });
+    await createSessionCookie(
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        departmentId: user.departmentId,
+      },
+      req
+    );
 
     return NextResponse.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role } });
   } catch (err) {

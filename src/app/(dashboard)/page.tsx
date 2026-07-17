@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,10 @@ const modules = [
 
 export default async function DashboardHomePage() {
   const user = await getCurrentUser();
+  // Only redirect to a known module route. Trusting the stored string would let a
+  // stale or hand-written value send users off-site, or loop if it pointed here.
+  const landing = modules.find((m) => m.href === user?.defaultLandingPage);
+  if (landing) redirect(landing.href);
   const admin = user ? isAdmin(user) : false;
 
   return (
