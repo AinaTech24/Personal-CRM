@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { IconLogOut, IconSettings, IconUser } from "@/components/icons";
 import { SettingsDialog } from "@/components/layout/settings-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export function UserMenu({ name, email, isAdmin }: { name: string; email: string; isAdmin: boolean }) {
   const router = useRouter();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
 
   // Load the current user's avatar for the menu button.
@@ -74,7 +76,7 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
               Settings
             </DropdownMenu.Item>
             <DropdownMenu.Item
-              onSelect={onLogout}
+              onSelect={() => setLogoutOpen(true)}
               className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
             >
               <IconLogOut className="h-3.5 w-3.5" />
@@ -85,6 +87,16 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
       </DropdownMenu.Root>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} isAdmin={isAdmin} onSaved={refreshAvatar} />
+
+      <ConfirmDialog
+        open={logoutOpen}
+        onOpenChange={setLogoutOpen}
+        title="Log out?"
+        description={`You'll be signed out of ${email} on this device and returned to the sign-in screen.`}
+        confirmLabel="Log out"
+        loadingLabel="Logging out..."
+        onConfirm={onLogout}
+      />
     </>
   );
 }

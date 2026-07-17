@@ -10,6 +10,8 @@ interface ConfirmDialogProps {
   title: string;
   description: string;
   confirmLabel?: string;
+  /** Shown while onConfirm runs. Defaults to the delete wording this dialog was built for. */
+  loadingLabel?: string;
   onConfirm: () => Promise<void> | void;
 }
 
@@ -19,6 +21,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = "Delete",
+  loadingLabel = "Deleting...",
   onConfirm,
 }: ConfirmDialogProps) {
   const [loading, setLoading] = useState(false);
@@ -46,7 +49,7 @@ export function ConfirmDialog({
               Cancel
             </Button>
             <Button type="button" variant="destructive" disabled={loading} onClick={handleConfirm}>
-              {loading ? "Deleting..." : confirmLabel}
+              {loading ? loadingLabel : confirmLabel}
             </Button>
           </div>
         </DialogBody>
