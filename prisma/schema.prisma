@@ -590,6 +590,19 @@ model CompanyProfile {
 }
 
 /** Single-row SMTP configuration for outgoing mail (invites, etc.). */
+/**
+ * App-level settings an admin can change without a redeploy. Single row, id "default".
+ * Only for values that are genuinely runtime config — infrastructure secrets stay in
+ * the environment: DATABASE_URL is needed to reach this table in the first place, and
+ * JWT_SECRET is read by proxy.ts on the edge, where there's no database connection.
+ */
+model AppSettings {
+  id        String   @id @default("default")
+  /** Base URL used to build links in outbound email. Falls back to APP_URL when unset. */
+  appUrl    String?
+  updatedAt DateTime @updatedAt
+}
+
 model SmtpSettings {
   id        String   @id @default("default")
   host      String?

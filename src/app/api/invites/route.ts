@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser, isAinatechEmail } from "@/lib/auth";
 import { canInviteUsers } from "@/lib/permissions";
 import { sendMail, inviteEmailHtml } from "@/lib/mailer";
+import { getAppUrl } from "@/lib/app-settings";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -73,7 +74,11 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const acceptUrl = `${process.env.APP_URL}/invite/${token}`;
+  // Falling back to the request's own origin keeps invites usable when nothing is
+  // configured. Previously an unset APP_URL silently produced "undefined/invite/...",
+  // which sends fine and is dead on arrival.
+  const baseUrl = (await getAppUrl()) ?? req.nextUrl.origin;
+  const acceptUrl = `${baseUrl}/invite/${token}`;
   await sendMail({
     to: email,
     subject: "You're invited to Aina CRM",
