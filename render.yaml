@@ -5,7 +5,10 @@ services:
     plan: starter
     region: singapore
     branch: main
-    buildCommand: npm ci && npx prisma generate && npm run build
+    # db push (not migrate) because this project has no migrations directory —
+    # schema.prisma is the source of truth. Deliberately no --accept-data-loss:
+    # a destructive schema change fails the build instead of dropping columns.
+    buildCommand: npm ci && npx prisma generate && npx prisma db push && npm run build
     startCommand: npm start
     healthCheckPath: /login
     envVars:
