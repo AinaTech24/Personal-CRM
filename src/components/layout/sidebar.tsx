@@ -12,6 +12,7 @@ import {
   IconBuilding,
   IconUsers,
   IconMail,
+  IconSettings,
   IconChevronLeft,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -36,6 +37,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/departments", label: "Departments", icon: IconBuilding },
   { href: "/admin/users", label: "Users & Invites", icon: IconUsers },
   { href: "/admin/email", label: "Email (SMTP)", icon: IconMail },
+  { href: "/admin/settings", label: "Application", icon: IconSettings },
 ];
 
 /**

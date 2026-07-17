@@ -19,7 +19,6 @@ import {
   IconChevronDown,
   IconMoon,
   IconPower,
-  IconSettings,
   IconShield,
   IconSliders,
   IconSun,
@@ -121,7 +120,7 @@ function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange
   );
 }
 
-type SectionId = "profile" | "preferences" | "notifications" | "security" | "company" | "application";
+type SectionId = "profile" | "preferences" | "notifications" | "security" | "company";
 
 interface NavItem {
   id: SectionId;
@@ -137,10 +136,7 @@ const PERSONAL_ITEMS: NavItem[] = [
   { id: "security", label: "Security", icon: IconShield },
 ];
 
-const WORKSPACE_ITEMS: NavItem[] = [
-  { id: "company", label: "Company profile", icon: IconBuildingCog, adminOnly: true },
-  { id: "application", label: "Application", icon: IconSettings, adminOnly: true },
-];
+const WORKSPACE_ITEMS: NavItem[] = [{ id: "company", label: "Company profile", icon: IconBuildingCog, adminOnly: true }];
 
 function NavButton({
   item,
@@ -283,12 +279,6 @@ export function SettingsDialog({
   const [revokingOthers, setRevokingOthers] = useState(false);
   const otherSessionCount = sessions.filter((s) => !s.isCurrent).length;
 
-  // Application settings (admin)
-  const [appUrl, setAppUrl] = useState("");
-  const [appUrlFromEnv, setAppUrlFromEnv] = useState(false);
-  const [appLoaded, setAppLoaded] = useState(false);
-  const [savingApp, setSavingApp] = useState(false);
-
   // Company profile (admin)
   const [companyLoaded, setCompanyLoaded] = useState(false);
   const [cName, setCName] = useState("");
@@ -348,20 +338,6 @@ export function SettingsDialog({
       .catch(() => {})
       .finally(() => setCompanyLoaded(true));
   }, [open, isAdmin, section, companyLoaded]);
-
-  // Application settings, loaded lazily.
-  useEffect(() => {
-    if (!open || !isAdmin || section !== "application" || appLoaded) return;
-    fetch("/api/app-settings")
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.settings) return;
-        setAppUrl(data.settings.appUrl ?? "");
-        setAppUrlFromEnv(!!data.settings.isFromEnv);
-      })
-      .catch(() => {})
-      .finally(() => setAppLoaded(true));
-  }, [open, isAdmin, section, appLoaded]);
 
   // Notification preferences, loaded lazily.
   useEffect(() => {
@@ -502,23 +478,6 @@ export function SettingsDialog({
       toast.success(`Signed out ${data.revoked} other device${data.revoked === 1 ? "" : "s"}`);
     } finally {
       setRevokingOthers(false);
-    }
-  }
-
-  async function saveAppSettings() {
-    setSavingApp(true);
-    try {
-      const res = await fetch("/api/app-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appUrl: appUrl.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) return toast.error("Couldn't save", data.error);
-      setAppUrlFromEnv(!appUrl.trim());
-      toast.success("Application settings saved");
-    } finally {
-      setSavingApp(false);
     }
   }
 
@@ -859,49 +818,6 @@ export function SettingsDialog({
                       <p className="text-xs text-muted-foreground/70">
                         Two-factor authentication is coming soon.
                       </p>
-                    </>
-                  )}
-
-                  {section === "application" && isAdmin && (
-                    <>
-                      <div>
-                        <h2 className="text-base font-semibold">Application</h2>
-                        <p className="text-sm text-muted-foreground">
-                          Runtime settings you can change without a redeploy.
-                        </p>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="set-app-url">Application URL</Label>
-                        <Input
-                          id="set-app-url"
-                          placeholder="https://crm.yourcompany.com"
-                          value={appUrl}
-                          onChange={(e) => setAppUrl(e.target.value)}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Used to build links in outbound email, like invites. Set this to the address
-                          people actually visit — if it&apos;s wrong, invite emails still send but their
-                          links go nowhere.
-                          {appUrlFromEnv && appUrl && " Currently coming from the APP_URL environment variable."}
-                        </p>
-                      </div>
-
-                      <Button type="button" onClick={saveAppSettings} disabled={savingApp} className="self-start">
-                        {savingApp ? "Saving..." : "Save settings"}
-                      </Button>
-
-                      <div className="flex flex-col gap-2 rounded-md border border-dashed border-border p-3">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-                          Managed outside the app
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Database connection and session signing secret stay in the server environment
-                          and can&apos;t be edited here. The database URL is needed to reach this table in
-                          the first place, and the signing secret is read where there&apos;s no database
-                          connection available.
-                        </p>
-                      </div>
                     </>
                   )}
 
