@@ -15,14 +15,11 @@ import { useToast } from "@/components/providers/toast-provider";
 import {
   IconBell,
   IconBuildingCog,
-  IconChevronRight,
-  IconMail,
   IconMoon,
   IconShield,
   IconSliders,
   IconSun,
   IconUser,
-  IconUsers,
   IconX,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -71,13 +68,6 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-interface NavLink {
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  href: string;
-  adminOnly?: boolean;
-}
-
 const PERSONAL_ITEMS: NavItem[] = [
   { id: "profile", label: "Profile", icon: IconUser },
   { id: "preferences", label: "Preferences", icon: IconSliders },
@@ -86,11 +76,6 @@ const PERSONAL_ITEMS: NavItem[] = [
 ];
 
 const WORKSPACE_ITEMS: NavItem[] = [{ id: "company", label: "Company profile", icon: IconBuildingCog, adminOnly: true }];
-
-const WORKSPACE_LINKS: NavLink[] = [
-  { label: "Users & Invites", icon: IconUsers, href: "/admin/users", adminOnly: true },
-  { label: "Email (SMTP)", icon: IconMail, href: "/admin/email", adminOnly: true },
-];
 
 export function SettingsDialog({
   open,
@@ -260,11 +245,6 @@ export function SettingsDialog({
     }
   }
 
-  function goTo(href: string) {
-    onOpenChange(false);
-    router.push(href);
-  }
-
   function NavButton({ item }: { item: NavItem }) {
     const active = section === item.id;
     return (
@@ -278,20 +258,6 @@ export function SettingsDialog({
       >
         <item.icon className="h-4 w-4 shrink-0" />
         {item.label}
-      </button>
-    );
-  }
-
-  function NavLinkButton({ link }: { link: NavLink }) {
-    return (
-      <button
-        type="button"
-        onClick={() => goTo(link.href)}
-        className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      >
-        <link.icon className="h-4 w-4 shrink-0" />
-        <span className="flex-1">{link.label}</span>
-        <IconChevronRight className="h-3.5 w-3.5 shrink-0 opacity-50" />
       </button>
     );
   }
@@ -320,9 +286,6 @@ export function SettingsDialog({
                 <p className="px-2.5 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">Workspace</p>
                 {WORKSPACE_ITEMS.map((item) => (
                   <NavButton key={item.id} item={item} />
-                ))}
-                {WORKSPACE_LINKS.map((link) => (
-                  <NavLinkButton key={link.href} link={link} />
                 ))}
               </div>
             )}
