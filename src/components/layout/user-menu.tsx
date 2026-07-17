@@ -3,15 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { IconBuildingCog, IconLogOut, IconSettings, IconUser } from "@/components/icons";
-import { CompanyProfileDialog } from "@/components/billing/company-profile-dialog";
-import { ProfileSettingsDialog } from "@/components/layout/profile-settings-dialog";
+import { IconLogOut, IconSettings, IconUser } from "@/components/icons";
+import { SettingsDialog } from "@/components/layout/settings-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export function UserMenu({ name, email, isAdmin }: { name: string; email: string; isAdmin: boolean }) {
   const router = useRouter();
-  const [companyOpen, setCompanyOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
 
@@ -75,15 +73,6 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
               <IconSettings className="h-3.5 w-3.5" />
               Settings
             </DropdownMenu.Item>
-            {isAdmin && (
-              <DropdownMenu.Item
-                onSelect={() => setCompanyOpen(true)}
-                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
-              >
-                <IconBuildingCog className="h-3.5 w-3.5" />
-                Company profile
-              </DropdownMenu.Item>
-            )}
             <DropdownMenu.Item
               onSelect={onLogout}
               className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
@@ -95,8 +84,7 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
 
-      <ProfileSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} onSaved={refreshAvatar} />
-      {isAdmin && <CompanyProfileDialog open={companyOpen} onOpenChange={setCompanyOpen} />}
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} isAdmin={isAdmin} onSaved={refreshAvatar} />
     </>
   );
 }
