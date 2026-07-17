@@ -45,7 +45,10 @@ model User {
   resetCodeExpiresAt DateTime?
 
   // Preferences
-  timezone           String?  // IANA timezone, e.g. "Asia/Kolkata"
+  // Fixed app-wide (Asia/Kolkata), not user-editable. Left nullable on purpose:
+  // making it required would fail db push against rows that predate the column,
+  // and db push runs during the build — a failed push blocks the deploy.
+  timezone           String?  @default("Asia/Kolkata")
   locale             String   @default("en")
   defaultLandingPage String?  // e.g. "/leads" — null means the Dashboard default
   density            String   @default("comfortable") // "comfortable" | "compact"

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,19 +30,14 @@ import { cn } from "@/lib/utils";
 
 const MAX_IMAGE_BYTES = 1_000_000;
 
-const TIMEZONES = [
-  "Asia/Kolkata",
-  "Asia/Dubai",
-  "Asia/Singapore",
-  "Asia/Hong_Kong",
-  "Asia/Tokyo",
-  "Europe/London",
-  "Europe/Berlin",
-  "America/New_York",
-  "America/Chicago",
-  "America/Los_Angeles",
-  "Australia/Sydney",
-  "UTC",
+/** Aina CRM runs on a single timezone — not a per-user choice, so it isn't editable. */
+const APP_TIMEZONE = "Asia/Kolkata";
+
+const LANGUAGE_OPTIONS = [{ value: "en", label: "English" }];
+
+const DENSITY_OPTIONS = [
+  { value: "comfortable", label: "Comfortable" },
+  { value: "compact", label: "Compact" },
 ];
 
 const LANDING_PAGE_OPTIONS = [
@@ -123,9 +119,6 @@ function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange
     </button>
   );
 }
-
-const selectClassName =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 type SectionId = "profile" | "preferences" | "notifications" | "security" | "company";
 
@@ -270,7 +263,6 @@ export function SettingsDialog({
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // Preferences
-  const [timezone, setTimezone] = useState("Asia/Kolkata");
   const [defaultLandingPage, setDefaultLandingPage] = useState("");
   const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
 
@@ -285,6 +277,7 @@ export function SettingsDialog({
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [revokingOthers, setRevokingOthers] = useState(false);
+  const otherSessionCount = sessions.filter((s) => !s.isCurrent).length;
 
   // Company profile (admin)
   const [companyLoaded, setCompanyLoaded] = useState(false);
@@ -316,7 +309,6 @@ export function SettingsDialog({
           setMobile(u.mobile ?? "");
           setEmail(u.email ?? "");
           setAvatarDataUrl(u.avatarDataUrl ?? null);
-          setTimezone(u.timezone ?? "Asia/Kolkata");
           setDefaultLandingPage(u.defaultLandingPage ?? "");
           setDensity(u.density === "compact" ? "compact" : "comfortable");
         }
@@ -358,16 +350,22 @@ export function SettingsDialog({
       .finally(() => setLoadingNotif(false));
   }, [open, section, notifPrefs.length]);
 
+  const loadSessions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/sessions");
+      const data = await res.json();
+      setSessions(data.sessions ?? []);
+    } catch {
+      // Leave the list as-is; the pane shows whatever loaded last.
+    }
+  }, []);
+
   // Active sessions, loaded lazily.
   useEffect(() => {
     if (!open || section !== "security") return;
     setLoadingSessions(true);
-    fetch("/api/sessions")
-      .then((r) => r.json())
-      .then((data) => setSessions(data.sessions ?? []))
-      .catch(() => {})
-      .finally(() => setLoadingSessions(false));
-  }, [open, section]);
+    loadSessions().finally(() => setLoadingSessions(false));
+  }, [open, section, loadSessions]);
 
   async function onPickImage(file: File | undefined, setter: (v: string | null) => void) {
     if (!file) return;
@@ -400,7 +398,7 @@ export function SettingsDialog({
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ timezone, defaultLandingPage: defaultLandingPage || null, density }),
+        body: JSON.stringify({ defaultLandingPage: defaultLandingPage || null, density }),
       });
       const data = await res.json();
       if (!res.ok) return toast.error("Couldn't save preferences", data.error);
@@ -473,8 +471,11 @@ export function SettingsDialog({
       const res = await fetch("/api/sessions/revoke-others", { method: "POST" });
       const data = await res.json();
       if (!res.ok) return toast.error("Couldn't sign out other devices");
-      setSessions((prev) => prev.filter((s) => s.isCurrent));
-      toast.success(data.revoked > 0 ? `Signed out ${data.revoked} other device${data.revoked === 1 ? "" : "s"}` : "No other devices to sign out");
+      // Refetch rather than filtering locally: the server decides which session
+      // is current, and dropping every row that isn't flagged current here would
+      // blank the list if that flag were ever wrong.
+      await loadSessions();
+      toast.success(`Signed out ${data.revoked} other device${data.revoked === 1 ? "" : "s"}`);
     } finally {
       setRevokingOthers(false);
     }
@@ -641,54 +642,32 @@ export function SettingsDialog({
 
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="set-timezone">Timezone</Label>
-                          <select
-                            id="set-timezone"
-                            className={selectClassName}
-                            value={timezone}
-                            onChange={(e) => setTimezone(e.target.value)}
-                          >
-                            {TIMEZONES.map((tz) => (
-                              <option key={tz} value={tz}>
-                                {tz}
-                              </option>
-                            ))}
-                          </select>
+                          <Label>Timezone</Label>
+                          <div className="flex h-9 items-center rounded-md border border-input px-3 text-sm text-muted-foreground">
+                            {APP_TIMEZONE} (IST)
+                          </div>
                         </div>
                         <div className="flex flex-col gap-1.5">
                           <Label htmlFor="set-landing">Default landing page</Label>
-                          <select
+                          <Dropdown
                             id="set-landing"
-                            className={selectClassName}
                             value={defaultLandingPage}
-                            onChange={(e) => setDefaultLandingPage(e.target.value)}
-                          >
-                            {LANDING_PAGE_OPTIONS.map((o) => (
-                              <option key={o.value} value={o.value}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={setDefaultLandingPage}
+                            options={LANDING_PAGE_OPTIONS}
+                          />
                         </div>
                         <div className="flex flex-col gap-1.5">
                           <Label htmlFor="set-language">Language</Label>
-                          <Tooltip label="More languages coming soon">
-                            <select id="set-language" className={cn(selectClassName, "opacity-70")} value="en" disabled>
-                              <option value="en">English</option>
-                            </select>
-                          </Tooltip>
+                          <Dropdown id="set-language" value="en" onChange={() => {}} options={LANGUAGE_OPTIONS} disabled />
                         </div>
                         <div className="flex flex-col gap-1.5">
                           <Label htmlFor="set-density">Density</Label>
-                          <select
+                          <Dropdown
                             id="set-density"
-                            className={selectClassName}
                             value={density}
-                            onChange={(e) => setDensity(e.target.value as "comfortable" | "compact")}
-                          >
-                            <option value="comfortable">Comfortable</option>
-                            <option value="compact">Compact</option>
-                          </select>
+                            onChange={(v) => setDensity(v as "comfortable" | "compact")}
+                            options={DENSITY_OPTIONS}
+                          />
                         </div>
                       </div>
 
@@ -775,16 +754,26 @@ export function SettingsDialog({
                       <div className="flex flex-col gap-3 rounded-md border border-border p-3">
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-sm font-medium">Active sessions</p>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={revokeOthers}
-                            disabled={revokingOthers || sessions.length <= 1}
-                          >
-                            <IconPower className="h-3.5 w-3.5" />
-                            {revokingOthers ? "Signing out..." : "Sign out everywhere else"}
-                          </Button>
+                          {otherSessionCount > 0 ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={revokeOthers}
+                              disabled={revokingOthers}
+                            >
+                              <IconPower className="h-3.5 w-3.5" />
+                              {revokingOthers
+                                ? "Signing out..."
+                                : `Sign out ${otherSessionCount} other device${otherSessionCount === 1 ? "" : "s"}`}
+                            </Button>
+                          ) : (
+                            // A permanently greyed-out button reads as broken. When there's
+                            // nothing to sign out, say so instead of showing a dead control.
+                            !loadingSessions && (
+                              <p className="text-xs text-muted-foreground">Only this device is signed in</p>
+                            )
+                          )}
                         </div>
                         {loadingSessions ? (
                           <div className="flex justify-center py-4">
