@@ -21,83 +21,87 @@ model Department {
   slug      String   @unique
   createdAt DateTime @default(now())
 
-  users            User[]
-  leads            Lead[]
-  projects         Project[]
-  quotations       Quotation[]
-  invoices         Invoice[]
-  invites          Invite[]
+  users      User[]
+  leads      Lead[]
+  projects   Project[]
+  quotations Quotation[]
+  invoices   Invoice[]
+  invites    Invite[]
 }
 
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  passwordHash  String
-  name          String
-  surname       String?
-  mobile        String?
-  avatarDataUrl String?  @db.LongText
-  role          Role     @default(DEPARTMENT_USER)
-  departmentId  String?
-  department    Department? @relation(fields: [departmentId], references: [id])
-  isActive      Boolean  @default(true)
-  resetCode          String?   // bcrypt hash of the email login/reset code
+  id                 String      @id @default(cuid())
+  email              String      @unique
+  passwordHash       String
+  name               String
+  surname            String?
+  mobile             String?
+  avatarDataUrl      String?     @db.LongText
+  role               Role        @default(DEPARTMENT_USER)
+  departmentId       String?
+  department         Department? @relation(fields: [departmentId], references: [id])
+  isActive           Boolean     @default(true)
+  resetCode          String? // bcrypt hash of the email login/reset code
   resetCodeExpiresAt DateTime?
 
   // Preferences
   // Fixed app-wide (Asia/Kolkata), not user-editable. Left nullable on purpose:
   // making it required would fail db push against rows that predate the column,
   // and db push runs during the build — a failed push blocks the deploy.
-  timezone           String?  @default("Asia/Kolkata")
-  locale             String   @default("en")
-  defaultLandingPage String?  // e.g. "/leads" — null means the Dashboard default
-  density            String   @default("comfortable") // "comfortable" | "compact"
+  timezone           String? @default("Asia/Kolkata")
+  locale             String  @default("en")
+  defaultLandingPage String? // e.g. "/leads" — null means the Dashboard default
+  density            String  @default("comfortable") // "comfortable" | "compact"
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  invitesSent        Invite[]           @relation("InvitedBy")
-  notifications      Notification[]
-  notificationPrefs  NotificationPreference[]
-  sessions           Session[]
+  invitesSent       Invite[]                 @relation("InvitedBy")
+  notifications     Notification[]
+  notificationPrefs NotificationPreference[]
+  sessions          Session[]
 
-  leadsCreated       Lead[]             @relation("LeadCreatedBy")
-  leadsAssigned      Lead[]             @relation("LeadAssignedTo")
-  leadNotes          LeadNote[]
-  leadActivities     LeadActivity[]
-  leadReminders      LeadReminder[]
+  leadsCreated   Lead[]         @relation("LeadCreatedBy")
+  leadsAssigned  Lead[]         @relation("LeadAssignedTo")
+  leadNotes      LeadNote[]
+  leadActivities LeadActivity[]
+  leadReminders  LeadReminder[]
 
-  tasksCreated       Task[]             @relation("TaskCreatedBy")
-  tasksAssigned      Task[]             @relation("TaskAssignedTo")
-  taskComments       TaskComment[]
-  taskAttachments    TaskAttachment[]
+  tasksCreated    Task[]           @relation("TaskCreatedBy")
+  tasksAssigned   Task[]           @relation("TaskAssignedTo")
+  taskComments    TaskComment[]
+  taskAttachments TaskAttachment[]
 
-  projectsCreated    Project[]          @relation("ProjectCreatedBy")
-  projectsAssigned   Project[]          @relation("ProjectAssignedTo")
-  projectMemberships ProjectMember[]
-  projectDocuments   ProjectDocument[]
-  projectActivities  ProjectActivity[]
-  projectTasksAssigned ProjectTask[]    @relation("ProjectTaskAssignedTo")
+  projectsCreated      Project[]         @relation("ProjectCreatedBy")
+  projectsAssigned     Project[]         @relation("ProjectAssignedTo")
+  projectMemberships   ProjectMember[]
+  projectDocuments     ProjectDocument[]
+  projectActivities    ProjectActivity[]
+  projectTasksAssigned ProjectTask[]     @relation("ProjectTaskAssignedTo")
 
-  quotationsCreated  Quotation[]        @relation("QuotationCreatedBy")
+  quotationsCreated  Quotation[]         @relation("QuotationCreatedBy")
   quotationApprovals QuotationApproval[]
 
-  invoicesCreated    Invoice[]          @relation("InvoiceCreatedBy")
-  paymentsRecorded   Payment[]
+  invoicesCreated  Invoice[] @relation("InvoiceCreatedBy")
+  paymentsRecorded Payment[]
+
+  attendance         Attendance[]      @relation("AttendanceUser")
+  attendanceApproved Attendance[]      @relation("AttendanceApprover")
+  attendanceAudits   AttendanceAudit[] @relation("AttendanceAuditActor")
 }
 
 model Invite {
-  id           String     @id @default(cuid())
+  id           String      @id @default(cuid())
   email        String
   role         Role
   departmentId String?
   department   Department? @relation(fields: [departmentId], references: [id])
-  token        String     @unique
+  token        String      @unique
   invitedById  String
-  invitedBy    User       @relation("InvitedBy", fields: [invitedById], references: [id])
+  invitedBy    User        @relation("InvitedBy", fields: [invitedById], references: [id])
   expiresAt    DateTime
   acceptedAt   DateTime?
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime    @default(now())
 
   @@index([email])
 }
@@ -114,7 +118,9 @@ model Notification {
   @@index([userId, readAt])
 }
 
-/** Per-user, per-category in-app notification toggle. Missing row = enabled (default-on). */
+/**
+ * Per-user, per-category in-app notification toggle. Missing row = enabled (default-on).
+ */
 model NotificationPreference {
   id       String  @id @default(cuid())
   userId   String
@@ -125,9 +131,11 @@ model NotificationPreference {
   @@unique([userId, category])
 }
 
-/** A logged-in session/device. The JWT carries this row's id as its `sid` claim,
-    so revoking here (revokedAt) invalidates that cookie immediately, even before
-    it expires — otherwise a JWT has no server-side kill switch. */
+/**
+ * A logged-in session/device. The JWT carries this row's id as its `sid` claim,
+ * so revoking here (revokedAt) invalidates that cookie immediately, even before
+ * it expires — otherwise a JWT has no server-side kill switch.
+ */
 model Session {
   id         String    @id @default(cuid())
   userId     String
@@ -167,31 +175,31 @@ enum MeetingStatus {
 }
 
 model Lead {
-  id              String         @id @default(cuid())
-  name            String
-  company         String?
-  email           String?
-  phone           String?
-  source          String?
-  product         String?
-  priority        Priority       @default(MEDIUM)
-  status          LeadStatus     @default(NEW)
-  leadArriveDate  DateTime?
-  meetingDate     DateTime?
-  meetingStatus   MeetingStatus?
-  assignedToId    String?
-  assignedTo      User?          @relation("LeadAssignedTo", fields: [assignedToId], references: [id])
-  departmentId    String?
-  department      Department?    @relation(fields: [departmentId], references: [id])
-  createdById     String
-  createdBy       User           @relation("LeadCreatedBy", fields: [createdById], references: [id])
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  name           String
+  company        String?
+  email          String?
+  phone          String?
+  source         String?
+  product        String?
+  priority       Priority       @default(MEDIUM)
+  status         LeadStatus     @default(NEW)
+  leadArriveDate DateTime?
+  meetingDate    DateTime?
+  meetingStatus  MeetingStatus?
+  assignedToId   String?
+  assignedTo     User?          @relation("LeadAssignedTo", fields: [assignedToId], references: [id])
+  departmentId   String?
+  department     Department?    @relation(fields: [departmentId], references: [id])
+  createdById    String
+  createdBy      User           @relation("LeadCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  notes       LeadNote[]
-  activities  LeadActivity[]
-  reminders   LeadReminder[]
-  quotations  Quotation[]
+  notes      LeadNote[]
+  activities LeadActivity[]
+  reminders  LeadReminder[]
+  quotations Quotation[]
 
   @@index([status])
   @@index([departmentId])
@@ -242,20 +250,20 @@ enum TaskStatus {
 }
 
 model Task {
-  id                 String     @id @default(cuid())
-  title              String
-  description        String?    @db.Text
-  status             TaskStatus @default(TODO)
-  priority           Priority   @default(MEDIUM)
-  dueDate            DateTime?
-  assignedToId       String?
-  assignedTo         User?      @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
-  createdById        String
-  createdBy          User       @relation("TaskCreatedBy", fields: [createdById], references: [id])
-  projectTaskParentId String?   @unique
-  projectTaskParent  ProjectTask? @relation(fields: [projectTaskParentId], references: [id])
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  id                  String       @id @default(cuid())
+  title               String
+  description         String?      @db.Text
+  status              TaskStatus   @default(TODO)
+  priority            Priority     @default(MEDIUM)
+  dueDate             DateTime?
+  assignedToId        String?
+  assignedTo          User?        @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
+  createdById         String
+  createdBy           User         @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  projectTaskParentId String?      @unique
+  projectTaskParent   ProjectTask? @relation(fields: [projectTaskParentId], references: [id])
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   comments    TaskComment[]
   attachments TaskAttachment[]
@@ -314,11 +322,11 @@ model Project {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  members     ProjectMember[]
-  milestones  Milestone[]
-  tasks       ProjectTask[]
-  documents   ProjectDocument[]
-  activities  ProjectActivity[]
+  members    ProjectMember[]
+  milestones Milestone[]
+  tasks      ProjectTask[]
+  documents  ProjectDocument[]
+  activities ProjectActivity[]
 
   @@index([departmentId])
   @@index([status])
@@ -356,27 +364,27 @@ model Milestone {
 }
 
 model ProjectTask {
-  id           String     @id @default(cuid())
+  id           String        @id @default(cuid())
   projectId    String
-  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   milestoneId  String?
-  milestone    Milestone? @relation(fields: [milestoneId], references: [id])
+  milestone    Milestone?    @relation(fields: [milestoneId], references: [id])
   title        String
-  description  String?    @db.Text
-  status       TaskStatus @default(TODO)
+  description  String?       @db.Text
+  status       TaskStatus    @default(TODO)
   dueDate      DateTime?
-  progressPct  Int        @default(0)
+  progressPct  Int           @default(0)
   assignedToId String?
-  assignedTo   User?      @relation("ProjectTaskAssignedTo", fields: [assignedToId], references: [id])
+  assignedTo   User?         @relation("ProjectTaskAssignedTo", fields: [assignedToId], references: [id])
   parentTaskId String?
   parentTask   ProjectTask?  @relation("SubTasks", fields: [parentTaskId], references: [id])
   subTasks     ProjectTask[] @relation("SubTasks")
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  linkedTask       Task?
-  dependsOn        ProjectTaskDependency[] @relation("DependentTask")
-  dependents       ProjectTaskDependency[] @relation("DependsOnTask")
+  linkedTask Task?
+  dependsOn  ProjectTaskDependency[] @relation("DependentTask")
+  dependents ProjectTaskDependency[] @relation("DependsOnTask")
 
   @@index([projectId])
   @@index([status])
@@ -427,46 +435,46 @@ enum QuotationStatus {
 }
 
 model Quotation {
-  id               String          @id @default(cuid())
-  quotationNumber  String          @unique
-  clientName       String
-  clientEmail      String?
-  leadId           String?
-  lead             Lead?           @relation(fields: [leadId], references: [id])
-  status           QuotationStatus @default(DRAFT)
-  subtotal         Decimal         @default(0) @db.Decimal(12, 2)
-  gstAmount        Decimal         @default(0) @db.Decimal(12, 2)
-  discount         Decimal         @default(0) @db.Decimal(12, 2)
-  total            Decimal         @default(0) @db.Decimal(12, 2)
-  validUntil       DateTime?
-  clientAddress          String?  @db.Text
+  id                     String          @id @default(cuid())
+  quotationNumber        String          @unique
+  clientName             String
+  clientEmail            String?
+  leadId                 String?
+  lead                   Lead?           @relation(fields: [leadId], references: [id])
+  status                 QuotationStatus @default(DRAFT)
+  subtotal               Decimal         @default(0) @db.Decimal(12, 2)
+  gstAmount              Decimal         @default(0) @db.Decimal(12, 2)
+  discount               Decimal         @default(0) @db.Decimal(12, 2)
+  total                  Decimal         @default(0) @db.Decimal(12, 2)
+  validUntil             DateTime?
+  clientAddress          String?         @db.Text
   clientGstin            String?
-  shipToAddress          String?  @db.Text
+  shipToAddress          String?         @db.Text
   shipToGstin            String?
   placeOfSupply          String?
   subject                String?
-  notes                  String?  @db.Text
+  notes                  String?         @db.Text
   sellerName             String?
-  sellerAddress          String?  @db.Text
+  sellerAddress          String?         @db.Text
   sellerGstin            String?
   sellerPhone            String?
   sellerEmail            String?
   sellerWebsite          String?
   sellerSignatory        String?
-  sellerLogoDataUrl      String?  @db.LongText
-  sellerSignatureDataUrl String?  @db.LongText
-  createdById      String
-  createdBy        User            @relation("QuotationCreatedBy", fields: [createdById], references: [id])
-  departmentId     String?
-  department       Department?     @relation(fields: [departmentId], references: [id])
-  currentVersion   Int             @default(1)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  sellerLogoDataUrl      String?         @db.LongText
+  sellerSignatureDataUrl String?         @db.LongText
+  createdById            String
+  createdBy              User            @relation("QuotationCreatedBy", fields: [createdById], references: [id])
+  departmentId           String?
+  department             Department?     @relation(fields: [departmentId], references: [id])
+  currentVersion         Int             @default(1)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
 
-  items      QuotationItem[]
-  versions   QuotationVersion[]
-  approvals  QuotationApproval[]
-  invoices   Invoice[]
+  items     QuotationItem[]
+  versions  QuotationVersion[]
+  approvals QuotationApproval[]
+  invoices  Invoice[]
 
   @@index([status])
   @@index([departmentId])
@@ -518,22 +526,22 @@ enum InvoiceStatus {
 }
 
 model Invoice {
-  id             String        @id @default(cuid())
-  invoiceNumber  String        @unique
-  quotationId    String?
-  quotation      Quotation?    @relation(fields: [quotationId], references: [id])
-  clientName     String
-  clientEmail    String?
-  clientAddress  String?       @db.Text
-  clientGstin    String?
-  shipToAddress  String?       @db.Text
-  shipToGstin    String?
-  invoiceDate    DateTime      @default(now())
-  terms          String?
-  poNumber       String?
-  placeOfSupply  String?
-  subject        String?
-  notes          String?       @db.Text
+  id                     String        @id @default(cuid())
+  invoiceNumber          String        @unique
+  quotationId            String?
+  quotation              Quotation?    @relation(fields: [quotationId], references: [id])
+  clientName             String
+  clientEmail            String?
+  clientAddress          String?       @db.Text
+  clientGstin            String?
+  shipToAddress          String?       @db.Text
+  shipToGstin            String?
+  invoiceDate            DateTime      @default(now())
+  terms                  String?
+  poNumber               String?
+  placeOfSupply          String?
+  subject                String?
+  notes                  String?       @db.Text
   sellerName             String?
   sellerAddress          String?       @db.Text
   sellerGstin            String?
@@ -543,17 +551,17 @@ model Invoice {
   sellerSignatory        String?
   sellerLogoDataUrl      String?       @db.LongText
   sellerSignatureDataUrl String?       @db.LongText
-  status         InvoiceStatus @default(DRAFT)
-  subtotal       Decimal       @default(0) @db.Decimal(12, 2)
-  gstAmount      Decimal       @default(0) @db.Decimal(12, 2)
-  total          Decimal       @default(0) @db.Decimal(12, 2)
-  dueDate        DateTime?
-  createdById    String
-  createdBy      User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
-  departmentId   String?
-  department     Department?   @relation(fields: [departmentId], references: [id])
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  status                 InvoiceStatus @default(DRAFT)
+  subtotal               Decimal       @default(0) @db.Decimal(12, 2)
+  gstAmount              Decimal       @default(0) @db.Decimal(12, 2)
+  total                  Decimal       @default(0) @db.Decimal(12, 2)
+  dueDate                DateTime?
+  createdById            String
+  createdBy              User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+  departmentId           String?
+  department             Department?   @relation(fields: [departmentId], references: [id])
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
 
   items    InvoiceItem[]
   payments Payment[]
@@ -574,7 +582,9 @@ model InvoiceItem {
   lineTotal   Decimal @db.Decimal(12, 2)
 }
 
-/** Single-row seller profile used as the header on printed invoices/quotations. */
+/**
+ * Single-row seller profile used as the header on printed invoices/quotations.
+ */
 model CompanyProfile {
   id               String   @id @default("default")
   name             String   @default("")
@@ -589,7 +599,9 @@ model CompanyProfile {
   updatedAt        DateTime @updatedAt
 }
 
-/** Single-row SMTP configuration for outgoing mail (invites, etc.). */
+/**
+ * Single-row SMTP configuration for outgoing mail (invites, etc.).
+ */
 /**
  * App-level settings an admin can change without a redeploy. Single row, id "default".
  * Only for values that are genuinely runtime config — infrastructure secrets stay in
@@ -598,7 +610,9 @@ model CompanyProfile {
  */
 model AppSettings {
   id        String   @id @default("default")
-  /** Base URL used to build links in outbound email. Falls back to APP_URL when unset. */
+  /**
+   * Base URL used to build links in outbound email. Falls back to APP_URL when unset.
+   */
   appUrl    String?
   updatedAt DateTime @updatedAt
 }
@@ -625,4 +639,123 @@ model Payment {
   recordedById String
   recordedBy   User     @relation(fields: [recordedById], references: [id])
   note         String?
+}
+
+// ---------- Attendance ----------
+
+enum AttendanceStatus {
+  PRESENT
+  HALF_DAY
+  ABSENT
+}
+
+enum AttendanceApproval {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum HalfDayReason {
+  LATE_ARRIVAL
+  EARLY_DEPARTURE
+  INSUFFICIENT_HOURS
+  APPROVED_HALF_DAY
+  MANUAL_ADJUSTMENT
+  OTHER
+}
+
+/**
+ * One record per user per day. `date` is a DATE (no time) representing the
+ * Asia/Kolkata calendar day — the app is fixed to IST, so the day boundary is
+ * derived from IST wall-clock and stored as UTC midnight of that day.
+ * `calculatedStatus` is what the thresholds produced from worked minutes;
+ * `status` is what's in effect. They differ only when an admin overrides, and
+ * keeping both is the audit trail: "system said HALF_DAY, admin set PRESENT".
+ * `status` is null until check-out (or an admin sets it) — a checked-in-but-not-
+ * checked-out record has no finalized status and renders neutral, not absent.
+ */
+model Attendance {
+  id               String             @id @default(cuid())
+  userId           String
+  user             User               @relation("AttendanceUser", fields: [userId], references: [id], onDelete: Cascade)
+  date             DateTime           @db.Date
+  checkIn          DateTime?
+  checkOut         DateTime?
+  workedMinutes    Int?
+  calculatedStatus AttendanceStatus?
+  status           AttendanceStatus?
+  statusOverride   Boolean            @default(false)
+  overrideReason   String?
+  halfDayReason    HalfDayReason?
+  adminNote        String?
+  approvalStatus   AttendanceApproval @default(PENDING)
+  approvedById     String?
+  approvedBy       User?              @relation("AttendanceApprover", fields: [approvedById], references: [id])
+  approvedAt       DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  audits           AttendanceAudit[]
+
+  @@unique([userId, date])
+  @@index([date])
+  @@index([userId, date])
+  @@index([approvalStatus])
+}
+
+/**
+ * Immutable trail of every admin action on a record: override, approve, reject, edit times.
+ */
+model AttendanceAudit {
+  id           String            @id @default(cuid())
+  attendanceId String
+  attendance   Attendance        @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  actorId      String
+  actor        User              @relation("AttendanceAuditActor", fields: [actorId], references: [id])
+  action       String // "override" | "approve" | "reject" | "edit_times"
+  fromStatus   AttendanceStatus?
+  toStatus     AttendanceStatus?
+  note         String?           @db.Text
+  ip           String?
+  userAgent    String?           @db.Text
+  createdAt    DateTime          @default(now())
+
+  @@index([attendanceId])
+}
+
+/**
+ * Configurable classification thresholds and policy. Single row, id "default".
+ */
+model AttendanceSettings {
+  id                   String   @id @default("default")
+  /**
+   * Minutes worked to count as a full Present day. Default 8h.
+   */
+  fullDayMinutes       Int      @default(480)
+  /**
+   * Minutes worked to count as Half Day; below this is Absent. Default 4h.
+   */
+  halfDayMinutes       Int      @default(240)
+  /**
+   * When true, auto-classified records stay PENDING until an admin approves.
+   */
+  requireApproval      Boolean  @default(true)
+  /**
+   * When true, a Half Day can't be finalized without a halfDayReason.
+   */
+  requireHalfDayReason Boolean  @default(false)
+  /**
+   * JS getDay() numbers (0=Sun..6=Sat) that are working days. Default Mon–Sat.
+   */
+  workingWeekdays      String   @default("1,2,3,4,5,6")
+  updatedAt            DateTime @updatedAt
+}
+
+/**
+ * A non-working holiday, excluded from working days like Sundays are.
+ */
+model Holiday {
+  id        String   @id @default(cuid())
+  date      DateTime @unique @db.Date
+  name      String
+  createdAt DateTime @default(now())
 }

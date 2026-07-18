@@ -13,6 +13,7 @@ import {
   IconUsers,
   IconMail,
   IconSettings,
+  IconClock,
   IconChevronLeft,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -31,11 +32,13 @@ const mainNav: NavItem[] = [
   { href: "/projects", label: "Projects", icon: IconProjects },
   { href: "/quotations", label: "Quotations", icon: IconQuotations },
   { href: "/invoices", label: "Invoices", icon: IconInvoices },
+  { href: "/attendance", label: "My Attendance", icon: IconClock },
 ];
 
 const adminNav: NavItem[] = [
   { href: "/admin/departments", label: "Departments", icon: IconBuilding },
   { href: "/admin/users", label: "Users & Invites", icon: IconUsers },
+  { href: "/admin/attendance", label: "Attendance", icon: IconClock },
   { href: "/admin/email", label: "Email (SMTP)", icon: IconMail },
   { href: "/admin/settings", label: "Application", icon: IconSettings },
 ];
