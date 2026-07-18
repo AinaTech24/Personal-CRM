@@ -18,6 +18,7 @@ interface SmtpSettings {
   fromEmail: string;
   fromName: string;
   hasPassword: boolean;
+  allowExternalInvites: boolean;
 }
 
 export default function EmailSettingsPage() {
@@ -35,6 +36,7 @@ export default function EmailSettingsPage() {
   const [hasPassword, setHasPassword] = useState(false);
   const [fromEmail, setFromEmail] = useState("");
   const [fromName, setFromName] = useState("Aina CRM");
+  const [allowExternalInvites, setAllowExternalInvites] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -50,6 +52,7 @@ export default function EmailSettingsPage() {
         setHasPassword(s.hasPassword);
         setFromEmail(s.fromEmail);
         setFromName(s.fromName);
+        setAllowExternalInvites(s.allowExternalInvites);
       })
       .catch(() => { })
       .finally(() => setLoading(false));
@@ -61,7 +64,7 @@ export default function EmailSettingsPage() {
       const res = await fetch("/api/smtp-settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ host, port, secure, username, password, fromEmail, fromName }),
+        body: JSON.stringify({ host, port, secure, username, password, fromEmail, fromName, allowExternalInvites }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -200,6 +203,34 @@ export default function EmailSettingsPage() {
                   <Label htmlFor="smtp-femail">From email</Label>
                   <Input id="smtp-femail" placeholder="no-reply@ainatech.in" value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} />
                 </div>
+              </div>
+
+              {/* Invitation policy */}
+              <div className="flex items-center justify-between gap-4 border-t border-border pt-4">
+                <div>
+                  <p className="text-sm font-medium">Allow public email invites</p>
+                  <p className="text-xs text-muted-foreground">
+                    Also let invites go to Gmail, Outlook, iCloud, and Yahoo addresses. When off, only @ainatech.in
+                    can be invited.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={allowExternalInvites}
+                  onClick={() => setAllowExternalInvites((v) => !v)}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+                    allowExternalInvites ? "bg-primary" : "bg-input"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform",
+                      allowExternalInvites ? "translate-x-5" : "translate-x-0.5"
+                    )}
+                  />
+                </button>
               </div>
 
               <div className="mt-2 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">

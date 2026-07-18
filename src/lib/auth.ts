@@ -39,6 +39,20 @@ export function isAinatechEmail(email: string) {
   return email.toLowerCase().trim().endsWith("@ainatech.in");
 }
 
+/** Public email providers that admins can optionally allow inviting (see SmtpSettings.allowExternalInvites). */
+export const PUBLIC_INVITE_DOMAINS = ["gmail.com", "outlook.com", "icloud.com", "yahoo.com"];
+
+/**
+ * Whether an email may be invited: @ainatech.in is always allowed; the public
+ * providers are allowed only when the admin has turned on external invites.
+ */
+export function isAllowedInviteEmail(email: string, allowExternal: boolean) {
+  if (isAinatechEmail(email)) return true;
+  if (!allowExternal) return false;
+  const domain = email.toLowerCase().trim().split("@")[1] ?? "";
+  return PUBLIC_INVITE_DOMAINS.includes(domain);
+}
+
 async function signSessionToken(payload: SessionTokenPayload) {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })

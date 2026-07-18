@@ -15,6 +15,7 @@ function serialize(s: {
   password: string | null;
   fromEmail: string | null;
   fromName: string | null;
+  allowExternalInvites: boolean;
 } | null) {
   return {
     host: s?.host ?? "",
@@ -24,6 +25,7 @@ function serialize(s: {
     fromEmail: s?.fromEmail ?? "",
     fromName: s?.fromName ?? "Aina CRM",
     hasPassword: !!s?.password,
+    allowExternalInvites: s?.allowExternalInvites ?? false,
   };
 }
 
@@ -44,6 +46,7 @@ const putSchema = z.object({
   password: z.string().max(400).optional().nullable(),
   fromEmail: z.string().max(200).optional().nullable(),
   fromName: z.string().max(200).optional().nullable(),
+  allowExternalInvites: z.boolean().optional(),
 });
 
 export async function PUT(req: NextRequest) {
@@ -61,6 +64,7 @@ export async function PUT(req: NextRequest) {
     username: d.username || null,
     fromEmail: d.fromEmail || null,
     fromName: d.fromName || "Aina CRM",
+    allowExternalInvites: d.allowExternalInvites ?? false,
   };
 
   const settings = await db.smtpSettings.upsert({

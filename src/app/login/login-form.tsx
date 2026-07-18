@@ -138,7 +138,7 @@ function LoginFormInner() {
       >
         <Card>
           <CardHeader>
-            <Image src="/logo.png" alt="Aina CRM" width={160} height={67} priority unoptimized className="mb-1 h-12 w-auto self-start" />
+            <Image src="/logo.png" alt="Aina CRM" width={180} height={75} priority unoptimized className="mb-2 h-14 w-auto self-center" />
             <CardDescription>
               {mode === "login"
                 ? "Sign in with your @ainatech.in account"

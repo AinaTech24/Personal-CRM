@@ -626,6 +626,11 @@ model SmtpSettings {
   password  String?
   fromEmail String?
   fromName  String?  @default("Aina CRM")
+  /**
+   * When true, invites may be sent to public email providers (Gmail, Outlook,
+   * iCloud, Yahoo) in addition to @ainatech.in. Off by default.
+   */
+  allowExternalInvites Boolean @default(false)
   updatedAt DateTime @updatedAt
 }
 

@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getCurrentUser, isAinatechEmail } from "@/lib/auth";
+import { getCurrentUser, isAllowedInviteEmail } from "@/lib/auth";
 import { canInviteUsers } from "@/lib/permissions";
 import { sendMail, inviteEmailHtml } from "@/lib/mailer";
 import { getAppUrl } from "@/lib/app-settings";
@@ -41,9 +41,14 @@ export async function POST(req: NextRequest) {
 
   const { email, role, departmentId } = parsed.data;
 
-  if (!isAinatechEmail(email)) {
+  const smtp = await db.smtpSettings.findUnique({ where: { id: "default" }, select: { allowExternalInvites: true } });
+  if (!isAllowedInviteEmail(email, smtp?.allowExternalInvites ?? false)) {
     return NextResponse.json(
-      { error: "Only @ainatech.in email addresses can be invited" },
+      {
+        error: smtp?.allowExternalInvites
+          ? "Only @ainatech.in or Gmail / Outlook / iCloud / Yahoo addresses can be invited"
+          : "Only @ainatech.in email addresses can be invited",
+      },
       { status: 400 }
     );
   }
