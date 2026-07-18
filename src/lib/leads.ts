@@ -48,8 +48,10 @@ export function broadcastLeadChange(
   emitToAdmins(event, { leadId: lead.id });
 }
 
-export async function assignableUsersFor(user: PermissionUser) {
-  if (isAdmin(user)) {
+export async function assignableUsersFor(user: PermissionUser, opts?: { allActive?: boolean }) {
+  // Admins always see everyone; other modules (e.g. task assignment) can opt in
+  // to the full active-user list so any user can be assigned across departments.
+  if (opts?.allActive || isAdmin(user)) {
     return db.user.findMany({
       where: { isActive: true },
       select: { id: true, name: true, email: true, departmentId: true },

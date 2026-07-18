@@ -64,7 +64,7 @@ export function TasksBoard() {
     try {
       const [tasksRes, usersRes, meRes] = await Promise.all([
         fetch("/api/tasks"),
-        fetch("/api/users/assignable"),
+        fetch("/api/users/assignable?scope=all"),
         fetch("/api/auth/me"),
       ]);
       const [tasksData, usersData, meData] = await Promise.all([
