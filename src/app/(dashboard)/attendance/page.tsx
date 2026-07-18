@@ -101,7 +101,11 @@ export default function AttendancePage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {today?.status && <StatusBadge status={today.status} />}
+            {today?.status ? (
+              <StatusBadge status={today.status} />
+            ) : (
+              checkedIn && !checkedOut && <StatusBadge status={null} working />
+            )}
             {!checkedIn && (
               <Button type="button" onClick={() => act("check-in")} disabled={acting}>
                 <IconClock className="h-4 w-4" />
@@ -169,7 +173,7 @@ export default function AttendancePage() {
                         <tr key={r.date} className="border-b border-border/50 last:border-0">
                           <td className="whitespace-nowrap px-4 py-2">{formatFullDate(r.date)}</td>
                           <td className="px-4 py-2">
-                            <StatusBadge status={r.status} />
+                            <StatusBadge status={r.status} working={!!r.checkIn && !r.checkOut} />
                           </td>
                           <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">{formatIstTime(r.checkIn)}</td>
                           <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">{formatIstTime(r.checkOut)}</td>

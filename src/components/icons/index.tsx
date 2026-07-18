@@ -241,6 +241,26 @@ export function IconDownload(props: IconProps) {
   );
 }
 
+export function IconFileSpreadsheet(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M14 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8L14 3.5Z" />
+      <path d="M14 3.5V8h4.5" />
+      <path d="M8.5 12.5h7M8.5 15.5h7M12 11.5v6" />
+    </svg>
+  );
+}
+
+export function IconMailCheck(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h14a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 19 15h-6.5" />
+      <path d="M3.5 7l8.5 5.5L20.5 7" />
+      <path d="M4 16.5l2 2 3.5-3.5" />
+    </svg>
+  );
+}
+
 export function IconEye(props: IconProps) {
   return (
     <svg {...base(props)}>

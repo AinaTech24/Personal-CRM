@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -57,6 +58,26 @@ export function Sidebar({
   onToggle: () => void;
 }) {
   const pathname = usePathname();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  // Poll pending attendance so the Attendance item can flag new check-ins. Admin only.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    const poll = () =>
+      fetch("/api/attendance/pending-count")
+        .then((r) => r.json())
+        .then((d) => {
+          if (active) setPendingCount(d.count ?? 0);
+        })
+        .catch(() => {});
+    poll();
+    const id = setInterval(poll, 45_000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [isAdmin]);
 
   // Labels stay in the DOM and fade so the grid width can slide without reflowing.
   const labelClass = cn(
@@ -64,7 +85,7 @@ export function Sidebar({
     collapsed ? "opacity-0" : "opacity-100"
   );
 
-  function renderItem(item: NavItem, active: boolean) {
+  function renderItem(item: NavItem, active: boolean, badgeCount = 0) {
     return (
       <Tooltip key={item.href} label={collapsed ? item.label : ""} side="right" wrapperClassName="w-full">
         <Link
@@ -74,8 +95,22 @@ export function Sidebar({
             active && "bg-accent text-foreground"
           )}
         >
-          <item.icon className="h-4 w-4 shrink-0" />
-          <span className={labelClass}>{item.label}</span>
+          <span className="relative shrink-0">
+            <item.icon className="h-4 w-4" />
+            {badgeCount > 0 && (
+              // Green dot with a blue ping — a new/pending check-in needs attention.
+              <span className="absolute -right-1 -top-1 flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-card" />
+              </span>
+            )}
+          </span>
+          <span className={cn("flex-1", labelClass)}>{item.label}</span>
+          {badgeCount > 0 && !collapsed && (
+            <span className="rounded-full bg-emerald-500/15 px-1.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              {badgeCount}
+            </span>
+          )}
         </Link>
       </Tooltip>
     );
@@ -113,7 +148,9 @@ export function Sidebar({
             >
               Admin
             </div>
-            {adminNav.map((item) => renderItem(item, pathname.startsWith(item.href)))}
+            {adminNav.map((item) =>
+              renderItem(item, pathname.startsWith(item.href), item.href === "/admin/attendance" ? pendingCount : 0)
+            )}
           </>
         )}
       </nav>

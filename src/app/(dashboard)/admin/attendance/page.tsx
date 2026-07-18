@@ -8,12 +8,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
+import { DatePicker } from "@/components/ui/date-picker";
 import { EightDotsRotate } from "@/components/ui/loader";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
-import { IconDownload, IconSettings, IconCheck, IconX, IconPencil } from "@/components/icons";
+import { Tooltip } from "@/components/ui/tooltip";
+import { IconFileSpreadsheet, IconSettings, IconCheck, IconX, IconPencil } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { StatusBadge, ApprovalBadge } from "@/components/attendance/status-badge";
 import { formatIstTime, formatDuration, HALF_DAY_REASON_LABEL, STATUS_LABEL } from "@/lib/attendance-ui";
+import {
+  format,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  startOfQuarter,
+  endOfQuarter,
+  startOfYear,
+  endOfYear,
+} from "date-fns";
 
 interface AdminRecord {
   id: string;
@@ -50,6 +63,38 @@ const STATUS_OPTIONS = [
 ];
 const REASON_OPTIONS = Object.entries(HALF_DAY_REASON_LABEL).map(([value, label]) => ({ value, label }));
 
+const REPORT_PERIODS = [
+  { value: "custom", label: "Custom range" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "half_yearly", label: "Half-yearly" },
+  { value: "annually", label: "Annually" },
+];
+
+/** The date range for a report preset, relative to today. null = custom (use the manual From/To). */
+function periodRange(period: string): { from: string; to: string } | null {
+  const now = new Date();
+  const fmt = (d: Date) => format(d, "yyyy-MM-dd");
+  const year = now.getFullYear();
+  switch (period) {
+    case "weekly":
+      return { from: fmt(startOfWeek(now)), to: fmt(endOfWeek(now)) };
+    case "monthly":
+      return { from: fmt(startOfMonth(now)), to: fmt(endOfMonth(now)) };
+    case "quarterly":
+      return { from: fmt(startOfQuarter(now)), to: fmt(endOfQuarter(now)) };
+    case "half_yearly":
+      return now.getMonth() < 6
+        ? { from: fmt(new Date(year, 0, 1)), to: fmt(new Date(year, 5, 30)) }
+        : { from: fmt(new Date(year, 6, 1)), to: fmt(new Date(year, 11, 31)) };
+    case "annually":
+      return { from: fmt(startOfYear(now)), to: fmt(endOfYear(now)) };
+    default:
+      return null;
+  }
+}
+
 export default function AdminAttendancePage() {
   const toast = useToast();
   const [records, setRecords] = useState<AdminRecord[]>([]);
@@ -59,8 +104,19 @@ export default function AdminAttendancePage() {
   const [approval, setApproval] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [period, setPeriod] = useState("custom");
   const [editing, setEditing] = useState<AdminRecord | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Choosing a report preset fills the date range; editing dates by hand reverts to custom.
+  function selectPeriod(next: string) {
+    setPeriod(next);
+    const range = periodRange(next);
+    if (range) {
+      setFrom(range.from);
+      setTo(range.to);
+    }
+  }
 
   const queryString = useCallback(() => {
     const p = new URLSearchParams();
@@ -71,6 +127,9 @@ export default function AdminAttendancePage() {
     if (to) p.set("to", to);
     return p.toString();
   }, [q, status, approval, from, to]);
+
+  // The export carries the report period so the server titles and names the file.
+  const exportUrl = `/api/attendance/export?${queryString()}${period !== "custom" ? `&period=${period}` : ""}`;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,9 +173,9 @@ export default function AdminAttendancePage() {
           <p className="text-sm text-muted-foreground">Review, approve, and correct attendance across the team.</p>
         </div>
         <div className="flex items-center gap-2">
-          <a href={`/api/attendance/export?${queryString()}`}>
+          <a href={exportUrl}>
             <Button type="button" variant="outline" size="sm">
-              <IconDownload className="h-4 w-4" />
+              <IconFileSpreadsheet className="h-4 w-4" />
               Export CSV
             </Button>
           </a>
@@ -131,10 +190,14 @@ export default function AdminAttendancePage() {
 
       {/* Filters */}
       <Card>
-        <CardContent className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+        <CardContent className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="att-q">Search</Label>
             <Input id="att-q" placeholder="Name or email" value={q} onChange={(e) => setQ(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Report</Label>
+            <Dropdown value={period} onChange={selectPeriod} options={REPORT_PERIODS} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Status</Label>
@@ -146,11 +209,27 @@ export default function AdminAttendancePage() {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="att-from">From</Label>
-            <Input id="att-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <DatePicker
+              id="att-from"
+              value={from}
+              onChange={(v) => {
+                setFrom(v);
+                setPeriod("custom");
+              }}
+              placeholder="Any"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="att-to">To</Label>
-            <Input id="att-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <DatePicker
+              id="att-to"
+              value={to}
+              onChange={(v) => {
+                setTo(v);
+                setPeriod("custom");
+              }}
+              placeholder="Any"
+            />
           </div>
         </CardContent>
       </Card>
@@ -188,7 +267,7 @@ export default function AdminAttendancePage() {
                       <td className="whitespace-nowrap px-4 py-2">{r.date}</td>
                       <td className="px-4 py-2">
                         <div className="flex items-center gap-1.5">
-                          <StatusBadge status={r.status} />
+                          <StatusBadge status={r.status} working={!!r.checkIn && !r.checkOut} />
                           {r.statusOverride && (
                             <span
                               className="text-[10px] text-muted-foreground"
@@ -208,18 +287,24 @@ export default function AdminAttendancePage() {
                       <td className="px-4 py-2">
                         <div className="flex items-center justify-end gap-1">
                           {r.approvalStatus !== "APPROVED" && r.status && (
-                            <Button type="button" size="sm" variant="ghost" disabled={busyId === r.id} onClick={() => decide(r, "APPROVED")} title="Approve">
-                              <IconCheck className="h-4 w-4 text-emerald-500" />
-                            </Button>
+                            <Tooltip label="Approve">
+                              <Button type="button" size="sm" variant="ghost" disabled={busyId === r.id} onClick={() => decide(r, "APPROVED")}>
+                                <IconCheck className="h-4 w-4 text-emerald-500" />
+                              </Button>
+                            </Tooltip>
                           )}
                           {r.approvalStatus !== "REJECTED" && r.status && (
-                            <Button type="button" size="sm" variant="ghost" disabled={busyId === r.id} onClick={() => decide(r, "REJECTED")} title="Reject">
-                              <IconX className="h-4 w-4 text-red-500" />
-                            </Button>
+                            <Tooltip label="Reject">
+                              <Button type="button" size="sm" variant="ghost" disabled={busyId === r.id} onClick={() => decide(r, "REJECTED")}>
+                                <IconX className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </Tooltip>
                           )}
-                          <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(r)} title="Override / edit">
-                            <IconPencil className="h-3.5 w-3.5" />
-                          </Button>
+                          <Tooltip label="Override / edit">
+                            <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(r)}>
+                              <IconPencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </Tooltip>
                         </div>
                       </td>
                     </tr>

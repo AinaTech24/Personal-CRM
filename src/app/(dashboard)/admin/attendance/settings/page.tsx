@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { EightDotsRotate } from "@/components/ui/loader";
-import { IconChevronLeft, IconTrash, IconPlus } from "@/components/icons";
+import { IconChevronLeft, IconTrash, IconPlus, IconMailCheck } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 
 const WEEKDAYS = [
@@ -43,6 +44,7 @@ export default function AttendanceSettingsPage() {
   const [newDate, setNewDate] = useState("");
   const [newName, setNewName] = useState("");
   const [addingHoliday, setAddingHoliday] = useState(false);
+  const [sendingReports, setSendingReports] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -126,6 +128,21 @@ export default function AttendanceSettingsPage() {
     const res = await fetch(`/api/holidays/${id}`, { method: "DELETE" });
     if (!res.ok) return toast.error("Couldn't remove holiday");
     setHolidays((prev) => prev.filter((h) => h.id !== id));
+  }
+
+  async function sendMonthlyReports() {
+    setSendingReports(true);
+    try {
+      const res = await fetch("/api/attendance/send-monthly-reports", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) return toast.error("Couldn't send reports", json.error);
+      toast.success(
+        `${json.monthLabel} reports sent`,
+        `${json.sent} sent, ${json.skippedNoData} skipped${json.failed ? `, ${json.failed} failed` : ""}`
+      );
+    } finally {
+      setSendingReports(false);
+    }
   }
 
   if (loading) {
@@ -215,7 +232,9 @@ export default function AttendanceSettingsPage() {
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="hol-date">Date</Label>
-              <Input id="hol-date" type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="w-44" />
+              <div className="w-44">
+                <DatePicker id="hol-date" value={newDate} onChange={setNewDate} placeholder="Pick a date" />
+              </div>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="hol-name">Name</Label>
@@ -243,6 +262,25 @@ export default function AttendanceSettingsPage() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Monthly email reports */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 p-5">
+          <div>
+            <p className="text-sm font-medium">Monthly email reports</p>
+            <p className="text-xs text-muted-foreground">
+              Each active user gets an emailed attendance snapshot for the month, branded with the company profile.
+              Delivery runs automatically each month via a scheduled job; use this to send last month&apos;s reports now.
+            </p>
+          </div>
+          <div>
+            <Button type="button" variant="outline" onClick={sendMonthlyReports} disabled={sendingReports}>
+              <IconMailCheck className="h-4 w-4" />
+              {sendingReports ? "Sending..." : "Send last month's reports now"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
