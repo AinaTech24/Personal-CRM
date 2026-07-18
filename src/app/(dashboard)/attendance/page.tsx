@@ -9,15 +9,15 @@ import { IconClock, IconCheck } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { SummaryCards, type AttendanceSummaryData } from "@/components/attendance/summary-cards";
 import { AttendanceLegend } from "@/components/attendance/legend";
-import { YearList, type AttendanceDayRecord } from "@/components/attendance/year-list";
+import { YearHeatmap, type HeatmapRecord } from "@/components/attendance/year-heatmap";
 import { StatusBadge, ApprovalBadge } from "@/components/attendance/status-badge";
 import { formatIstTime, formatDuration, formatFullDate, HALF_DAY_REASON_LABEL } from "@/lib/attendance-ui";
 
 interface MeResponse {
   year: number;
   todayKey: string;
-  records: AttendanceDayRecord[];
-  today: AttendanceDayRecord | null;
+  records: HeatmapRecord[];
+  today: HeatmapRecord | null;
   summary: AttendanceSummaryData;
   holidays: { date: string; name: string }[];
 }
@@ -142,7 +142,7 @@ export default function AttendancePage() {
                 <p className="text-sm font-medium">{year} overview</p>
                 <AttendanceLegend />
               </div>
-              <YearList year={year} records={data.records} todayKey={data.todayKey} />
+              <YearHeatmap year={year} records={data.records} holidays={data.holidays} todayKey={data.todayKey} />
             </CardContent>
           </Card>
 
