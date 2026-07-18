@@ -1,12 +1,13 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { IconEye, IconEyeOff } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 
@@ -137,7 +138,7 @@ function LoginFormInner() {
       >
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl">Aina CRM</CardTitle>
+            <Image src="/logo.png" alt="Aina CRM" width={160} height={67} priority unoptimized className="mb-1 h-12 w-auto self-start" />
             <CardDescription>
               {mode === "login"
                 ? "Sign in with your @ainatech.in account"

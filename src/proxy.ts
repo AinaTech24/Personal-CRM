@@ -39,7 +39,10 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/socket.io") ||
-    pathname === "/favicon.ico"
+    pathname === "/favicon.ico" ||
+    // Static assets in /public (logo.png, *.svg, …) — a path ending in a file
+    // extension is never an app route, and must load even when signed out.
+    /\.[a-z0-9]+$/i.test(pathname)
   ) {
     return NextResponse.next();
   }

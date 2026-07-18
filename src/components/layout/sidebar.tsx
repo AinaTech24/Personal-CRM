@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   IconDashboard,
@@ -129,7 +130,15 @@ export function Sidebar({
             <IconChevronLeft className={cn("h-4 w-4 transition-transform duration-300", collapsed && "rotate-180")} />
           </button>
         </Tooltip>
-        <span className={cn("text-sm font-semibold tracking-tight", labelClass)}>Aina CRM</span>
+        <Image
+          src="/logo.png"
+          alt="Aina CRM"
+          width={72}
+          height={30}
+          priority
+          unoptimized
+          className={cn("h-7 w-auto shrink-0", labelClass)}
+        />
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 py-2">
