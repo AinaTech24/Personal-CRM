@@ -2,24 +2,10 @@
 
 import { useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import {
-  addMonths,
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
-  format,
-  isSameDay,
-  isSameMonth,
-  setHours,
-  setMinutes,
-  startOfMonth,
-  startOfWeek,
-  subMonths,
-} from "date-fns";
-import { IconCalendar, IconChevronLeft, IconChevronRight, IconX } from "@/components/icons";
+import { format, isSameDay, setHours, setMinutes } from "date-fns";
+import { IconCalendar, IconX } from "@/components/icons";
 import { cn } from "@/lib/utils";
-
-const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+import { CalendarMonth } from "@/components/ui/calendar";
 
 interface DateTimePickerProps {
   value: Date | null;
@@ -46,10 +32,6 @@ export function DateTimePicker({
 }: DateTimePickerProps) {
   const [open, setOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState(value ?? new Date());
-
-  const gridStart = startOfWeek(startOfMonth(viewMonth));
-  const gridEnd = endOfWeek(endOfMonth(viewMonth));
-  const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
 
   const hour = value ? value.getHours() : 9;
   const minute = value ? value.getMinutes() : 0;
@@ -107,48 +89,12 @@ export function DateTimePicker({
           sideOffset={6}
           className="z-50 w-64 rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-lg"
         >
-          <div className="flex items-center justify-between pb-2">
-            <button
-              type="button"
-              onClick={() => setViewMonth((m) => subMonths(m, 1))}
-              className="flex h-6 w-6 items-center justify-center rounded hover:bg-accent"
-            >
-              <IconChevronLeft className="h-3.5 w-3.5" />
-            </button>
-            <span className="text-xs font-medium">{format(viewMonth, "MMMM yyyy")}</span>
-            <button
-              type="button"
-              onClick={() => setViewMonth((m) => addMonths(m, 1))}
-              className="flex h-6 w-6 items-center justify-center rounded hover:bg-accent"
-            >
-              <IconChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <div className="grid grid-cols-7 gap-y-0.5 text-center">
-            {WEEKDAYS.map((w) => (
-              <span key={w} className="text-[10px] font-medium text-muted-foreground">
-                {w}
-              </span>
-            ))}
-            {days.map((day) => {
-              const selected = value && isSameDay(day, value);
-              const inMonth = isSameMonth(day, viewMonth);
-              return (
-                <button
-                  key={day.toISOString()}
-                  type="button"
-                  onClick={() => pickDay(day)}
-                  className={cn(
-                    "mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs transition-colors hover:bg-accent",
-                    !inMonth && "text-muted-foreground/40",
-                    selected && "bg-primary text-primary-foreground hover:bg-primary"
-                  )}
-                >
-                  {format(day, "d")}
-                </button>
-              );
-            })}
-          </div>
+          <CalendarMonth
+            viewMonth={viewMonth}
+            onViewMonthChange={setViewMonth}
+            onPick={pickDay}
+            dayState={(day) => ({ selected: !!value && isSameDay(day, value) })}
+          />
           {showTime && (
             <div className="mt-3 flex items-center justify-center gap-1.5 border-t border-border pt-3">
               <TimeStepper label="HH" value={hour} onChange={setHour} max={23} />

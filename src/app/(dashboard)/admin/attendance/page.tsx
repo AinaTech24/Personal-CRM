@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { EightDotsRotate } from "@/components/ui/loader";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -190,7 +190,7 @@ export default function AdminAttendancePage() {
 
       {/* Filters */}
       <Card>
-        <CardContent className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
+        <CardContent className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="att-q">Search</Label>
             <Input id="att-q" placeholder="Name or email" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -208,24 +208,14 @@ export default function AdminAttendancePage() {
             <Dropdown value={approval} onChange={setApproval} options={APPROVAL_FILTER} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="att-from">From</Label>
-            <DatePicker
-              id="att-from"
-              value={from}
-              onChange={(v) => {
-                setFrom(v);
-                setPeriod("custom");
-              }}
-              placeholder="Any"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="att-to">To</Label>
-            <DatePicker
-              id="att-to"
-              value={to}
-              onChange={(v) => {
-                setTo(v);
+            <Label htmlFor="att-range">Date range</Label>
+            <DateRangePicker
+              id="att-range"
+              from={from}
+              to={to}
+              onChange={(f, t) => {
+                setFrom(f);
+                setTo(t);
                 setPeriod("custom");
               }}
               placeholder="Any"
