@@ -16,6 +16,8 @@ import { IconFileSpreadsheet, IconSettings, IconCheck, IconX, IconPencil } from 
 import { useToast } from "@/components/providers/toast-provider";
 import { StatusBadge, ApprovalBadge } from "@/components/attendance/status-badge";
 import { SummaryCards } from "@/components/attendance/summary-cards";
+import { AttendanceLegend } from "@/components/attendance/legend";
+import { TeamYearHeatmap, type TeamDay } from "@/components/attendance/team-year-heatmap";
 import { summarize } from "@/lib/attendance";
 import { formatIstTime, formatDuration, HALF_DAY_REASON_LABEL, STATUS_LABEL } from "@/lib/attendance-ui";
 import {
@@ -65,6 +67,16 @@ const STATUS_OPTIONS = [
 ];
 const REASON_OPTIONS = Object.entries(HALF_DAY_REASON_LABEL).map(([value, label]) => ({ value, label }));
 
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = [CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2].map((y) => ({ value: String(y), label: String(y) }));
+
+interface TeamYearResponse {
+  year: number;
+  todayKey: string;
+  days: TeamDay[];
+  holidays: { date: string; name: string }[];
+}
+
 const REPORT_PERIODS = [
   { value: "custom", label: "Custom range" },
   { value: "weekly", label: "Weekly" },
@@ -109,6 +121,8 @@ export default function AdminAttendancePage() {
   const [period, setPeriod] = useState("custom");
   const [editing, setEditing] = useState<AdminRecord | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [overviewYear, setOverviewYear] = useState(CURRENT_YEAR);
+  const [teamYear, setTeamYear] = useState<TeamYearResponse | null>(null);
 
   // Choosing a report preset fills the date range; editing dates by hand reverts to custom.
   function selectPeriod(next: string) {
@@ -157,6 +171,20 @@ export default function AdminAttendancePage() {
     return () => clearTimeout(t);
   }, [load]);
 
+  // The year-overview heatmap loads independently of the table filters.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/attendance/team-year?year=${overviewYear}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled) setTeamYear(json);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [overviewYear]);
+
   async function decide(rec: AdminRecord, decision: "APPROVED" | "REJECTED") {
     setBusyId(rec.id);
     try {
@@ -195,6 +223,37 @@ export default function AdminAttendancePage() {
           </Link>
         </div>
       </div>
+
+      {/* Team year overview — hover a day to see present / half day / absent counts */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <p className="text-sm font-medium">{overviewYear} overview</p>
+              <div className="w-24">
+                <Dropdown
+                  value={String(overviewYear)}
+                  onChange={(v) => setOverviewYear(Number(v))}
+                  options={YEAR_OPTIONS}
+                />
+              </div>
+            </div>
+            <AttendanceLegend />
+          </div>
+          {teamYear ? (
+            <TeamYearHeatmap
+              year={overviewYear}
+              days={teamYear.days}
+              holidays={teamYear.holidays}
+              todayKey={teamYear.todayKey}
+            />
+          ) : (
+            <div className="flex justify-center py-8">
+              <EightDotsRotate className="h-8 w-8" />
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>
