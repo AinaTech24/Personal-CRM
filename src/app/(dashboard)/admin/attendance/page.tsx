@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AttendanceStatus, AttendanceApproval, HalfDayReason } from "@/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,8 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { IconFileSpreadsheet, IconSettings, IconCheck, IconX, IconPencil } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { StatusBadge, ApprovalBadge } from "@/components/attendance/status-badge";
+import { SummaryCards } from "@/components/attendance/summary-cards";
+import { summarize } from "@/lib/attendance";
 import { formatIstTime, formatDuration, HALF_DAY_REASON_LABEL, STATUS_LABEL } from "@/lib/attendance-ui";
 import {
   format,
@@ -131,6 +133,12 @@ export default function AdminAttendancePage() {
   // The export carries the report period so the server titles and names the file.
   const exportUrl = `/api/attendance/export?${queryString()}${period !== "custom" ? `&period=${period}` : ""}`;
 
+  // Present / Half / Absent (and the rest) across whatever the filters currently match.
+  const summary = useMemo(
+    () => summarize(records.map((r) => ({ status: r.status, approvalStatus: r.approvalStatus }))),
+    [records]
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -223,6 +231,9 @@ export default function AdminAttendancePage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Present / Half / Absent totals for the current filter */}
+      {!loading && records.length > 0 && <SummaryCards summary={summary} />}
 
       <Card>
         <CardContent className="p-0">
