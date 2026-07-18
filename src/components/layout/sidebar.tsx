@@ -16,6 +16,7 @@ import {
   IconMail,
   IconSettings,
   IconClock,
+  IconCalendar,
   IconChevronLeft,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -32,6 +33,7 @@ const mainNav: NavItem[] = [
   { href: "/leads", label: "Leads", icon: IconLeads },
   { href: "/tasks", label: "Tasks", icon: IconTasks },
   { href: "/projects", label: "Projects", icon: IconProjects },
+  { href: "/meetings", label: "Meetings", icon: IconCalendar },
   { href: "/quotations", label: "Quotations", icon: IconQuotations },
   { href: "/invoices", label: "Invoices", icon: IconInvoices },
   { href: "/attendance", label: "My Attendance", icon: IconClock },

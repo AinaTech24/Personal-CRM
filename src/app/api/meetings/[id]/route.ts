@@ -1,0 +1,88 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import { isAdmin } from "@/lib/permissions";
+
+const meetingInclude = {
+  organizer: { select: { id: true, name: true, email: true } },
+  attendees: { select: { id: true, name: true, email: true }, orderBy: { name: "asc" as const } },
+};
+
+const patchSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().max(5000).nullable().optional(),
+  location: z.string().max(500).nullable().optional(),
+  startsAt: z.string().optional(),
+  endsAt: z.string().nullable().optional(),
+  status: z.enum(["SCHEDULED", "COMPLETED", "CANCELLED"]).optional(),
+  attendeeIds: z.array(z.string()).optional(),
+});
+
+/** Only the organizer or an admin may change or remove a meeting. */
+async function canManage(userId: string, isAdminUser: boolean, meetingId: string) {
+  if (isAdminUser) return true;
+  const m = await db.meeting.findUnique({ where: { id: meetingId }, select: { organizerId: true } });
+  return !!m && m.organizerId === userId;
+}
+
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+
+  const meeting = await db.meeting.findUnique({ where: { id }, include: meetingInclude });
+  if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const visible = isAdmin(user) || meeting.organizer.id === user.id || meeting.attendees.some((a) => a.id === user.id);
+  if (!visible) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  return NextResponse.json({ meeting });
+}
+
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+
+  if (!(await canManage(user.id, isAdmin(user), id))) {
+    return NextResponse.json({ error: "Only the organizer can edit this meeting" }, { status: 403 });
+  }
+
+  const parsed = patchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  const d = parsed.data;
+
+  const data: Record<string, unknown> = {};
+  if (d.title !== undefined) data.title = d.title;
+  if (d.description !== undefined) data.description = d.description || null;
+  if (d.location !== undefined) data.location = d.location || null;
+  if (d.status !== undefined) data.status = d.status;
+  if (d.startsAt !== undefined) {
+    const s = new Date(d.startsAt);
+    if (Number.isNaN(s.getTime())) return NextResponse.json({ error: "Invalid start time" }, { status: 400 });
+    data.startsAt = s;
+  }
+  if (d.endsAt !== undefined) {
+    data.endsAt = d.endsAt ? new Date(d.endsAt) : null;
+  }
+  if (d.attendeeIds !== undefined) {
+    data.attendees = { set: d.attendeeIds.map((aid) => ({ id: aid })) };
+  }
+
+  const meeting = await db.meeting.update({ where: { id }, data, include: meetingInclude });
+  return NextResponse.json({ meeting });
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+
+  if (!(await canManage(user.id, isAdmin(user), id))) {
+    return NextResponse.json({ error: "Only the organizer can delete this meeting" }, { status: 403 });
+  }
+
+  await db.meeting.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}
