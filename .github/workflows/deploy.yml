@@ -21,28 +21,34 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          script_stop: true
           command_timeout: 20m
           script: |
             set -e
 
-            echo "=== Starting Aina CRM deployment ==="
+            echo "=== Connected as $(whoami) on $(hostname) ==="
 
-            cd /var/www/ainacrm
+            # Non-interactive SSH sessions don't load the login PATH, so node/npm/pm2
+            # (esp. via nvm or a global npm prefix) can be missing. Load them explicitly.
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            export PATH="$PATH:/usr/local/bin:/usr/bin:$HOME/.npm-global/bin"
+
+            echo "=== Tool versions ==="
+            command -v node npm pm2 || { echo "!! node/npm/pm2 not on PATH"; exit 1; }
+            node -v && npm -v && pm2 -v
 
             echo "=== Pulling latest code ==="
+            cd /var/www/ainacrm
             git pull --ff-only
 
             echo "=== Installing dependencies ==="
             npm ci
 
-            echo "=== Building application ==="
+            echo "=== Building application (prisma generate + db push + next build) ==="
             npm run build
 
-            echo "=== Restarting PM2 ==="
-            pm2 restart aina-crm
-
-            echo "=== Saving PM2 configuration ==="
+            echo "=== (Re)starting PM2 process 'aina-crm' ==="
+            pm2 restart aina-crm || pm2 start npm --name aina-crm -- start
             pm2 save
 
             echo "=== Deployment completed successfully ==="
