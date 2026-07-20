@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -11,13 +11,15 @@ import {
   IconQuotations,
   IconInvoices,
   IconClock,
+  IconCalendar,
+  IconUsers,
   IconX,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface SearchResult {
-  type: "lead" | "task" | "project" | "quotation" | "invoice";
+  type: "lead" | "task" | "project" | "quotation" | "invoice" | "meeting" | "user";
   id: string;
   title: string;
   subtitle?: string;
@@ -30,7 +32,33 @@ const TYPE_ICON = {
   project: IconProjects,
   quotation: IconQuotations,
   invoice: IconInvoices,
+  meeting: IconCalendar,
+  user: IconUsers,
 } as const;
+
+/** Wrap every occurrence of the query substring in the text so matches stand out. */
+function Highlight({ text, query }: { text: string; query: string }) {
+  const q = query.trim();
+  if (!q) return <>{text}</>;
+  const parts: ReactNode[] = [];
+  const lower = text.toLowerCase();
+  const needle = q.toLowerCase();
+  let from = 0;
+  let idx = lower.indexOf(needle, from);
+  let k = 0;
+  while (idx !== -1) {
+    if (idx > from) parts.push(text.slice(from, idx));
+    parts.push(
+      <mark key={k++} className="rounded-[2px] bg-primary/25 text-foreground">
+        {text.slice(idx, idx + needle.length)}
+      </mark>
+    );
+    from = idx + needle.length;
+    idx = lower.indexOf(needle, from);
+  }
+  if (from < text.length) parts.push(text.slice(from));
+  return <>{parts}</>;
+}
 
 const RECENT_SEARCHES_KEY = "aina-recent-searches";
 const RECENT_PAGES_KEY = "aina-recent-pages";
@@ -230,7 +258,7 @@ export function CommandPalette() {
                   )}
                   {recentSearches.length === 0 && recentPages.length === 0 && (
                     <p className="px-2 py-8 text-center text-sm text-muted-foreground">
-                      Search leads, tasks, projects, quotations and invoices
+                      Search across leads, tasks, projects, meetings, quotations, invoices and more
                     </p>
                   )}
                 </>
@@ -239,7 +267,7 @@ export function CommandPalette() {
               ) : results.length === 0 ? (
                 <p className="px-2 py-8 text-center text-sm text-muted-foreground">No results for “{query}”</p>
               ) : (
-                results.map((r) => <ResultRow key={`${r.type}-${r.id}`} result={r} onSelect={select} />)
+                results.map((r) => <ResultRow key={`${r.type}-${r.id}`} result={r} onSelect={select} query={query} />)
               )}
             </div>
           </Dialog.Content>
@@ -249,7 +277,7 @@ export function CommandPalette() {
   );
 }
 
-function ResultRow({ result, onSelect }: { result: SearchResult; onSelect: (r: SearchResult) => void }) {
+function ResultRow({ result, onSelect, query = "" }: { result: SearchResult; onSelect: (r: SearchResult) => void; query?: string }) {
   const Icon = TYPE_ICON[result.type];
   return (
     <button
@@ -259,8 +287,15 @@ function ResultRow({ result, onSelect }: { result: SearchResult; onSelect: (r: S
     >
       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1 truncate">
-        <span className="font-medium">{result.title}</span>
-        {result.subtitle && <span className="text-muted-foreground"> — {result.subtitle}</span>}
+        <span className="font-medium">
+          <Highlight text={result.title} query={query} />
+        </span>
+        {result.subtitle && (
+          <span className="text-muted-foreground">
+            {" — "}
+            <Highlight text={result.subtitle} query={query} />
+          </span>
+        )}
       </span>
       <span className={cn("shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60")}>
         {result.type}

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isAdmin } from "@/lib/permissions";
 import { leadListWhere } from "@/lib/leads";
 import { taskListWhere } from "@/lib/tasks";
 import { projectListWhere } from "@/lib/projects";
 import { billingListWhere } from "@/lib/billing";
 
 export interface SearchResult {
-  type: "lead" | "task" | "project" | "quotation" | "invoice";
+  type: "lead" | "task" | "project" | "quotation" | "invoice" | "meeting" | "user";
   id: string;
   title: string;
   subtitle?: string;
@@ -23,7 +24,12 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   if (q.length < 1) return NextResponse.json({ results: [] });
 
-  const [leads, tasks, projects, quotations, invoices] = await Promise.all([
+  const admin = isAdmin(user);
+  const meetingVisibility = admin
+    ? {}
+    : { OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }] };
+
+  const [leads, tasks, projects, quotations, invoices, meetings, users] = await Promise.all([
     db.lead.findMany({
       where: {
         AND: [leadListWhere(user), { OR: [{ name: { contains: q } }, { company: { contains: q } }, { email: { contains: q } }] }],
@@ -51,6 +57,19 @@ export async function GET(req: NextRequest) {
       select: { id: true, invoiceNumber: true, clientName: true },
       take: TAKE,
     }),
+    db.meeting.findMany({
+      where: { AND: [meetingVisibility, { title: { contains: q } }] },
+      select: { id: true, title: true, status: true },
+      take: TAKE,
+    }),
+    // User search is admin-only (the admin side of the CRM).
+    admin
+      ? db.user.findMany({
+          where: { OR: [{ name: { contains: q } }, { surname: { contains: q } }, { email: { contains: q } }] },
+          select: { id: true, name: true, surname: true, email: true },
+          take: TAKE,
+        })
+      : Promise.resolve([]),
   ]);
 
   const results: SearchResult[] = [
@@ -59,6 +78,14 @@ export async function GET(req: NextRequest) {
     ...projects.map((p) => ({ type: "project" as const, id: p.id, title: p.name, href: `/projects/${p.id}` })),
     ...quotations.map((qo) => ({ type: "quotation" as const, id: qo.id, title: qo.quotationNumber, subtitle: qo.clientName, href: `/quotations?quotation=${qo.id}` })),
     ...invoices.map((inv) => ({ type: "invoice" as const, id: inv.id, title: inv.invoiceNumber, subtitle: inv.clientName, href: `/invoices?invoice=${inv.id}` })),
+    ...meetings.map((m) => ({ type: "meeting" as const, id: m.id, title: m.title, subtitle: m.status.replace(/_/g, " "), href: "/meetings" })),
+    ...users.map((u) => ({
+      type: "user" as const,
+      id: u.id,
+      title: [u.name, u.surname].filter(Boolean).join(" "),
+      subtitle: u.email,
+      href: `/admin/users/${u.id}`,
+    })),
   ];
 
   return NextResponse.json({ results });
