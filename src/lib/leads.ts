@@ -49,17 +49,21 @@ export function broadcastLeadChange(
 }
 
 export async function assignableUsersFor(user: PermissionUser, opts?: { allActive?: boolean }) {
+  const admin = isAdmin(user);
+  // Super Admins are only offered as an assignee to admins; regular users never
+  // see them in assignment pickers.
+  const roleFilter = admin ? {} : { role: { not: "SUPER_ADMIN" as const } };
   // Admins always see everyone; other modules (e.g. task assignment) can opt in
   // to the full active-user list so any user can be assigned across departments.
-  if (opts?.allActive || isAdmin(user)) {
+  if (opts?.allActive || admin) {
     return db.user.findMany({
-      where: { isActive: true },
+      where: { isActive: true, ...roleFilter },
       select: { id: true, name: true, email: true, departmentId: true },
       orderBy: { name: "asc" },
     });
   }
   return db.user.findMany({
-    where: { isActive: true, departmentId: user.departmentId },
+    where: { isActive: true, departmentId: user.departmentId, ...roleFilter },
     select: { id: true, name: true, email: true, departmentId: true },
     orderBy: { name: "asc" },
   });
