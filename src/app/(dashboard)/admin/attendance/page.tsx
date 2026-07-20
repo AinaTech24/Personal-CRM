@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AttendanceStatus, AttendanceApproval, HalfDayReason } from "@/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
@@ -18,6 +17,7 @@ import { StatusBadge, ApprovalBadge } from "@/components/attendance/status-badge
 import { SummaryCards } from "@/components/attendance/summary-cards";
 import { AttendanceLegend } from "@/components/attendance/legend";
 import { TeamYearHeatmap, type TeamDay } from "@/components/attendance/team-year-heatmap";
+import { AttendanceSettingsPanel } from "@/components/attendance/attendance-settings-panel";
 import { summarize } from "@/lib/attendance";
 import { formatIstTime, formatDuration, HALF_DAY_REASON_LABEL, STATUS_LABEL } from "@/lib/attendance-ui";
 import {
@@ -123,6 +123,7 @@ export default function AdminAttendancePage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [overviewYear, setOverviewYear] = useState(CURRENT_YEAR);
   const [teamYear, setTeamYear] = useState<TeamYearResponse | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Choosing a report preset fills the date range; editing dates by hand reverts to custom.
   function selectPeriod(next: string) {
@@ -215,14 +216,23 @@ export default function AdminAttendancePage() {
               Export CSV
             </Button>
           </a>
-          <Link href="/admin/attendance/settings">
-            <Button type="button" variant="outline" size="sm">
-              <IconSettings className="h-4 w-4" />
-              Settings
-            </Button>
-          </Link>
+          <Button type="button" variant="outline" size="sm" onClick={() => setSettingsOpen(true)}>
+            <IconSettings className="h-4 w-4" />
+            Settings
+          </Button>
         </div>
       </div>
+
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent size="lg">
+          <DialogHeader>
+            <DialogTitle>Attendance settings</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <AttendanceSettingsPanel />
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
 
       {/* Team year overview — hover a day to see present / half day / absent counts */}
       <Card>
