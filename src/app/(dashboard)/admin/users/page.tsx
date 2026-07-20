@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -41,10 +42,16 @@ interface Department {
 interface UserRow {
   id: string;
   name: string;
+  surname: string | null;
   email: string;
   role: string;
   isActive: boolean;
   department: { id: string; name: string } | null;
+}
+
+/** Full name = name + surname, falling back to just the name. */
+function fullName(u: { name: string; surname?: string | null }) {
+  return [u.name, u.surname].filter(Boolean).join(" ");
 }
 
 function roleLabel(role: string) {
@@ -53,6 +60,7 @@ function roleLabel(role: string) {
 
 export default function UsersPage() {
   const toast = useToast();
+  const router = useRouter();
   const { socket } = useSocket();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -233,8 +241,12 @@ export default function UsersPage() {
                   </tr>
                 ) : (
                   filteredUsers.map((u) => (
-                    <tr key={u.id} className="border-t border-border">
-                      <td className="px-6 py-2.5">{u.name}</td>
+                    <tr
+                      key={u.id}
+                      onClick={() => router.push(`/admin/users/${u.id}`)}
+                      className="cursor-pointer border-t border-border transition-colors hover:bg-accent/40"
+                    >
+                      <td className="px-6 py-2.5 font-medium">{fullName(u)}</td>
                       <td className="px-6 py-2.5 text-muted-foreground">{u.email}</td>
                       <td className="px-6 py-2.5">{roleLabel(u.role)}</td>
                       <td className="px-6 py-2.5 text-muted-foreground">{u.department?.name ?? "—"}</td>
@@ -249,7 +261,7 @@ export default function UsersPage() {
                         </span>
                       </td>
                       <td className="px-6 py-2.5">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                           <Tooltip label="Edit">
                             <button
                               type="button"
