@@ -91,6 +91,10 @@ model User {
 
   meetingsOrganized Meeting[] @relation("MeetingOrganizer")
   meetingsAttending Meeting[] @relation("MeetingAttendees")
+
+  conversationsCreated    Conversation[]       @relation("ConversationCreatedBy")
+  conversationMemberships ConversationMember[]
+  messagesSent            Message[]            @relation("MessageSender")
 }
 
 model Invite {
@@ -798,4 +802,55 @@ model Meeting {
 
   @@index([startsAt])
   @@index([organizerId])
+}
+
+// ---------- Chat / Messaging ----------
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+model Conversation {
+  id          String           @id @default(cuid())
+  type        ConversationType
+  /// Group name; null for 1:1 direct chats.
+  title       String?
+  /// True for the auto-managed "Aina Family" group every user belongs to.
+  isSystem    Boolean          @default(false)
+  createdById String?
+  createdBy   User?            @relation("ConversationCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@index([type])
+}
+
+model ConversationMember {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// When this member last opened the conversation — drives unread counts.
+  lastReadAt     DateTime?
+  joinedAt       DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id])
+  body           String       @db.Text
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
 }

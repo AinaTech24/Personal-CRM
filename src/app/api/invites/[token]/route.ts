@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { hashPassword, createSessionCookie } from "@/lib/auth";
 import { emitToAdmins } from "@/lib/socket-emit";
+import { addUserToAinaFamily } from "@/lib/chat";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -56,6 +57,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
     return created;
   });
+
+  // Every new account joins the auto-managed "Aina Family" group.
+  await addUserToAinaFamily(user.id).catch(() => {});
 
   await createSessionCookie(
     {

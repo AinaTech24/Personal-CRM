@@ -364,6 +364,14 @@ export function IconSend(props: IconProps) {
   );
 }
 
+export function IconMessage(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z" />
+    </svg>
+  );
+}
+
 export function IconShield(props: IconProps) {
   return (
     <svg {...base(props)}>
