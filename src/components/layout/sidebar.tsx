@@ -62,6 +62,26 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const [pendingCount, setPendingCount] = useState(0);
+  const [hiddenModules, setHiddenModules] = useState<string[]>([]);
+
+  // Which modules an admin has hidden from regular users. Admins see everything.
+  useEffect(() => {
+    if (isAdmin) return;
+    let active = true;
+    fetch("/api/module-visibility")
+      .then((r) => r.json())
+      .then((d) => {
+        if (active) setHiddenModules(Array.isArray(d.hiddenModules) ? d.hiddenModules : []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isAdmin]);
+
+  const visibleMainNav = isAdmin
+    ? mainNav
+    : mainNav.filter((item) => item.href === "/" || !hiddenModules.includes(item.href.replace(/^\//, "")));
 
   // Poll pending attendance so the Attendance item can flag new check-ins. Admin only.
   useEffect(() => {
@@ -121,7 +141,10 @@ export function Sidebar({
 
   return (
     <aside className="hidden h-screen min-w-0 flex-col overflow-hidden border-r border-border bg-card/40 md:flex">
-      <div className="flex h-14 shrink-0 items-center gap-2 px-3">
+      <div className={cn("flex h-14 shrink-0 items-center px-3", collapsed ? "justify-center" : "justify-between")}>
+        {!collapsed && (
+          <Image src="/logo.png" alt="Aina CRM" width={72} height={30} priority unoptimized className="h-7 w-auto shrink-0" />
+        )}
         <Tooltip label={collapsed ? "Expand sidebar" : "Collapse sidebar"} side="right">
           <button
             type="button"
@@ -132,19 +155,10 @@ export function Sidebar({
             <IconChevronLeft className={cn("h-4 w-4 transition-transform duration-300", collapsed && "rotate-180")} />
           </button>
         </Tooltip>
-        <Image
-          src="/logo.png"
-          alt="Aina CRM"
-          width={72}
-          height={30}
-          priority
-          unoptimized
-          className={cn("h-7 w-auto shrink-0", labelClass)}
-        />
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 py-2">
-        {mainNav.map((item) => {
+        {visibleMainNav.map((item) => {
           const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
           return renderItem(item, active);
         })}

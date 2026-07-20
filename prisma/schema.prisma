@@ -617,6 +617,11 @@ model AppSettings {
    * Base URL used to build links in outbound email. Falls back to APP_URL when unset.
    */
   appUrl    String?
+  /**
+   * Sidebar module keys hidden from non-admin users (e.g. ["quotations","invoices"]).
+   * Admins always see every module. Null/absent = nothing hidden.
+   */
+  hiddenModules Json?
   updatedAt DateTime @updatedAt
 }
 
