@@ -32,6 +32,7 @@ const bodySchema = z.object({
   location: z.string().max(500).optional().nullable(),
   startsAt: z.string(),
   endsAt: z.string().optional().nullable(),
+  status: z.enum(["SCHEDULED", "COMPLETED", "CANCELLED"]).optional().default("SCHEDULED"),
   attendeeIds: z.array(z.string()).optional().default([]),
 });
 
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
       location: d.location || null,
       startsAt,
       endsAt,
+      status: d.status,
       organizerId: user.id,
       attendees: { connect: d.attendeeIds.map((id) => ({ id })) },
     },

@@ -26,6 +26,7 @@ const bodySchema = z.object({
   title: z.string().min(1),
   description: z.string().optional().nullable(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
+  status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELLED"]).default("TODO"),
   dueDate: z.string().optional().nullable(),
   assignedToId: z.string().optional().nullable(),
 });
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
       title: data.title,
       description: data.description || null,
       priority: data.priority,
+      status: data.status,
       dueDate: data.dueDate ? new Date(data.dueDate) : null,
       assignedToId: data.assignedToId || null,
       createdById: user.id,

@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { IconPlus } from "@/components/icons";
-import { PRIORITY_OPTIONS, type AssignableUser, type Priority } from "@/components/tasks/types";
+import { PRIORITY_OPTIONS, TASK_STATUSES, type AssignableUser, type Priority, type TaskStatus } from "@/components/tasks/types";
 
 export function NewTaskDialog({
   assignableUsers,
@@ -31,6 +31,7 @@ export function NewTaskDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("MEDIUM");
+  const [status, setStatus] = useState<TaskStatus>("TODO");
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [assignedToId, setAssignedToId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export function NewTaskDialog({
     setTitle("");
     setDescription("");
     setPriority("MEDIUM");
+    setStatus("TODO");
     setDueDate(null);
     setAssignedToId("");
     setError(null);
@@ -57,6 +59,7 @@ export function NewTaskDialog({
           title,
           description: description || null,
           priority,
+          status,
           dueDate: dueDate ? dueDate.toISOString() : null,
           assignedToId: assignedToId || null,
         }),
@@ -116,6 +119,17 @@ export function NewTaskDialog({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
+                <Label htmlFor="task-status">Status</Label>
+                <Dropdown
+                  id="task-status"
+                  value={status}
+                  onChange={(v) => setStatus(v as TaskStatus)}
+                  options={TASK_STATUSES.map((s) => ({ value: s.value, label: s.label }))}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="task-assignee">Assign to</Label>
                 <Dropdown
                   id="task-assignee"
@@ -125,10 +139,10 @@ export function NewTaskDialog({
                   options={assignableUsers.map((u) => ({ value: u.id, label: u.name }))}
                 />
               </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Due date</Label>
-              <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Not set" />
+              <div className="flex flex-col gap-1.5">
+                <Label>Due date</Label>
+                <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Not set" />
+              </div>
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" disabled={loading} className="mt-1">

@@ -275,7 +275,7 @@ function MeetingDialog({
         startsAt: startsAt.toISOString(),
         endsAt: endsAt ? endsAt.toISOString() : null,
         attendeeIds: [...attendeeIds],
-        ...(editingId ? { status } : {}),
+        status,
       };
       const res = await fetch(editingId ? `/api/meetings/${editingId}` : "/api/meetings", {
         method: editingId ? "PATCH" : "POST",
@@ -340,12 +340,10 @@ function MeetingDialog({
               <Input id="m-loc" value={location} disabled={readOnly} onChange={(e) => setLocation(e.target.value)} placeholder="Meeting room 2, or https://meet.…" />
             </div>
 
-            {editingId && (
-              <div className="flex flex-col gap-1.5">
-                <Label>Status</Label>
-                <Dropdown value={status} onChange={(v) => setStatus(v as MeetingStatus)} options={STATUS_OPTIONS} />
-              </div>
-            )}
+            <div className="flex flex-col gap-1.5">
+              <Label>Status</Label>
+              <Dropdown value={status} disabled={readOnly} onChange={(v) => setStatus(v as MeetingStatus)} options={STATUS_OPTIONS} />
+            </div>
 
             <div className="flex flex-col gap-1.5">
               <Label>Attendees ({attendeeIds.size})</Label>
