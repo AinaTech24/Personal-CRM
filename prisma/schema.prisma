@@ -852,5 +852,21 @@ model Message {
   body           String       @db.Text
   createdAt      DateTime     @default(now())
 
+  attachments MessageAttachment[]
+
   @@index([conversationId, createdAt])
+}
+
+model MessageAttachment {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  name      String
+  mimeType  String
+  size      Int
+  /// base64 data URL stored in MySQL (images + documents only; no video).
+  data      String   @db.LongText
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
 }
