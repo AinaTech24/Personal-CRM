@@ -24,6 +24,8 @@ export interface TaskCommentItem {
 }
 
 export interface TaskAttachmentItem {
+  /** Set when this attachment is a link rather than an uploaded file. */
+  url?: string | null;
   id: string;
   fileName: string;
   filePath: string;

@@ -324,6 +324,10 @@ model TaskAttachment {
   fileName     String
   filePath     String
   data         String?  @db.LongText // base64-encoded file bytes stored in MySQL
+  /// Set when this is a link rather than an uploaded file; `data` is then null
+  /// and `fileName` holds the label. An explicit column rather than sniffing
+  /// filePath for "http", so the two kinds can never be confused.
+  url          String?  @db.Text
   uploadedById String
   uploadedBy   User     @relation(fields: [uploadedById], references: [id])
   createdAt    DateTime @default(now())

@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { AttachmentPicker, uploadPendingAttachments, type PendingAttachment } from "@/components/tasks/attachment-picker";
 import { IconPlus } from "@/components/icons";
 import { PRIORITY_OPTIONS, TASK_STATUSES, type AssignableUser, type Priority, type TaskStatus } from "@/components/tasks/types";
 
@@ -39,6 +40,7 @@ export function NewTaskDialog({
   const [assignedToId, setAssignedToId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
 
   function reset() {
     setTitle("");
@@ -47,6 +49,7 @@ export function NewTaskDialog({
     setStatus("TODO");
     setDueDate(null);
     setAssignedToId("");
+    setAttachments([]);
     setError(null);
   }
 
@@ -72,6 +75,19 @@ export function NewTaskDialog({
         setError(data.error ?? "Something went wrong");
         return;
       }
+
+      // The task had no id until now, so its attachments go up afterwards. A
+      // failure here doesn't undo the task — it exists and is worth keeping.
+      if (attachments.length && data.task?.id) {
+        const failed = await uploadPendingAttachments(data.task.id, attachments);
+        if (failed.length) {
+          setError(`Task created, but these attachments failed: ${failed.join(", ")}`);
+          setAttachments([]);
+          onCreated();
+          return;
+        }
+      }
+
       reset();
       setOpen(false);
       onCreated();
@@ -147,9 +163,12 @@ export function NewTaskDialog({
                 <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Not set" />
               </div>
             </div>
+
+            <AttachmentPicker value={attachments} onChange={setAttachments} disabled={loading} />
+
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" disabled={loading} className="mt-1">
-              Create task
+              {loading && attachments.length ? "Uploading…" : "Create task"}
             </Button>
           </form>
         </DialogBody>

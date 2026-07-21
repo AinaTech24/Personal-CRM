@@ -15,6 +15,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // A link comes in as JSON; an upload as multipart. Branch on content type so
+  // one endpoint covers both kinds of attachment.
+  if (req.headers.get("content-type")?.includes("application/json")) {
+    const body = await req.json().catch(() => null);
+    const rawUrl = typeof body?.url === "string" ? body.url.trim() : "";
+    if (!rawUrl) return NextResponse.json({ error: "No link provided" }, { status: 400 });
+
+    // Accept "example.com/x" by assuming https, the way a browser bar would.
+    const candidate = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+    let parsed: URL;
+    try {
+      parsed = new URL(candidate);
+    } catch {
+      return NextResponse.json({ error: "That doesn't look like a valid link" }, { status: 400 });
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return NextResponse.json({ error: "Only http and https links are allowed" }, { status: 400 });
+    }
+
+    const label = typeof body?.label === "string" && body.label.trim() ? body.label.trim() : parsed.hostname;
+    const linkAttachment = await db.taskAttachment.create({
+      data: {
+        taskId: id,
+        fileName: label.slice(0, 255),
+        filePath: parsed.toString(),
+        url: parsed.toString(),
+        uploadedById: user.id,
+      },
+      include: { uploadedBy: { select: { name: true } } },
+      omit: { data: true },
+    });
+    return NextResponse.json({ attachment: linkAttachment }, { status: 201 });
+  }
+
   const formData = await req.formData().catch(() => null);
   const file = formData?.get("file");
   if (!file || !(file instanceof File)) {

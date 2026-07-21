@@ -105,7 +105,7 @@ function deviceLabel(userAgent: string | null): string {
  * phone buzz while their desk browser stays quiet.
  */
 function PushToggle() {
-  const { state, busy, enable, disable } = usePushNotifications();
+  const { state, busy, error, enable, disable } = usePushNotifications();
 
   const detail: Record<typeof state, string> = {
     on: "This device will buzz when you get a message.",
@@ -117,20 +117,29 @@ function PushToggle() {
   };
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
-      <div className="flex items-center gap-2.5">
-        <IconBell className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <div>
-          <p className="text-sm font-medium">Push notifications on this device</p>
-          <p className="text-xs text-muted-foreground">{detail[state]}</p>
+    <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5">
+          <IconBell className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div>
+            <p className="text-sm font-medium">Push notifications on this device</p>
+            <p className="text-xs text-muted-foreground">{busy ? "Working…" : detail[state]}</p>
+          </div>
         </div>
+        <ToggleSwitch
+          checked={state === "on"}
+          onChange={(v) => (v ? enable() : disable())}
+          label="Toggle push notifications"
+          disabled={busy || state === "unsupported" || state === "unconfigured" || state === "denied"}
+        />
       </div>
-      <ToggleSwitch
-        checked={state === "on"}
-        onChange={(v) => (v ? enable() : disable())}
-        label="Toggle push notifications"
-        disabled={busy || state === "unsupported" || state === "unconfigured" || state === "denied"}
-      />
+      {/* The browser knows exactly why a subscription failed; hiding that made
+          this undiagnosable from the UI alone. */}
+      {error && (
+        <p className="rounded border border-destructive/40 bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

@@ -13,11 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AttachmentViewerDialog } from "@/components/tasks/attachment-viewer-dialog";
-import { IconDownload, IconEye, IconPlus, IconTrash } from "@/components/icons";
+import { IconDownload, IconEye, IconLink, IconPlus, IconTrash } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
   TASK_STATUSES,
@@ -57,6 +58,9 @@ export function TaskDetailDialog({
   const [commentBody, setCommentBody] = useState("");
   const [savingField, setSavingField] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [viewingAttachment, setViewingAttachment] = useState<{ fileName: string; filePath: string } | null>(
     null
@@ -121,6 +125,27 @@ export function TaskDetailDialog({
       formData.append("file", file);
       const res = await fetch(`/api/tasks/${taskId}/attachments`, { method: "POST", body: formData });
       if (res.ok) await load();
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function addLink() {
+    const raw = linkUrl.trim();
+    if (!taskId || !raw) return;
+    setUploading(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/attachments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: raw, label: linkLabel.trim() || undefined }),
+      });
+      if (res.ok) {
+        setLinkUrl("");
+        setLinkLabel("");
+        setLinkOpen(false);
+        await load();
+      }
     } finally {
       setUploading(false);
     }
@@ -240,8 +265,42 @@ export function TaskDetailDialog({
                     <IconPlus className="h-3.5 w-3.5" />
                     {uploading ? "Uploading..." : "Add file"}
                   </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={uploading}
+                    onClick={() => setLinkOpen((v) => !v)}
+                    className="h-7 gap-1 text-xs"
+                  >
+                    <IconLink className="h-3.5 w-3.5" />
+                    Add link
+                  </Button>
                   <input ref={fileInputRef} type="file" className="hidden" onChange={onFileSelected} />
                 </div>
+
+                {linkOpen && (
+                  <div className="flex flex-col gap-2 rounded-md border border-border p-2 sm:flex-row">
+                    <Input
+                      autoFocus
+                      value={linkUrl}
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      placeholder="https://example.com/doc"
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addLink())}
+                      className="h-8 flex-1 text-xs"
+                    />
+                    <Input
+                      value={linkLabel}
+                      onChange={(e) => setLinkLabel(e.target.value)}
+                      placeholder="Label (optional)"
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addLink())}
+                      className="h-8 text-xs sm:w-36"
+                    />
+                    <Button type="button" size="sm" className="h-8 text-xs" onClick={addLink} disabled={uploading}>
+                      Add
+                    </Button>
+                  </div>
+                )}
                 <div className="flex flex-col gap-1.5">
                   {task.attachments.length === 0 && (
                     <p className="text-xs text-muted-foreground">No attachments yet</p>
@@ -252,12 +311,31 @@ export function TaskDetailDialog({
                       className="flex items-center justify-between gap-2 rounded-md bg-accent/50 p-2 text-sm"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate">{a.fileName}</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="flex items-center gap-1.5 truncate">
+                          {a.url && <IconLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                          {a.fileName}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {a.url ? `${a.url} · ` : ""}
                           {a.uploadedBy.name} · {formatDate(a.createdAt)}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
+                        {/* A link has nothing to preview or download — it just opens. */}
+                        {a.url ? (
+                          <Tooltip label="Open in new tab">
+                            <a
+                              href={a.url}
+                              target="_blank"
+                              rel="noopener noreferrer nofollow"
+                              aria-label={`Open ${a.fileName}`}
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                            >
+                              <IconLink className="h-4 w-4" />
+                            </a>
+                          </Tooltip>
+                        ) : (
+                        <>
                         <Tooltip label="View">
                           <button
                             type="button"
@@ -278,6 +356,8 @@ export function TaskDetailDialog({
                             <IconDownload className="h-4 w-4" />
                           </a>
                         </Tooltip>
+                        </>
+                        )}
                       </div>
                     </div>
                   ))}

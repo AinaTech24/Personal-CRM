@@ -25,6 +25,8 @@ export function usePushNotifications() {
   const [state, setState] = useState<PushState>("off");
   const [busy, setBusy] = useState(false);
   const [publicKey, setPublicKey] = useState("");
+  /** Why the last attempt failed, so the UI can say rather than silently revert. */
+  const [error, setError] = useState<string | null>(null);
 
   const supported =
     typeof window !== "undefined" &&
@@ -64,28 +66,54 @@ export function usePushNotifications() {
   const enable = useCallback(async () => {
     if (!supported || !publicKey) return;
     setBusy(true);
+    setError(null);
     try {
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
         setState(permission === "denied" ? "denied" : "off");
+        if (permission !== "denied") setError("You dismissed the permission prompt.");
         return;
       }
-      const reg = await navigator.serviceWorker.ready;
-      const sub =
-        (await reg.pushManager.getSubscription()) ??
-        (await reg.pushManager.subscribe({
-          // Required by every browser: pushes must be user-visible.
+
+      // `ready` never settles if no service worker is registered, which would
+      // otherwise leave the switch spinning forever with nothing to show for it.
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("The service worker isn't running — reload the page and try again.")), 8000)
+        ),
+      ]);
+
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          // Required by every browser: a push must show something to the user.
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(publicKey),
-        }));
+        });
+      }
 
       const res = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sub.toJSON()),
       });
-      setState(res.ok ? "on" : "off");
-    } catch {
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? `The server rejected the subscription (${res.status}).`);
+      }
+      setState("on");
+    } catch (err) {
+      // Silently reverting the switch is what made this impossible to diagnose:
+      // the browser knows exactly why, so pass its reason straight through.
+      const raw = err instanceof Error ? err.message : String(err);
+      // Brave ships with Google's push service disabled, and its failure text
+      // ("push service error") explains nothing on its own.
+      const friendly = /push service/i.test(raw)
+        ? "Your browser blocked the push service. In Brave: Settings → Privacy and security → turn on \"Use Google services for push messaging\", then restart the browser."
+        : raw;
+      console.error("[push] enable failed:", err);
+      setError(friendly);
       setState("off");
     } finally {
       setBusy(false);
@@ -114,5 +142,5 @@ export function usePushNotifications() {
     }
   }, [supported]);
 
-  return { state, busy, enable, disable };
+  return { state, busy, error, enable, disable };
 }

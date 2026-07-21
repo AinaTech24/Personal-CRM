@@ -108,7 +108,17 @@ export function DateTimePicker({
   );
 }
 
+/**
+ * One half of the HH:MM control.
+ *
+ * The number is typable, not just steppable — reaching :45 by clicking "+"
+ * forty-five times is not a time picker. The steppers stay for nudging.
+ *
+ * While focused the field holds its own draft string so a half-typed "1" on the
+ * way to "17" isn't reformatted to "01" under the cursor.
+ */
 function TimeStepper({
+  label,
   value,
   onChange,
   max,
@@ -118,20 +128,69 @@ function TimeStepper({
   onChange: (v: number) => void;
   max: number;
 }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown = draft ?? String(value).padStart(2, "0");
+
+  function commit(text: string) {
+    const n = Number.parseInt(text, 10);
+    if (Number.isNaN(n)) return;
+    onChange(Math.min(Math.max(n, 0), max));
+  }
+
   return (
     <div className="flex flex-col items-center gap-0.5">
       <button
         type="button"
+        tabIndex={-1}
+        aria-label={`Increase ${label}`}
         onClick={() => onChange(value + 1 > max ? 0 : value + 1)}
-        className="flex h-5 w-8 items-center justify-center rounded text-xs text-muted-foreground hover:bg-accent"
+        className="flex h-5 w-9 items-center justify-center rounded text-xs text-muted-foreground hover:bg-accent"
       >
         +
       </button>
-      <span className="w-8 text-center text-sm tabular-nums">{String(value).padStart(2, "0")}</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        aria-label={label}
+        value={shown}
+        // Focus selects everything so typing overwrites rather than appends.
+        onFocus={(e) => {
+          setDraft(String(value).padStart(2, "0"));
+          e.currentTarget.select();
+        }}
+        onChange={(e) => {
+          const digits = e.target.value.replace(/\D/g, "").slice(0, 2);
+          setDraft(digits);
+          if (digits) commit(digits);
+        }}
+        onBlur={() => {
+          if (draft !== null && draft !== "") commit(draft);
+          setDraft(null); // fall back to the canonical, zero-padded value
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            const next = value + 1 > max ? 0 : value + 1;
+            onChange(next);
+            setDraft(String(next).padStart(2, "0"));
+          } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            const next = value - 1 < 0 ? max : value - 1;
+            onChange(next);
+            setDraft(String(next).padStart(2, "0"));
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+        className="w-9 rounded border border-transparent bg-transparent text-center text-sm tabular-nums outline-none hover:border-border focus:border-ring focus:bg-background"
+      />
       <button
         type="button"
+        tabIndex={-1}
+        aria-label={`Decrease ${label}`}
         onClick={() => onChange(value - 1 < 0 ? max : value - 1)}
-        className="flex h-5 w-8 items-center justify-center rounded text-xs text-muted-foreground hover:bg-accent"
+        className="flex h-5 w-9 items-center justify-center rounded text-xs text-muted-foreground hover:bg-accent"
       >
         −
       </button>
