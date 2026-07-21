@@ -288,7 +288,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
             onChange={(v) => patchProjectTask(t.id, { assignedToId: v || null })}
             placeholder="Unassigned"
             emptyMessage="No members"
-            options={assignableUsers.map((u) => ({ value: u.id, label: u.name }))}
+            options={assignableUsers.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
           />
           <DateTimePicker
             className="text-xs"
@@ -395,7 +395,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
                 onChange={setMemberToAdd}
                 placeholder="Select a member"
                 emptyMessage="Everyone's already added"
-                options={memberOptions.map((u) => ({ value: u.id, label: u.name }))}
+                options={memberOptions.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
               />
               <Button type="button" size="sm" variant="outline" onClick={addMember} className="shrink-0">
                 Add

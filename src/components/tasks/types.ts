@@ -40,8 +40,10 @@ export interface TaskDetail extends TaskSummary {
 export interface AssignableUser {
   id: string;
   name: string;
+  surname?: string | null;
   email: string;
   departmentId: string | null;
+  avatarDataUrl?: string | null;
 }
 
 export const TASK_STATUSES: { value: TaskStatus; label: string }[] = [

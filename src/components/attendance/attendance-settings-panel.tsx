@@ -66,7 +66,7 @@ export function AttendanceSettingsPanel() {
 
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [leaves, setLeaves] = useState<LeaveRow[]>([]);
-  const [staff, setStaff] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [staff, setStaff] = useState<{ id: string; name: string; email: string; avatarDataUrl?: string | null }[]>([]);
   const [leaveUserId, setLeaveUserId] = useState("");
   const [leaveDate, setLeaveDate] = useState("");
   const [leaveType, setLeaveType] = useState<"FULL_DAY" | "HALF_DAY">("FULL_DAY");
@@ -375,7 +375,7 @@ export function AttendanceSettingsPanel() {
                 value={leaveUserId}
                 onChange={setLeaveUserId}
                 placeholder="Select user"
-                options={staff.map((u) => ({ value: u.id, label: u.name }))}
+                options={staff.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
               />
             </div>
             <div className="flex flex-col gap-1.5">

@@ -58,7 +58,7 @@ export async function assignableUsersFor(user: PermissionUser, opts?: { allActiv
   if (opts?.allActive || admin) {
     return db.user.findMany({
       where: { isActive: true, ...roleFilter },
-      select: { id: true, name: true, email: true, departmentId: true },
+      select: { id: true, name: true, surname: true, email: true, departmentId: true, avatarDataUrl: true },
       orderBy: { name: "asc" },
     });
   }

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { UserField } from "@/components/ui/user-field";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dropdown } from "@/components/ui/dropdown";
@@ -21,10 +22,12 @@ import { PRIORITY_OPTIONS, TASK_STATUSES, type AssignableUser, type Priority, ty
 export function NewTaskDialog({
   assignableUsers,
   assignedByName,
+  assignedByAvatar,
   onCreated,
 }: {
   assignableUsers: AssignableUser[];
   assignedByName?: string;
+  assignedByAvatar?: string | null;
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -93,7 +96,7 @@ export function NewTaskDialog({
             {assignedByName && (
               <div className="flex flex-col gap-1.5">
                 <Label>Assigned by</Label>
-                <Input value={assignedByName} disabled readOnly />
+                <UserField name={assignedByName} avatarDataUrl={assignedByAvatar} />
               </div>
             )}
             <div className="flex flex-col gap-1.5">
@@ -136,7 +139,7 @@ export function NewTaskDialog({
                   value={assignedToId}
                   onChange={setAssignedToId}
                   placeholder="Unassigned"
-                  options={assignableUsers.map((u) => ({ value: u.id, label: u.name }))}
+                  options={assignableUsers.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
                 />
               </div>
               <div className="flex flex-col gap-1.5">

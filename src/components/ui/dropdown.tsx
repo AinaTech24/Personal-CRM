@@ -8,6 +8,24 @@ import { cn } from "@/lib/utils";
 export interface DropdownOption {
   value: string;
   label: string;
+  /** Optional avatar (base64 data URL). User pickers pass the person's photo. */
+  avatarDataUrl?: string | null;
+  /** Set to render an avatar bubble even without a photo (falls back to an initial). */
+  showAvatar?: boolean;
+}
+
+/** Small round avatar used inside user dropdowns. */
+function OptionAvatar({ option }: { option: DropdownOption }) {
+  return (
+    <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-[9px] font-semibold text-primary">
+      {option.avatarDataUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={option.avatarDataUrl} alt="" className="h-full w-full object-cover" />
+      ) : (
+        (option.label.trim()[0] ?? "?").toUpperCase()
+      )}
+    </span>
+  );
 }
 
 interface DropdownProps {
@@ -49,8 +67,11 @@ export function Dropdown({
             className
           )}
         >
-          <span className={cn("truncate", !selected && "text-muted-foreground")}>
-            {selected?.label ?? placeholder}
+          <span className="flex min-w-0 items-center gap-2">
+            {selected && (selected.showAvatar || selected.avatarDataUrl) && <OptionAvatar option={selected} />}
+            <span className={cn("truncate", !selected && "text-muted-foreground")}>
+              {selected?.label ?? placeholder}
+            </span>
           </span>
           <IconChevronDown
             className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
@@ -79,7 +100,10 @@ export function Dropdown({
                   opt.value === value && "bg-accent/60"
                 )}
               >
-                <span className="truncate">{opt.label}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  {(opt.showAvatar || opt.avatarDataUrl) && <OptionAvatar option={opt} />}
+                  <span className="truncate">{opt.label}</span>
+                </span>
                 {opt.value === value && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
               </button>
             ))

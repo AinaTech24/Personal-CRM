@@ -31,6 +31,7 @@ interface Department {
 interface CurrentUser {
   name: string;
   role: "SUPER_ADMIN" | "ADMIN" | "DEPARTMENT_USER";
+  avatarDataUrl?: string | null;
 }
 
 function statusLabel(status: string) {
@@ -217,6 +218,7 @@ export function ProjectsList() {
                   assignableUsers={assignableUsers}
                   departments={departments}
                   currentUserName={currentUser?.name ?? ""}
+                  currentUserAvatar={currentUser?.avatarDataUrl ?? null}
                   onCreated={loadProjects}
                 />
               </motion.div>

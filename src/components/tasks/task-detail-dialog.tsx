@@ -197,7 +197,7 @@ export function TaskDetailDialog({
                     disabled={savingField === "assignedToId"}
                     onChange={(v) => patchTask({ assignedToId: v || null })}
                     placeholder="Unassigned"
-                    options={assignableUsers.map((u) => ({ value: u.id, label: u.name }))}
+                    options={assignableUsers.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
                   />
                 </div>
               </div>

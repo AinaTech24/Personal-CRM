@@ -133,7 +133,7 @@ export function EditProjectDialog({
                 value={assignedToId}
                 onChange={setAssignedToId}
                 placeholder="Unassigned"
-                options={assignableUsers.map((u) => ({ value: u.id, label: u.name }))}
+                options={assignableUsers.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
               />
             </div>
           </div>

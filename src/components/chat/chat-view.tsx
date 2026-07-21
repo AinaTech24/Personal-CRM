@@ -479,6 +479,12 @@ export function ChatView() {
 
   async function startRecording() {
     if (recording) return;
+
+    // getUserMedia only exists in a secure context, so an http:// page shows the
+    // same "unsupported" symptom as a genuinely old browser. Separate the two.
+    if (!window.isSecureContext) {
+      return toast.error("Microphone needs a secure connection", "Open the CRM over https:// (or localhost) to record.");
+    }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       return toast.error("Recording isn't supported in this browser");
     }
@@ -523,8 +529,23 @@ export function ChatView() {
         // Hard cap so a forgotten recording can't grow unbounded.
         if (recordSecsRef.current >= 300) stopRecording(true);
       }, 1000);
-    } catch {
-      toast.error("Microphone permission denied");
+    } catch (err) {
+      // Each failure needs a different fix, so name the actual one.
+      const name = err instanceof DOMException ? err.name : "";
+      if (name === "NotAllowedError") {
+        toast.error(
+          "Microphone blocked",
+          "Allow it for this site in your browser, and check the OS privacy settings let your browser use the mic."
+        );
+      } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+        toast.error("No microphone found", "Connect a mic or check it isn't disabled in your system settings.");
+      } else if (name === "NotReadableError") {
+        toast.error("Microphone is in use", "Another app has the mic open — close it and try again.");
+      } else if (name === "SecurityError") {
+        toast.error("Microphone blocked by policy", "A Permissions-Policy header is disabling the mic for this site.");
+      } else {
+        toast.error("Couldn't start recording", name || "Unknown error");
+      }
     }
   }
 
@@ -1870,10 +1891,18 @@ function GroupInfoDialog({
               <div className="max-h-44 overflow-y-auto rounded-md border border-border">
                 {conversation.members.map((m) => (
                   <div key={m.id} className="flex items-center gap-2 border-b border-border/50 px-3 py-2 last:border-0">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
-                      {initial(fullName(m))}
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                      {m.avatarDataUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={m.avatarDataUrl} alt={fullName(m)} className="h-full w-full object-cover" />
+                      ) : (
+                        initial(fullName(m))
+                      )}
                     </span>
-                    <span className="truncate text-sm">{fullName(m)}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm">{fullName(m)}</span>
+                      {m.email && <span className="block truncate text-xs text-muted-foreground">{m.email}</span>}
+                    </span>
                   </div>
                 ))}
               </div>

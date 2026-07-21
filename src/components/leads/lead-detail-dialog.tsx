@@ -221,7 +221,7 @@ export function LeadDetailDialog({
                   disabled={savingField === "assignedToId"}
                   onChange={(v) => patchLead({ assignedToId: v || null })}
                   placeholder="Unassigned"
-                  options={assignableUsers.map((u) => ({ value: u.id, label: u.name }))}
+                  options={assignableUsers.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
                 />
               </div>
             </div>

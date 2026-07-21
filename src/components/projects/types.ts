@@ -81,8 +81,10 @@ export interface ProjectDetail extends ProjectSummary {
 export interface AssignableUser {
   id: string;
   name: string;
+  surname?: string | null;
   email: string;
   departmentId: string | null;
+  avatarDataUrl?: string | null;
 }
 
 export const PROJECT_STATUSES: { value: ProjectStatus; label: string }[] = [

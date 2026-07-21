@@ -43,6 +43,7 @@ export function TasksBoard() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const [currentUserName, setCurrentUserName] = useState<string | undefined>(undefined);
+  const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -74,7 +75,10 @@ export function TasksBoard() {
       ]);
       if (tasksRes.ok) setTasks(tasksData.tasks);
       if (usersRes.ok) setAssignableUsers(usersData.users);
-      if (meRes.ok) setCurrentUserName(meData.user?.name);
+      if (meRes.ok) {
+        setCurrentUserName(meData.user?.name);
+        setCurrentUserAvatar(meData.user?.avatarDataUrl ?? null);
+      }
     } finally {
       setLoading(false);
     }
@@ -209,6 +213,7 @@ export function TasksBoard() {
                 <NewTaskDialog
                   assignableUsers={assignableUsers}
                   assignedByName={currentUserName}
+                  assignedByAvatar={currentUserAvatar}
                   onCreated={loadTasks}
                 />
               </motion.div>

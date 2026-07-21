@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { UserField } from "@/components/ui/user-field";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dropdown } from "@/components/ui/dropdown";
@@ -28,12 +29,14 @@ export function NewProjectDialog({
   assignableUsers,
   departments,
   currentUserName,
+  currentUserAvatar,
   onCreated,
 }: {
   isAdmin: boolean;
   assignableUsers: AssignableUser[];
   departments: Department[];
   currentUserName: string;
+  currentUserAvatar?: string | null;
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -153,7 +156,7 @@ export function NewProjectDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="project-assigned-by">Assigned by</Label>
-                <Input id="project-assigned-by" value={currentUserName} disabled readOnly />
+                <UserField id="project-assigned-by" name={currentUserName} avatarDataUrl={currentUserAvatar} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="project-assigned-to">Assigned to</Label>
@@ -162,7 +165,7 @@ export function NewProjectDialog({
                   value={assignedToId}
                   onChange={setAssignedToId}
                   placeholder="Unassigned"
-                  options={assignableUsers.map((u) => ({ value: u.id, label: u.name }))}
+                  options={assignableUsers.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
                 />
               </div>
             </div>
@@ -183,7 +186,7 @@ export function NewProjectDialog({
                   value={memberToAdd}
                   onChange={setMemberToAdd}
                   placeholder="Select a member"
-                  options={memberOptions.map((u) => ({ value: u.id, label: u.name }))}
+                  options={memberOptions.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
                 />
                 <Button type="button" size="sm" variant="outline" onClick={addMember} className="shrink-0">
                   Add

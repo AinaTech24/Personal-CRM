@@ -64,8 +64,10 @@ export interface LeadDetail extends LeadSummary {
 export interface AssignableUser {
   id: string;
   name: string;
+  surname?: string | null;
   email: string;
   departmentId: string | null;
+  avatarDataUrl?: string | null;
 }
 
 export const LEAD_STATUSES: { value: LeadStatus; label: string }[] = [
