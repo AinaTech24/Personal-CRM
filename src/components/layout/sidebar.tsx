@@ -57,10 +57,15 @@ export function Sidebar({
   isAdmin,
   collapsed,
   onToggle,
+  /** Rendered inside the mobile drawer: always visible, always expanded. */
+  mobile = false,
+  onNavigate,
 }: {
   isAdmin: boolean;
   collapsed: boolean;
   onToggle: () => void;
+  mobile?: boolean;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const [pendingCount, setPendingCount] = useState(0);
@@ -115,6 +120,7 @@ export function Sidebar({
       <Tooltip key={item.href} label={collapsed ? item.label : ""} side="right" wrapperClassName="w-full">
         <Link
           href={item.href}
+          onClick={onNavigate}
           className={cn(
             "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
             active && "bg-accent text-foreground"
@@ -142,7 +148,12 @@ export function Sidebar({
   }
 
   return (
-    <aside className="hidden h-screen min-w-0 flex-col overflow-hidden border-r border-border bg-card/40 md:flex">
+    <aside
+      className={cn(
+        "h-screen min-w-0 flex-col overflow-hidden border-r border-border bg-card/40",
+        mobile ? "flex w-64" : "hidden md:flex"
+      )}
+    >
       <div className={cn("flex h-14 shrink-0 items-center px-3", collapsed ? "justify-center" : "justify-between")}>
         {!collapsed && (
           <Image src="/logo.png" alt="Aina CRM" width={72} height={30} priority unoptimized className="h-7 w-auto shrink-0" />

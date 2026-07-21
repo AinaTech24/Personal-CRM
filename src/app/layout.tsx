@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ToastProvider } from "@/components/providers/toast-provider";
 import { DensityInit } from "@/components/providers/density-init";
+import { PwaRegister } from "@/components/providers/pwa-register";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,7 +19,21 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Aina CRM",
   description: "Internal operations platform for AinaTech",
-  icons: { icon: "/favicon.ico", shortcut: "/favicon.ico", apple: "/favicon.ico" },
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/icons/apple-touch-icon.png",
+  },
+  // Installable app metadata (the manifest itself lives in app/manifest.ts).
+  applicationName: "Aina CRM",
+  appleWebApp: { capable: true, title: "Aina CRM", statusBarStyle: "black-translucent" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0a0c",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -41,6 +56,7 @@ export default function RootLayout({
         >
           <ToastProvider>
             <DensityInit />
+            <PwaRegister />
             {children}
           </ToastProvider>
         </ThemeProvider>

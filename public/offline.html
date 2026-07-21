@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Offline · Aina CRM</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #0a0a0c;
+        color: #e8e8ea;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        text-align: center;
+        padding: 24px;
+      }
+      img { width: 84px; height: 84px; }
+      h1 { font-size: 20px; margin: 0; }
+      p { margin: 0; color: #9a9aa2; font-size: 14px; max-width: 22rem; }
+      button {
+        margin-top: 8px;
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-size: 14px;
+        font-weight: 500;
+        background: #c62828;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <img src="/icons/icon-192.png" alt="Aina CRM" />
+    <h1>You're offline</h1>
+    <p>Aina CRM needs a connection to load your records. Reconnect and try again.</p>
+    <button onclick="location.reload()">Retry</button>
+  </body>
+</html>

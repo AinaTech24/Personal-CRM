@@ -26,12 +26,21 @@ export function DashboardShell({
   const [collapsed, setCollapsed] = useState(false);
   // Animate only after mount so the initial restore is instant, not a slide-in.
   const [animate, setAnimate] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(STORAGE_KEY) === "1");
     const id = setTimeout(() => setAnimate(true), 80);
     return () => clearTimeout(id);
   }, []);
+
+  // Escape closes the mobile drawer.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMobileOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
 
   function toggle() {
     setCollapsed((prev) => {
@@ -51,8 +60,29 @@ export function DashboardShell({
     >
       <Sidebar isAdmin={isAdmin} collapsed={collapsed} onToggle={toggle} />
       <div className="flex min-w-0 flex-col overflow-hidden">
-        <Topbar name={name} email={email} isAdmin={isAdmin} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <Topbar name={name} email={email} isAdmin={isAdmin} onOpenMenu={() => setMobileOpen(true)} />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+      </div>
+
+      {/* Mobile drawer. Driven by CSS transitions rather than mount/unmount so a
+          half-finished animation can never leave an invisible backdrop over the app. */}
+      <div
+        aria-hidden={!mobileOpen}
+        onClick={() => setMobileOpen(false)}
+        style={{ opacity: mobileOpen ? 1 : 0, pointerEvents: mobileOpen ? "auto" : "none" }}
+        className="fixed inset-0 z-40 bg-black/60 transition-opacity duration-300 md:hidden"
+      />
+      <div
+        style={{ transform: mobileOpen ? "translateX(0)" : "translateX(-100%)" }}
+        className="fixed inset-y-0 left-0 z-50 w-64 shadow-2xl transition-transform duration-300 ease-out md:hidden"
+      >
+        <Sidebar
+          isAdmin={isAdmin}
+          collapsed={false}
+          onToggle={() => setMobileOpen(false)}
+          mobile
+          onNavigate={() => setMobileOpen(false)}
+        />
       </div>
     </div>
   );
