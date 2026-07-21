@@ -38,6 +38,8 @@ import { AnimatedEmoji, TextWithAnimatedEmoji, isEmojiOnly, countEmoji } from "@
 import { NOTO_EMOJI, NOTO_CATEGORIES } from "@/lib/noto-emoji";
 import { cn } from "@/lib/utils";
 import { displayUrl, extractUrls, tokenizeLinks } from "@/lib/links";
+import { tokenizeMentions } from "@/lib/mentions";
+import { MentionChip } from "@/components/chat/mention-chip";
 
 /* ---------------------------------- types --------------------------------- */
 
@@ -264,13 +266,26 @@ export function ChatView() {
   useEffect(() => {
     if (deepLinked.current || loading || conversations.length === 0) return;
     const wanted = new URLSearchParams(window.location.search).get("c");
-    if (!wanted) return;
-    deepLinked.current = true;
-    if (conversations.some((c) => c.id === wanted)) {
-      openConversation(wanted);
-      // Drop the parameter so a refresh doesn't keep yanking the user back here.
-      window.history.replaceState({}, "", "/messages");
+
+    if (wanted) {
+      deepLinked.current = true;
+      if (conversations.some((c) => c.id === wanted)) {
+        openConversation(wanted);
+        // Drop the parameter so a refresh doesn't keep yanking the user back here.
+        window.history.replaceState({}, "", "/messages");
+      }
+      return;
     }
+
+    // No deep link — open Aina Family so the page doesn't start on an empty
+    // pane. Only where the list stays visible: below `sm` an open conversation
+    // replaces the list, so doing this on a phone would bury every other chat
+    // behind a back button on every visit.
+    if (activeIdRef.current) return;
+    if (!window.matchMedia("(min-width: 640px)").matches) return;
+    deepLinked.current = true;
+    const home = conversations.find((c) => c.isSystem) ?? conversations[0];
+    if (home) openConversation(home.id);
   }, [loading, conversations, openConversation]);
 
   // Smooth auto-scroll to the newest message.
@@ -867,6 +882,7 @@ export function ChatView() {
                     <MessageBubble
                       key={m.id}
                       message={m}
+                      members={users}
                       mine={m.senderId === me.id}
                       group={active.type === "GROUP"}
                       status={statusOf(m)}
@@ -1382,6 +1398,7 @@ function MessageBubble({
   selected,
   onSelectToggle,
   onSenderClick,
+  members,
 }: {
   message: Message;
   mine: boolean;
@@ -1398,6 +1415,8 @@ function MessageBubble({
   selected: boolean;
   onSelectToggle: () => void;
   onSenderClick: () => void;
+  /** People who can be @mentioned here — used to match full names and fill the hover card. */
+  members: ChatUser[];
 }) {
   const long = m.body.length > LONG_BODY;
   const shown = long && !expanded ? `${m.body.slice(0, LONG_BODY)}…` : m.body;
@@ -1428,15 +1447,6 @@ function MessageBubble({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.94 }}
       transition={{ type: "spring", stiffness: 480, damping: 34 }}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onContext(e.clientX, e.clientY);
-      }}
-      // Double-click opens the same actions (delete for me / everyone, info…).
-      onDoubleClick={(e) => {
-        e.preventDefault();
-        onContext(e.clientX, e.clientY);
-      }}
       onClick={() => selectMode && onSelectToggle()}
       className={cn(
         "group flex items-end gap-2 rounded-lg px-0.5 py-0.5 transition-colors",
@@ -1478,6 +1488,18 @@ function MessageBubble({
       )}
       <motion.div
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        // On the bubble, not the row: the row spans the full width, so having
+        // these on it meant right-clicking empty space beside a message opened
+        // that message's menu.
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onContext(e.clientX, e.clientY);
+        }}
+        // Double-click opens the same actions (delete for me / everyone, info…).
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          onContext(e.clientX, e.clientY);
+        }}
         className={cn(
           "relative max-w-[78%] rounded-3xl px-3.5 py-2 text-sm shadow-sm",
           mine ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-muted"
@@ -1587,13 +1609,16 @@ function MessageBubble({
                           </a>
                         ) : (
                           <span key={pi}>
-                            {part.value.split(/(\s+)/).map((tok, i) =>
-                              tok.startsWith("@") && tok.length > 1 ? (
-                                <span key={i} className={cn("font-medium", mine ? "underline" : "text-primary")}>
-                                  {tok}
-                                </span>
+                            {tokenizeMentions(part.value, members).map((tok, i) =>
+                              tok.type === "mention" ? (
+                                <MentionChip
+                                  key={i}
+                                  label={tok.value}
+                                  mine={mine}
+                                  user={members.find((u) => u.id === tok.person.id)}
+                                />
                               ) : (
-                                <span key={i}>{tok}</span>
+                                <span key={i}>{tok.value}</span>
                               )
                             )}
                           </span>
