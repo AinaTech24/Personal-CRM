@@ -1,16 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { format, isToday, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EightDotsRotate } from "@/components/ui/loader";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
-import { IconPlus, IconSend, IconUsers, IconChevronLeft, IconSmile, IconPaperclip, IconX } from "@/components/icons";
+import {
+  IconPlus,
+  IconSend,
+  IconUsers,
+  IconChevronLeft,
+  IconSmile,
+  IconPaperclip,
+  IconX,
+  IconTrash,
+  IconCheck,
+} from "@/components/icons";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { cn } from "@/lib/utils";
+
+/* ---------------------------------- types --------------------------------- */
 
 interface ChatUser {
   id: string;
@@ -26,15 +39,12 @@ interface Attachment {
   size: number;
   data: string;
 }
-interface Conversation {
+interface ReplyPreview {
   id: string;
-  type: "DIRECT" | "GROUP";
-  isSystem: boolean;
-  title: string;
-  members: ChatUser[];
-  lastMessage: { body: string; senderName: string; createdAt: string } | null;
-  updatedAt: string;
-  unread: number;
+  body: string;
+  deletedForEveryone: boolean;
+  sender: { name: string; surname: string | null };
+  attachments: { name: string; mimeType: string }[];
 }
 interface Message {
   id: string;
@@ -43,6 +53,22 @@ interface Message {
   createdAt: string;
   sender: ChatUser;
   attachments: Attachment[];
+  reactions: { emoji: string; userId: string }[];
+  replyTo: ReplyPreview | null;
+  forwardedFromName: string | null;
+  deletedForEveryone: boolean;
+  pinnedAt: string | null;
+}
+interface Conversation {
+  id: string;
+  type: "DIRECT" | "GROUP";
+  isSystem: boolean;
+  title: string;
+  members: ChatUser[];
+  reads: { userId: string; lastReadAt: string | null }[];
+  lastMessage: { body: string; senderName: string; createdAt: string } | null;
+  updatedAt: string;
+  unread: number;
 }
 interface PendingAttachment {
   name: string;
@@ -51,9 +77,13 @@ interface PendingAttachment {
   data: string;
 }
 
+/* -------------------------------- constants ------------------------------- */
+
 const EMOJIS = "😀 😄 😁 😂 🤣 😊 😍 😘 😎 🤩 🥳 🤔 😴 😅 😇 🙂 😉 😌 😔 😢 😭 😡 👍 👎 👏 🙏 💪 🔥 ✨ 🎉 ❤️ 💯 👀 ✅ ❌ ⚡ 🚀 🎯 📌 📎".split(" ");
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const ACCEPT = "image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip";
 const MAX_BYTES = 10 * 1024 * 1024;
+const LONG_BODY = 420;
 
 const fullName = (u: { name: string; surname: string | null }) => [u.name, u.surname].filter(Boolean).join(" ");
 const initial = (t: string) => (t.trim()[0] ?? "?").toUpperCase();
@@ -61,6 +91,16 @@ const fmtTime = (s: string) => format(parseISO(s), "h:mm a");
 const fmtWhen = (s: string) => (isToday(parseISO(s)) ? fmtTime(s) : format(parseISO(s), "MMM d"));
 const isImage = (m: string) => m.startsWith("image/");
 const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+
+function fileIcon(mime: string) {
+  if (isImage(mime)) return "🖼️";
+  if (mime.includes("pdf")) return "📕";
+  if (mime.includes("sheet") || mime.includes("excel") || mime.includes("csv")) return "📗";
+  if (mime.includes("presentation") || mime.includes("powerpoint")) return "📙";
+  if (mime.includes("zip")) return "🗜️";
+  if (mime.startsWith("text/")) return "📄";
+  return "📎";
+}
 
 function readFile(file: File): Promise<PendingAttachment> {
   return new Promise((resolve, reject) => {
@@ -70,6 +110,37 @@ function readFile(file: File): Promise<PendingAttachment> {
     reader.readAsDataURL(file);
   });
 }
+
+/** Short synthesized chime — no asset files needed. */
+function playSound(kind: "send" | "delete") {
+  try {
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    if (kind === "send") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(660, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1180, ctx.currentTime + 0.12);
+    } else {
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(420, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(180, ctx.currentTime + 0.16);
+    }
+    gain.gain.setValueAtTime(0.07, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.24);
+    setTimeout(() => ctx.close().catch(() => {}), 500);
+  } catch {
+    /* audio is a nicety — never break sending over it */
+  }
+}
+
+/* ------------------------------- main view -------------------------------- */
 
 export function ChatView() {
   const { socket } = useSocket();
@@ -89,6 +160,11 @@ export function ChatView() {
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [mention, setMention] = useState<{ query: string } | null>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [ctx, setCtx] = useState<{ message: Message; x: number; y: number } | null>(null);
+  const [forwardOf, setForwardOf] = useState<Message | null>(null);
+  const [preview, setPreview] = useState<Attachment | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
@@ -119,13 +195,13 @@ export function ChatView() {
 
   const openConversation = useCallback(
     async (id: string) => {
-      // Swap conversation socket rooms so typing events target the right thread.
       if (socket) {
         if (activeIdRef.current) socket.emit("leave", `conv:${activeIdRef.current}`);
         socket.emit("join", `conv:${id}`);
       }
       setActiveId(id);
       setTypingNames([]);
+      setReplyTo(null);
       setLoadingThread(true);
       setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)));
       try {
@@ -139,15 +215,17 @@ export function ChatView() {
     [socket]
   );
 
+  // Smooth auto-scroll to the newest message.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    const el = scrollRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, typingNames]);
 
-  const appendMessage = useCallback((m: Message) => {
-    setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+  const upsertMessage = useCallback((m: Message) => {
+    setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev.map((x) => (x.id === m.id ? m : x)) : [...prev, m]));
   }, []);
 
-  // Presence roster.
+  /* presence */
   useEffect(() => {
     if (!socket) return;
     const onInit = (ids: string[]) => setOnlineIds(new Set(ids));
@@ -166,13 +244,12 @@ export function ChatView() {
     };
   }, [socket]);
 
-  // Incoming messages + typing + new conversations.
+  /* messages, edits, typing, read receipts */
   useEffect(() => {
     if (!socket) return;
-    const onMessage = (payload: { conversationId: string; message: Message }) => {
-      const { conversationId, message } = payload;
+    const onMessage = ({ conversationId, message }: { conversationId: string; message: Message }) => {
       if (conversationId === activeIdRef.current) {
-        appendMessage(message);
+        upsertMessage(message);
         setTypingNames((prev) => prev.filter((n) => n !== message.sender.name));
       }
       setConversations((prev) => {
@@ -192,6 +269,19 @@ export function ChatView() {
         return [updated, ...prev.filter((_, i) => i !== idx)].sort((a, b) => Number(b.isSystem) - Number(a.isSystem));
       });
     };
+    const onUpdate = ({ conversationId, message }: { conversationId: string; message: Message }) => {
+      if (conversationId === activeIdRef.current) upsertMessage(message);
+    };
+    const onHidden = ({ conversationId, messageId }: { conversationId: string; messageId: string }) => {
+      if (conversationId === activeIdRef.current) setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    };
+    const onRead = ({ conversationId, userId, at }: { conversationId: string; userId: string; at: string }) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === conversationId ? { ...c, reads: c.reads.map((r) => (r.userId === userId ? { ...r, lastReadAt: at } : r)) } : c
+        )
+      );
+    };
     const onTyping = (d: { conversationId: string; userId: string; name: string }) => {
       if (d.conversationId !== activeIdRef.current || d.userId === me.id) return;
       setTypingNames((prev) => (prev.includes(d.name) ? prev : [...prev, d.name]));
@@ -206,22 +296,53 @@ export function ChatView() {
       if (d.conversationId !== activeIdRef.current) return;
       setTypingNames((prev) => prev.filter((n) => n !== d.name));
     };
-    const onConversation = () => loadConversations();
     socket.on("message", onMessage);
+    socket.on("message:update", onUpdate);
+    socket.on("message:hidden", onHidden);
+    socket.on("read", onRead);
     socket.on("typing", onTyping);
     socket.on("stop_typing", onStopTyping);
-    socket.on("conversation", onConversation);
+    socket.on("conversation", loadConversations);
     return () => {
       socket.off("message", onMessage);
+      socket.off("message:update", onUpdate);
+      socket.off("message:hidden", onHidden);
+      socket.off("read", onRead);
       socket.off("typing", onTyping);
       socket.off("stop_typing", onStopTyping);
-      socket.off("conversation", onConversation);
+      socket.off("conversation", loadConversations);
     };
-  }, [socket, appendMessage, loadConversations, me.id]);
+  }, [socket, upsertMessage, loadConversations, me.id]);
+
+  /* close context menu on outside click / Escape */
+  useEffect(() => {
+    if (!ctx) return;
+    const close = () => setCtx(null);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [ctx]);
 
   const active = useMemo(() => conversations.find((c) => c.id === activeId) ?? null, [conversations, activeId]);
   const otherMember = active && active.type === "DIRECT" ? active.members.find((m) => m.id !== me.id) ?? null : null;
   const otherOnline = otherMember ? onlineIds.has(otherMember.id) : false;
+  const pinned = useMemo(() => messages.filter((m) => m.pinnedAt && !m.deletedForEveryone), [messages]);
+
+  /** sent → delivered → seen, from the other members' last-read times + presence. */
+  const statusOf = useCallback(
+    (m: Message): "sent" | "delivered" | "seen" => {
+      if (!active || m.senderId !== me.id) return "sent";
+      const others = active.reads.filter((r) => r.userId !== me.id);
+      if (others.some((r) => r.lastReadAt && new Date(r.lastReadAt) >= new Date(m.createdAt))) return "seen";
+      const anyOnline = active.members.some((u) => u.id !== me.id && onlineIds.has(u.id));
+      return anyOnline ? "delivered" : "sent";
+    },
+    [active, me.id, onlineIds]
+  );
 
   function emitTyping() {
     if (!socket || !activeId) return;
@@ -237,19 +358,8 @@ export function ChatView() {
   function onDraftChange(value: string) {
     setDraft(value);
     emitTyping();
-    // @-mention: detect a trailing "@word" being typed.
     const m = value.match(/(?:^|\s)@([\w.]*)$/);
     setMention(m ? { query: m[1] } : null);
-  }
-
-  function insertMention(u: ChatUser) {
-    setDraft((prev) => prev.replace(/(^|\s)@([\w.]*)$/, `$1@${fullName(u)} `));
-    setMention(null);
-  }
-
-  function insertEmoji(e: string) {
-    setDraft((prev) => prev + e);
-    setEmojiOpen(false);
   }
 
   async function onPickFiles(files: FileList | null) {
@@ -266,7 +376,7 @@ export function ChatView() {
       }
       picked.push(await readFile(file));
     }
-    setPending((prev) => [...prev, ...picked].slice(0, 6));
+    setPending((prev) => [...prev, ...picked].slice(0, 10));
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -276,24 +386,66 @@ export function ChatView() {
     setSending(true);
     setDraft("");
     const attachments = pending;
+    const parent = replyTo;
     setPending([]);
+    setReplyTo(null);
     if (socket) socket.emit("stop_typing", { conversationId: activeId, userId: me.id });
     try {
       const res = await fetch(`/api/conversations/${activeId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: text, attachments }),
+        body: JSON.stringify({ body: text, attachments, replyToId: parent?.id ?? null }),
       });
       const data = await res.json();
       if (!res.ok) {
         toast.error("Couldn't send", data.error);
         setDraft(text);
         setPending(attachments);
+        setReplyTo(parent);
         return;
       }
-      appendMessage(data.message);
+      upsertMessage(data.message);
+      playSound("send");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function react(message: Message, emoji: string) {
+    setCtx(null);
+    const res = await fetch(`/api/messages/${message.id}/react`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emoji }),
+    });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.message) upsertMessage(data.message);
+  }
+
+  async function togglePin(message: Message) {
+    setCtx(null);
+    const res = await fetch(`/api/messages/${message.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned: !message.pinnedAt }),
+    });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.message) upsertMessage(data.message);
+    else toast.error("Couldn't pin the message");
+  }
+
+  async function remove(message: Message, scope: "me" | "everyone") {
+    setCtx(null);
+    const res = await fetch(`/api/messages/${message.id}?scope=${scope}`, { method: "DELETE" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      return toast.error("Couldn't delete", d.error);
+    }
+    playSound("delete");
+    if (scope === "me") setMessages((prev) => prev.filter((m) => m.id !== message.id));
+    else {
+      const d = await res.json().catch(() => null);
+      if (d?.message) upsertMessage(d.message);
     }
   }
 
@@ -302,6 +454,10 @@ export function ChatView() {
     const q = mention.query.toLowerCase();
     return active.members.filter((m) => m.id !== me.id && fullName(m).toLowerCase().includes(q)).slice(0, 6);
   }, [mention, active, me.id]);
+
+  function scrollToMessage(id: string) {
+    document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
   if (loading) {
     return (
@@ -323,36 +479,34 @@ export function ChatView() {
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {conversations.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-muted-foreground">No conversations yet.</p>
-          ) : (
-            conversations.map((c) => {
-              const other = c.type === "DIRECT" ? c.members.find((m) => m.id !== me.id) : null;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => openConversation(c.id)}
-                  className={cn(
-                    "flex w-full items-center gap-3 border-b border-border/50 px-4 py-3 text-left transition-colors hover:bg-accent/50",
-                    activeId === c.id && "bg-accent/60"
-                  )}
-                >
-                  <Avatar title={c.title} group={c.type === "GROUP"} online={other ? onlineIds.has(other.id) : undefined} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">{c.title}</span>
-                      {c.lastMessage && <span className="shrink-0 text-[11px] text-muted-foreground">{fmtWhen(c.lastMessage.createdAt)}</span>}
-                    </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {c.lastMessage ? `${c.type === "GROUP" ? `${c.lastMessage.senderName}: ` : ""}${c.lastMessage.body}` : "No messages yet"}
-                    </p>
+          {conversations.map((c) => {
+            const other = c.type === "DIRECT" ? c.members.find((m) => m.id !== me.id) : null;
+            return (
+              <motion.button
+                key={c.id}
+                type="button"
+                whileHover={{ x: 2 }}
+                transition={{ type: "spring", stiffness: 500, damping: 32 }}
+                onClick={() => openConversation(c.id)}
+                className={cn(
+                  "flex w-full items-center gap-3 border-b border-border/50 px-4 py-3 text-left transition-colors hover:bg-accent/50",
+                  activeId === c.id && "bg-accent/60"
+                )}
+              >
+                <Avatar title={c.title} group={c.type === "GROUP"} online={other ? onlineIds.has(other.id) : undefined} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-medium">{c.title}</span>
+                    {c.lastMessage && <span className="shrink-0 text-[11px] text-muted-foreground">{fmtWhen(c.lastMessage.createdAt)}</span>}
                   </div>
-                  {c.unread > 0 && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />}
-                </button>
-              );
-            })
-          )}
+                  <p className="truncate text-xs text-muted-foreground">
+                    {c.lastMessage ? `${c.type === "GROUP" ? `${c.lastMessage.senderName}: ` : ""}${c.lastMessage.body}` : "No messages yet"}
+                  </p>
+                </div>
+                {c.unread > 0 && <motion.span layout className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />}
+              </motion.button>
+            );
+          })}
         </div>
       </div>
 
@@ -375,7 +529,28 @@ export function ChatView() {
               </div>
             </div>
 
-            <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto p-4">
+            {/* Pinned bar */}
+            <AnimatePresence initial={false}>
+              {pinned.length > 0 && (
+                <motion.button
+                  type="button"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  onClick={() => scrollToMessage(pinned[pinned.length - 1].id)}
+                  className="flex w-full items-center gap-2 overflow-hidden border-b border-border bg-amber-500/10 px-4 py-2 text-left text-xs"
+                >
+                  <span>📌</span>
+                  <span className="truncate text-muted-foreground">
+                    <span className="font-medium text-foreground">{pinned.length} pinned</span>
+                    {" — "}
+                    {pinned[pinned.length - 1].body || "Attachment"}
+                  </span>
+                </motion.button>
+              )}
+            </AnimatePresence>
+
+            <div ref={scrollRef} className="flex-1 space-y-1 overflow-y-auto p-4">
               {loadingThread ? (
                 <div className="flex justify-center py-8">
                   <EightDotsRotate className="h-7 w-7" />
@@ -383,63 +558,172 @@ export function ChatView() {
               ) : messages.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">No messages yet — say hello 👋</p>
               ) : (
-                messages.map((m) => <MessageBubble key={m.id} message={m} mine={m.senderId === me.id} group={active.type === "GROUP"} />)
+                <AnimatePresence initial={false}>
+                  {messages.map((m) => (
+                    <MessageBubble
+                      key={m.id}
+                      message={m}
+                      mine={m.senderId === me.id}
+                      group={active.type === "GROUP"}
+                      status={statusOf(m)}
+                      expanded={expanded.has(m.id)}
+                      onToggleExpand={() =>
+                        setExpanded((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(m.id)) next.delete(m.id);
+                          else next.add(m.id);
+                          return next;
+                        })
+                      }
+                      onContext={(x, y) => setCtx({ message: m, x, y })}
+                      onOpenAttachment={setPreview}
+                      onQuoteClick={scrollToMessage}
+                      onReact={react}
+                      meId={me.id}
+                    />
+                  ))}
+                </AnimatePresence>
               )}
-              {typingNames.length > 0 && (
-                <p className="px-1 text-xs italic text-muted-foreground">
-                  {typingNames.join(", ")} {typingNames.length === 1 ? "is" : "are"} typing…
-                </p>
-              )}
+              <AnimatePresence>
+                {typingNames.length > 0 && (
+                  <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="flex gap-0.5">
+                      {[0, 1, 2].map((i) => (
+                        <motion.span
+                          key={i}
+                          className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
+                          animate={{ y: [0, -3, 0] }}
+                          transition={{ duration: 0.7, repeat: Infinity, delay: i * 0.15 }}
+                        />
+                      ))}
+                    </span>
+                    <span className="text-xs italic text-muted-foreground">
+                      {typingNames.join(", ")} {typingNames.length === 1 ? "is" : "are"} typing…
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
-            {/* Pending attachments */}
-            {pending.length > 0 && (
-              <div className="flex flex-wrap gap-2 border-t border-border px-3 pt-2">
-                {pending.map((a, i) => (
-                  <div key={i} className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs">
-                    {isImage(a.mimeType) ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={a.data} alt={a.name} className="h-8 w-8 rounded object-cover" />
-                    ) : (
-                      <span className="text-muted-foreground">📄</span>
-                    )}
-                    <span className="max-w-32 truncate">{a.name}</span>
-                    <button type="button" onClick={() => setPending((prev) => prev.filter((_, x) => x !== i))} aria-label="Remove">
-                      <IconX className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-                    </button>
+            {/* Reply preview */}
+            <AnimatePresence>
+              {replyTo && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="flex items-center gap-2 overflow-hidden border-t border-border bg-muted/40 px-4 py-2"
+                >
+                  <div className="h-8 w-1 shrink-0 rounded-full bg-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-primary">Replying to {fullName(replyTo.sender)}</p>
+                    <p className="truncate text-xs text-muted-foreground">{replyTo.body || "Attachment"}</p>
                   </div>
-                ))}
-              </div>
-            )}
+                  <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">
+                    <IconX className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Pending attachments with caption hint */}
+            <AnimatePresence>
+              {pending.length > 0 && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden border-t border-border px-3 pt-2"
+                >
+                  <p className="mb-1.5 text-[11px] text-muted-foreground">
+                    {pending.length} file{pending.length === 1 ? "" : "s"} ready — add a description below, then send.
+                  </p>
+                  <div className="flex flex-wrap gap-2 pb-1">
+                    {pending.map((a, i) => (
+                      <motion.div
+                        key={`${a.name}-${i}`}
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.9, opacity: 0 }}
+                        className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-2 py-1.5 text-xs"
+                      >
+                        {isImage(a.mimeType) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={a.data} alt={a.name} className="h-9 w-9 rounded object-cover" />
+                        ) : (
+                          <span className="text-base">{fileIcon(a.mimeType)}</span>
+                        )}
+                        <span className="min-w-0">
+                          <span className="block max-w-32 truncate">{a.name}</span>
+                          <span className="text-[10px] text-muted-foreground">{fmtSize(a.size)}</span>
+                        </span>
+                        <button type="button" onClick={() => setPending((prev) => prev.filter((_, x) => x !== i))} aria-label="Remove">
+                          <IconX className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Composer */}
             <div className="relative flex items-center gap-1.5 border-t border-border p-3">
-              {mention && mentionMatches.length > 0 && (
-                <div className="absolute bottom-full left-3 mb-1 w-56 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
-                  {mentionMatches.map((u) => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => insertMention(u)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
-                    >
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
-                        {initial(fullName(u))}
-                      </span>
-                      {fullName(u)}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {emojiOpen && (
-                <div className="absolute bottom-full left-3 mb-1 grid w-64 grid-cols-8 gap-1 rounded-md border border-border bg-popover p-2 shadow-lg">
-                  {EMOJIS.map((e) => (
-                    <button key={e} type="button" onClick={() => insertEmoji(e)} className="rounded p-1 text-lg hover:bg-accent">
-                      {e}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <AnimatePresence>
+                {mention && mentionMatches.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                    className="absolute bottom-full left-3 mb-1 w-56 overflow-hidden rounded-xl border border-border bg-popover shadow-lg"
+                  >
+                    {mentionMatches.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => {
+                          setDraft((prev) => prev.replace(/(^|\s)@([\w.]*)$/, `$1@${fullName(u)} `));
+                          setMention(null);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                      >
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                          {initial(fullName(u))}
+                        </span>
+                        {fullName(u)}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {emojiOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    className="absolute bottom-full left-3 mb-1 grid w-64 grid-cols-8 gap-1 rounded-xl border border-border bg-popover p-2 shadow-lg"
+                  >
+                    {EMOJIS.map((e) => (
+                      <motion.button
+                        key={e}
+                        type="button"
+                        whileHover={{ scale: 1.25 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => {
+                          setDraft((prev) => prev + e);
+                          setEmojiOpen(false);
+                        }}
+                        className="rounded p-1 text-lg"
+                      >
+                        {e}
+                      </motion.button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <input ref={fileRef} type="file" accept={ACCEPT} multiple hidden onChange={(e) => onPickFiles(e.target.files)} />
               <IconButton label="Attach" onClick={() => fileRef.current?.click()}>
@@ -457,16 +741,85 @@ export function ChatView() {
                     send();
                   }
                 }}
-                placeholder="Type a message… use @ to mention"
+                placeholder={pending.length ? "Add a description…" : "Type a message… use @ to mention"}
               />
-              <Button type="button" onClick={send} disabled={sending || (!draft.trim() && pending.length === 0)} size="sm">
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.88, rotate: -12 }}
+                transition={{ type: "spring", stiffness: 600, damping: 20 }}
+                onClick={send}
+                disabled={sending || (!draft.trim() && pending.length === 0)}
+                aria-label="Send"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
+              >
                 <IconSend className="h-4 w-4" />
-              </Button>
+              </motion.button>
             </div>
           </>
         )}
       </div>
 
+      {/* Right-click menu */}
+      <AnimatePresence>
+        {ctx && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.94 }}
+            transition={{ duration: 0.12 }}
+            style={{ left: Math.min(ctx.x, (typeof window !== "undefined" ? window.innerWidth : 800) - 230), top: ctx.y }}
+            onClick={(e) => e.stopPropagation()}
+            className="fixed z-50 w-52 overflow-hidden rounded-xl border border-border bg-popover py-1 shadow-2xl"
+          >
+            {!ctx.message.deletedForEveryone && (
+              <div className="flex justify-around border-b border-border px-1 pb-1.5 pt-1">
+                {QUICK_REACTIONS.map((e) => (
+                  <motion.button
+                    key={e}
+                    type="button"
+                    whileHover={{ scale: 1.3 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => react(ctx.message, e)}
+                    className="rounded p-0.5 text-lg"
+                  >
+                    {e}
+                  </motion.button>
+                ))}
+              </div>
+            )}
+            {!ctx.message.deletedForEveryone && (
+              <>
+                <MenuItem onClick={() => { setReplyTo(ctx.message); setCtx(null); }}>↩️ Reply</MenuItem>
+                <MenuItem onClick={() => { setForwardOf(ctx.message); setCtx(null); }}>↪️ Forward</MenuItem>
+                <MenuItem onClick={() => togglePin(ctx.message)}>📌 {ctx.message.pinnedAt ? "Unpin" : "Pin"}</MenuItem>
+              </>
+            )}
+            <MenuItem onClick={() => remove(ctx.message, "me")} danger>
+              <IconTrash className="h-3.5 w-3.5" /> Delete for me
+            </MenuItem>
+            {ctx.message.senderId === me.id && !ctx.message.deletedForEveryone && (
+              <MenuItem onClick={() => remove(ctx.message, "everyone")} danger>
+                <IconTrash className="h-3.5 w-3.5" /> Delete for everyone
+              </MenuItem>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {preview && <AttachmentPreview attachment={preview} onClose={() => setPreview(null)} />}
+      {forwardOf && (
+        <ForwardDialog
+          message={forwardOf}
+          conversations={conversations.filter((c) => c.id !== activeId)}
+          onClose={() => setForwardOf(null)}
+          onDone={(n) => {
+            setForwardOf(null);
+            toast.success(`Forwarded to ${n} chat${n === 1 ? "" : "s"}`);
+            loadConversations();
+          }}
+        />
+      )}
       {newOpen && (
         <NewConversationDialog
           users={users.filter((u) => u.id !== me.id)}
@@ -483,66 +836,343 @@ export function ChatView() {
   );
 }
 
-function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+/* ------------------------------- sub-pieces -------------------------------- */
+
+function MenuItem({ children, onClick, danger }: { children: ReactNode; onClick: () => void; danger?: boolean }) {
   return (
     <button
       type="button"
-      aria-label={label}
       onClick={onClick}
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      className={cn(
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
+        danger && "text-destructive"
+      )}
     >
       {children}
     </button>
   );
 }
 
-function MessageBubble({ message: m, mine, group }: { message: Message; mine: boolean; group: boolean }) {
+function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
   return (
-    <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
-      <div className={cn("max-w-[75%] rounded-2xl px-3 py-2 text-sm", mine ? "bg-primary text-primary-foreground" : "bg-muted")}>
-        {!mine && group && <p className="mb-0.5 text-[11px] font-medium opacity-70">{fullName(m.sender)}</p>}
-        {m.attachments.length > 0 && (
-          <div className="mb-1 flex flex-col gap-1.5">
-            {m.attachments.map((a) =>
-              isImage(a.mimeType) ? (
-                <a key={a.id} href={a.data} target="_blank" rel="noreferrer">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={a.data} alt={a.name} className="max-h-60 rounded-lg object-cover" />
-                </a>
-              ) : (
-                <a
-                  key={a.id}
-                  href={a.data}
-                  download={a.name}
-                  className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-2", mine ? "border-primary-foreground/30" : "border-border")}
-                >
-                  <span>📄</span>
-                  <span className="min-w-0">
-                    <span className="block max-w-48 truncate">{a.name}</span>
-                    <span className={cn("text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>{fmtSize(a.size)}</span>
-                  </span>
-                </a>
-              )
-            )}
-          </div>
-        )}
-        {m.body && <p className="whitespace-pre-wrap break-words">{renderWithMentions(m.body, mine)}</p>}
-        <p className={cn("mt-0.5 text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>{fmtTime(m.createdAt)}</p>
-      </div>
-    </div>
+    <motion.button
+      type="button"
+      aria-label={label}
+      whileHover={{ scale: 1.12 }}
+      whileTap={{ scale: 0.9 }}
+      onClick={onClick}
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      {children}
+    </motion.button>
   );
 }
 
-/** Highlight @mention tokens in a message body. */
-function renderWithMentions(body: string, mine: boolean) {
-  return body.split(/(\s+)/).map((tok, i) =>
-    tok.startsWith("@") && tok.length > 1 ? (
-      <span key={i} className={cn("font-medium", mine ? "underline" : "text-primary")}>
-        {tok}
-      </span>
-    ) : (
-      <span key={i}>{tok}</span>
-    )
+function StatusTicks({ status }: { status: "sent" | "delivered" | "seen" }) {
+  if (status === "sent") return <span className="text-[10px] opacity-70">✓</span>;
+  return <span className={cn("text-[10px]", status === "seen" ? "text-sky-300" : "opacity-70")}>✓✓</span>;
+}
+
+function MessageBubble({
+  message: m,
+  mine,
+  group,
+  status,
+  expanded,
+  onToggleExpand,
+  onContext,
+  onOpenAttachment,
+  onQuoteClick,
+  onReact,
+  meId,
+}: {
+  message: Message;
+  mine: boolean;
+  group: boolean;
+  status: "sent" | "delivered" | "seen";
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onContext: (x: number, y: number) => void;
+  onOpenAttachment: (a: Attachment) => void;
+  onQuoteClick: (id: string) => void;
+  onReact: (m: Message, emoji: string) => void;
+  meId: string;
+}) {
+  const long = m.body.length > LONG_BODY;
+  const shown = long && !expanded ? `${m.body.slice(0, LONG_BODY)}…` : m.body;
+
+  // group identical emoji into counts
+  const grouped = useMemo(() => {
+    const map = new Map<string, { count: number; mine: boolean }>();
+    for (const r of m.reactions) {
+      const cur = map.get(r.emoji) ?? { count: 0, mine: false };
+      map.set(r.emoji, { count: cur.count + 1, mine: cur.mine || r.userId === meId });
+    }
+    return [...map.entries()];
+  }, [m.reactions, meId]);
+
+  return (
+    <motion.div
+      id={`msg-${m.id}`}
+      layout
+      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.94 }}
+      transition={{ type: "spring", stiffness: 480, damping: 34 }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onContext(e.clientX, e.clientY);
+      }}
+      className={cn("group flex px-0.5 py-0.5", mine ? "justify-end" : "justify-start")}
+    >
+      <motion.div
+        whileHover={{ scale: 1.01 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        className={cn(
+          "relative max-w-[78%] rounded-3xl px-3.5 py-2 text-sm shadow-sm",
+          mine ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-muted"
+        )}
+      >
+        {m.pinnedAt && <span className="absolute -top-1.5 right-2 text-[10px]">📌</span>}
+
+        {!mine && group && !m.deletedForEveryone && <p className="mb-0.5 text-[11px] font-medium opacity-70">{fullName(m.sender)}</p>}
+
+        {m.forwardedFromName && !m.deletedForEveryone && (
+          <p className={cn("mb-0.5 text-[11px] italic", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
+            ↪️ Forwarded from {m.forwardedFromName}
+          </p>
+        )}
+
+        {m.replyTo && !m.deletedForEveryone && (
+          <button
+            type="button"
+            onClick={() => onQuoteClick(m.replyTo!.id)}
+            className={cn(
+              "mb-1 flex w-full gap-2 rounded-lg border-l-2 px-2 py-1 text-left text-xs transition-opacity hover:opacity-80",
+              mine ? "border-primary-foreground/50 bg-primary-foreground/10" : "border-primary bg-background/50"
+            )}
+          >
+            <span className="min-w-0">
+              <span className="block font-medium">{fullName(m.replyTo.sender)}</span>
+              <span className="block truncate opacity-80">
+                {m.replyTo.deletedForEveryone ? "Deleted message" : m.replyTo.body || m.replyTo.attachments[0]?.name || "Attachment"}
+              </span>
+            </span>
+          </button>
+        )}
+
+        {m.deletedForEveryone ? (
+          <p className={cn("italic", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>🚫 This message was deleted</p>
+        ) : (
+          <>
+            {m.attachments.length > 0 && (
+              <div className="mb-1 flex flex-col gap-1.5">
+                {m.attachments.map((a) =>
+                  isImage(a.mimeType) ? (
+                    <motion.button
+                      key={a.id}
+                      type="button"
+                      whileHover={{ scale: 1.02 }}
+                      onClick={() => onOpenAttachment(a)}
+                      className="overflow-hidden rounded-xl"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={a.data} alt={a.name} className="max-h-56 rounded-xl object-cover" />
+                    </motion.button>
+                  ) : (
+                    <motion.button
+                      key={a.id}
+                      type="button"
+                      whileHover={{ scale: 1.015 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => onOpenAttachment(a)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors",
+                        mine ? "border-primary-foreground/30 hover:bg-primary-foreground/10" : "border-border hover:bg-background/60"
+                      )}
+                    >
+                      <span className="text-lg">{fileIcon(a.mimeType)}</span>
+                      <span className="min-w-0">
+                        <span className="block max-w-44 truncate text-xs font-medium">{a.name}</span>
+                        <span className={cn("text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>{fmtSize(a.size)}</span>
+                      </span>
+                    </motion.button>
+                  )
+                )}
+              </div>
+            )}
+
+            {m.body && (
+              <p className="whitespace-pre-wrap break-words">
+                {shown.split(/(\s+)/).map((tok, i) =>
+                  tok.startsWith("@") && tok.length > 1 ? (
+                    <span key={i} className={cn("font-medium", mine ? "underline" : "text-primary")}>
+                      {tok}
+                    </span>
+                  ) : (
+                    <span key={i}>{tok}</span>
+                  )
+                )}
+                {long && (
+                  <button
+                    type="button"
+                    onClick={onToggleExpand}
+                    className={cn("ml-1 text-xs font-medium underline", mine ? "text-primary-foreground/80" : "text-primary")}
+                  >
+                    {expanded ? "Show less" : "Read more"}
+                  </button>
+                )}
+              </p>
+            )}
+          </>
+        )}
+
+        <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
+          <span>{fmtTime(m.createdAt)}</span>
+          {mine && !m.deletedForEveryone && <StatusTicks status={status} />}
+        </div>
+
+        {/* Reactions */}
+        <AnimatePresence>
+          {grouped.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className={cn("absolute -bottom-3 flex gap-0.5 rounded-full border border-border bg-popover px-1.5 py-0.5 shadow-sm", mine ? "right-2" : "left-2")}
+            >
+              {grouped.map(([emoji, info]) => (
+                <motion.button
+                  key={emoji}
+                  type="button"
+                  whileHover={{ scale: 1.2 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => onReact(m, emoji)}
+                  className={cn("text-[11px] leading-none", info.mine && "font-bold")}
+                >
+                  {emoji}
+                  {info.count > 1 && <span className="ml-0.5 text-[9px] text-muted-foreground">{info.count}</span>}
+                </motion.button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function AttachmentPreview({ attachment: a, onClose }: { attachment: Attachment; onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle className="truncate pr-6">
+            {fileIcon(a.mimeType)} {a.name}
+          </DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          {isImage(a.mimeType) ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={a.data} alt={a.name} className="mx-auto max-h-[60vh] rounded-lg object-contain" />
+          ) : a.mimeType.includes("pdf") ? (
+            <iframe src={a.data} title={a.name} className="h-[60vh] w-full rounded-lg border border-border" />
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <span className="text-5xl">{fileIcon(a.mimeType)}</span>
+              <p className="text-sm text-muted-foreground">
+                {a.name} · {fmtSize(a.size)}
+              </p>
+              <p className="text-xs text-muted-foreground">No inline preview for this file type.</p>
+            </div>
+          )}
+          <div className="mt-4 flex justify-end">
+            <a href={a.data} download={a.name}>
+              <Button type="button" variant="outline" size="sm">
+                Download
+              </Button>
+            </a>
+          </div>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ForwardDialog({
+  message,
+  conversations,
+  onClose,
+  onDone,
+}: {
+  message: Message;
+  conversations: Conversation[];
+  onClose: () => void;
+  onDone: (n: number) => void;
+}) {
+  const toast = useToast();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+
+  async function forward() {
+    if (selected.size === 0) return toast.error("Pick at least one chat");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/messages/forward", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: message.id, conversationIds: [...selected] }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't forward", data.error);
+      onDone(data.forwarded ?? selected.size);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Forward message</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <p className="mb-2 truncate rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            {message.body || message.attachments[0]?.name || "Attachment"}
+          </p>
+          <div className="max-h-64 overflow-y-auto rounded-md border border-border">
+            {conversations.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-muted-foreground">No other chats.</p>
+            ) : (
+              conversations.map((c) => (
+                <label key={c.id} className="flex cursor-pointer items-center gap-3 border-b border-border/50 px-3 py-2 last:border-0 hover:bg-accent/50">
+                  <Checkbox
+                    checked={selected.has(c.id)}
+                    onChange={() =>
+                      setSelected((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(c.id)) next.delete(c.id);
+                        else next.add(c.id);
+                        return next;
+                      })
+                    }
+                    aria-label={`Forward to ${c.title}`}
+                  />
+                  <span className="truncate text-sm">{c.title}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <div className="mt-3 flex justify-end">
+            <Button type="button" onClick={forward} disabled={busy}>
+              <IconCheck className="h-4 w-4" />
+              {busy ? "Forwarding…" : `Forward (${selected.size})`}
+            </Button>
+          </div>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -553,11 +1183,10 @@ function Avatar({ title, group, online }: { title: string; group: boolean; onlin
         {group ? <IconUsers className="h-5 w-5" /> : initial(title)}
       </div>
       {online !== undefined && (
-        <span
-          className={cn(
-            "absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card",
-            online ? "bg-emerald-500" : "bg-muted-foreground/40"
-          )}
+        <motion.span
+          initial={false}
+          animate={{ scale: online ? 1 : 0.85 }}
+          className={cn("absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card", online ? "bg-emerald-500" : "bg-muted-foreground/40")}
         />
       )}
     </div>
@@ -580,15 +1209,6 @@ function NewConversationDialog({
   const [title, setTitle] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
 
   async function startDirect(userId: string) {
     setBusy(true);
@@ -659,7 +1279,18 @@ function NewConversationDialog({
               users.map((u) =>
                 mode === "group" && isAdmin ? (
                   <label key={u.id} className="flex cursor-pointer items-center gap-3 border-b border-border/50 px-3 py-2 last:border-0 hover:bg-accent/50">
-                    <Checkbox checked={selected.has(u.id)} onChange={() => toggle(u.id)} aria-label={`Add ${u.name}`} />
+                    <Checkbox
+                      checked={selected.has(u.id)}
+                      onChange={() =>
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(u.id)) next.delete(u.id);
+                          else next.add(u.id);
+                          return next;
+                        })
+                      }
+                      aria-label={`Add ${u.name}`}
+                    />
                     <UserLabel user={u} />
                   </label>
                 ) : (

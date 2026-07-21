@@ -31,6 +31,8 @@ function serialize(
     isSystem: conv.isSystem,
     title,
     members: conv.members.map((m) => m.user),
+    // When each member last opened the thread — drives the "Seen" tick.
+    reads: conv.members.map((m) => ({ userId: m.userId, lastReadAt: m.lastReadAt })),
     lastMessage: last ? { body: last.body, senderName: last.sender.name, createdAt: last.createdAt } : null,
     updatedAt: conv.updatedAt,
     unread,

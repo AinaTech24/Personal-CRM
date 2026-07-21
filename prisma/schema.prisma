@@ -95,6 +95,7 @@ model User {
   conversationsCreated    Conversation[]       @relation("ConversationCreatedBy")
   conversationMemberships ConversationMember[]
   messagesSent            Message[]            @relation("MessageSender")
+  messageReactions        MessageReaction[]    @relation("MessageReactionUser")
 }
 
 model Invite {
@@ -852,9 +853,51 @@ model Message {
   body           String       @db.Text
   createdAt      DateTime     @default(now())
 
+  /// Quoted message this one replies to.
+  replyToId String?
+  replyTo   Message?  @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[] @relation("MessageReply")
+
+  /// Name of the original sender when this message was forwarded.
+  forwardedFromName String?
+
+  /// "Delete for everyone" — kept as a tombstone so the thread shows a placeholder.
+  deletedForEveryone Boolean @default(false)
+
+  pinnedAt   DateTime?
+  pinnedById String?
+
   attachments MessageAttachment[]
+  reactions   MessageReaction[]
+  hiddenFor   MessageHidden[]
 
   @@index([conversationId, createdAt])
+  @@index([replyToId])
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("MessageReactionUser", fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
+/// "Delete for me" — hides a message for one user without removing it for others.
+model MessageHidden {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
 }
 
 model MessageAttachment {
