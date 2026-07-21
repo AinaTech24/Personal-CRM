@@ -77,9 +77,12 @@ jobs:
 
             # Non-interactive SSH sessions don't load the login PATH, so node/npm/pm2
             # (esp. via nvm or a global npm prefix) can be missing. Load them explicitly.
+            # `|| true` matters: nvm.sh can return non-zero even when it loads
+            # fine, and under `set -e` that aborts the whole deploy about ten
+            # seconds in with no error printed at all.
             if [ -s "$HOME/.nvm/nvm.sh" ]; then
               export NVM_DIR="$HOME/.nvm"
-              . "$NVM_DIR/nvm.sh"
+              . "$NVM_DIR/nvm.sh" || true
               echo "Loaded nvm."
             fi
             export PATH="$PATH:/usr/local/bin:/usr/bin:$HOME/.npm-global/bin:$HOME/.yarn/bin"
