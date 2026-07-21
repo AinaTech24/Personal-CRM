@@ -53,7 +53,10 @@ export function DashboardShell({
   return (
     <div
       className={cn(
-        "grid h-screen w-full grid-cols-[1fr] overflow-hidden",
+        // dvh, not vh: on Android Chrome and mobile Safari 100vh is the viewport
+        // with the address bar hidden, so the shell overflowed and — being
+        // overflow-hidden — pushed the bottom of the page off-screen.
+        "grid h-[100dvh] w-full grid-cols-[1fr] overflow-hidden",
         collapsed ? "md:grid-cols-[4rem_1fr]" : "md:grid-cols-[15rem_1fr]",
         animate && "md:[transition:grid-template-columns_300ms_ease-in-out]"
       )}

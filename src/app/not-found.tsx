@@ -3,7 +3,7 @@ import Link from "next/link";
 /** Custom 404 with a self-animating SVG (SMIL — no JS, works in a server component). */
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-6 text-center">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-6 bg-background px-6 text-center">
       <svg width="320" height="200" viewBox="0 0 320 200" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
         {/* soft orbit ring behind the 0 */}
         <g transform="translate(160 100)">

@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+  # Lets you re-run a deploy from the Actions tab without pushing a commit.
+  workflow_dispatch:
 
 concurrency:
   group: aina-crm-production
@@ -13,15 +15,61 @@ jobs:
   deploy:
     name: Deploy Production
     runs-on: ubuntu-latest
+    # A hung deploy would otherwise sit in the concurrency group and block every
+    # later push behind it.
+    timeout-minutes: 30
 
     steps:
+      - name: Check deployment secrets
+        # An empty or malformed secret makes the ssh action fail after a few
+        # seconds with a generic connection error, which says nothing about the
+        # real cause. Check them here so the log names the actual problem.
+        #
+        # Passed as env vars rather than interpolated into the script: the key is
+        # a multi-line block and splicing it into shell source would break it.
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          missing=""
+          if [ -z "$VPS_HOST" ]; then missing="$missing VPS_HOST"; fi
+          if [ -z "$VPS_USER" ]; then missing="$missing VPS_USER"; fi
+          if [ -z "$VPS_SSH_KEY" ]; then missing="$missing VPS_SSH_KEY"; fi
+          if [ -n "$missing" ]; then
+            echo "!! Missing repository secret(s):$missing"
+            echo "   Add them under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+          # The classic mistake, and one this repo has hit: pasting the contents
+          # of id_ed25519.pub (the public key) instead of id_ed25519 (the private
+          # one). The public key is what belongs in the server's authorized_keys.
+          case "$VPS_SSH_KEY" in
+            ssh-rsa*|ssh-ed25519*|ecdsa-sha2-*)
+              echo "!! VPS_SSH_KEY holds a PUBLIC key (it starts with 'ssh-...')."
+              echo "   It needs the PRIVATE key — the whole file including the"
+              echo "   '-----BEGIN OPENSSH PRIVATE KEY-----' and END lines."
+              echo "   The public key goes in ~/.ssh/authorized_keys on the VPS."
+              exit 1
+              ;;
+          esac
+          if ! printf '%s' "$VPS_SSH_KEY" | grep -q -- '-----BEGIN .*PRIVATE KEY-----'; then
+            echo "!! VPS_SSH_KEY has no '-----BEGIN ... PRIVATE KEY-----' header."
+            echo "   Copy the private key file verbatim, including both marker"
+            echo "   lines and the trailing newline."
+            exit 1
+          fi
+          echo "Secrets present; key looks like a private key."
+
       - name: Deploy to Hostinger VPS
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          command_timeout: 20m
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 25m
           script: |
             set -e
 
@@ -29,26 +77,49 @@ jobs:
 
             # Non-interactive SSH sessions don't load the login PATH, so node/npm/pm2
             # (esp. via nvm or a global npm prefix) can be missing. Load them explicitly.
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-            export PATH="$PATH:/usr/local/bin:/usr/bin:$HOME/.npm-global/bin"
+            if [ -s "$HOME/.nvm/nvm.sh" ]; then
+              export NVM_DIR="$HOME/.nvm"
+              . "$NVM_DIR/nvm.sh"
+              echo "Loaded nvm."
+            fi
+            export PATH="$PATH:/usr/local/bin:/usr/bin:$HOME/.npm-global/bin:$HOME/.yarn/bin"
 
             echo "=== Tool versions ==="
-            command -v node npm pm2 || { echo "!! node/npm/pm2 not on PATH"; exit 1; }
-            node -v && npm -v && pm2 -v
+            # Checked one at a time and by name. `command -v node npm pm2` returns 0
+            # if *any* of them resolves, so a missing pm2 slipped through the guard
+            # and blew up later with a bare "command not found".
+            for tool in node npm pm2; do
+              if ! command -v "$tool" >/dev/null 2>&1; then
+                echo "!! '$tool' is not on PATH for a non-interactive SSH session."
+                echo "   PATH=$PATH"
+                echo "   Found instead:"
+                ls -1 /usr/local/bin "$HOME/.npm-global/bin" 2>/dev/null | sort -u | head -30 || true
+                echo "   Fix: install it globally, or add its directory to PATH above."
+                exit 1
+              fi
+              printf '   %-4s %s (%s)\n' "$tool" "$(command -v "$tool")" "$($tool -v 2>&1 | head -1)"
+            done
+
+            echo "=== Free disk and memory ==="
+            # Both have bitten this deploy before: a full disk breaks npm ci, and
+            # next build is the peak-memory step on a small VPS.
+            df -h /var/www | tail -1
+            free -h | head -2 || true
 
             echo "=== Pulling latest code ==="
             cd /var/www/ainacrm
+            git fetch --all --prune
             git pull --ff-only
+            echo "Now at: $(git rev-parse --short HEAD) $(git log -1 --pretty=%s)"
 
             echo "=== Installing dependencies ==="
-            npm ci
+            npm ci --no-audit --no-fund
 
-            echo "=== Building application (prisma generate + db push + next build) ==="
+            echo "=== Building (prisma generate + db push + next build) ==="
             npm run build
 
             echo "=== (Re)starting PM2 process 'aina-crm' ==="
-            pm2 restart aina-crm || pm2 start npm --name aina-crm -- start
+            pm2 restart aina-crm --update-env || pm2 start npm --name aina-crm -- start
             pm2 save
 
             echo "=== Deployment completed successfully ==="

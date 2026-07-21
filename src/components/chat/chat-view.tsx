@@ -698,14 +698,14 @@ export function ChatView() {
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100vh-7rem)] items-center justify-center">
+      <div className="flex h-[calc(100dvh-7rem-var(--safe-top,0px)-var(--safe-bottom,0px))] items-center justify-center">
         <EightDotsRotate className="h-9 w-9" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] overflow-hidden rounded-xl border border-border bg-card/30">
+    <div className="flex h-[calc(100dvh-7rem-var(--safe-top,0px)-var(--safe-bottom,0px))] overflow-hidden rounded-xl border border-border bg-card/30">
       {/* Conversation list */}
       <div className={cn("flex w-full flex-col border-r border-border sm:w-72 lg:w-80", activeId && "hidden sm:flex")}>
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
