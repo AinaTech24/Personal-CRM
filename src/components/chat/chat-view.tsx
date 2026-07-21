@@ -29,6 +29,8 @@ import {
   IconImage,
   IconDots,
   IconInfo,
+  IconMic,
+  IconStop,
 } from "@/components/icons";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -107,6 +109,8 @@ const initial = (t: string) => (t.trim()[0] ?? "?").toUpperCase();
 const fmtTime = (s: string) => format(parseISO(s), "h:mm a");
 const fmtWhen = (s: string) => (isToday(parseISO(s)) ? fmtTime(s) : format(parseISO(s), "MMM d"));
 const isImage = (m: string) => m.startsWith("image/");
+const isAudio = (m: string) => m.startsWith("audio/");
+const mmss = (secs: number) => `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, "0")}`;
 const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
 /** Icon for a file, drawn from the app's icon set (never an OS emoji). */
@@ -188,6 +192,12 @@ export function ChatView() {
   const [reactPickerFor, setReactPickerFor] = useState<Message | null>(null);
   const [infoUser, setInfoUser] = useState<ChatUser | null>(null);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [recordSecs, setRecordSecs] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordSecsRef = useRef(0);
+  const discardRecordingRef = useRef(false);
 
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
@@ -454,6 +464,68 @@ export function ChatView() {
     }
     setPending((prev) => [...prev, ...picked].slice(0, 10));
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  /**
+   * Voice notes. Recording stops either way; `keep` decides whether the audio
+   * becomes a pending attachment or is dropped and never leaves the browser.
+   */
+  function stopRecording(keep: boolean) {
+    const rec = recorderRef.current;
+    if (!rec) return;
+    discardRecordingRef.current = !keep;
+    rec.stop();
+  }
+
+  async function startRecording() {
+    if (recording) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      return toast.error("Recording isn't supported in this browser");
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      recorderRef.current = rec;
+
+      rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (recordTimer.current) clearInterval(recordTimer.current);
+        const seconds = recordSecsRef.current;
+        setRecording(false);
+        setRecordSecs(0);
+        recorderRef.current = null;
+        // Discarded: the blob is simply never read, so nothing is stored or sent.
+        if (discardRecordingRef.current) return;
+        const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
+        if (blob.size === 0) return;
+        const data = await new Promise<string>((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(String(fr.result));
+          fr.onerror = reject;
+          fr.readAsDataURL(blob);
+        });
+        setPending((prev) => [
+          ...prev,
+          { name: `voice-note-${mmss(seconds).replace(":", "m")}s.webm`, mimeType: blob.type, size: blob.size, data },
+        ]);
+      };
+
+      rec.start();
+      discardRecordingRef.current = false;
+      setRecording(true);
+      setRecordSecs(0);
+      recordSecsRef.current = 0;
+      recordTimer.current = setInterval(() => {
+        recordSecsRef.current += 1;
+        setRecordSecs(recordSecsRef.current);
+        // Hard cap so a forgotten recording can't grow unbounded.
+        if (recordSecsRef.current >= 300) stopRecording(true);
+      }, 1000);
+    } catch {
+      toast.error("Microphone permission denied");
+    }
   }
 
   async function send() {
@@ -748,6 +820,7 @@ export function ChatView() {
                       selectMode={selectMode}
                       selected={selectedIds.has(m.id)}
                       onSelectToggle={() => toggleSelected(m.id)}
+                      onSenderClick={() => setInfoUser(active.members.find((u) => u.id === m.senderId) ?? m.sender)}
                     />
                   ))}
                 </AnimatePresence>
@@ -818,6 +891,8 @@ export function ChatView() {
                         {isImage(a.mimeType) ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={a.data} alt={a.name} className="h-9 w-9 rounded object-cover" />
+                        ) : isAudio(a.mimeType) ? (
+                          <IconMic className="h-5 w-5 text-primary" />
                         ) : (
                           <FileIcon mime={a.mimeType} className="h-5 w-5 text-muted-foreground" />
                         )}
@@ -926,21 +1001,57 @@ export function ChatView() {
                 </div>
               )}
 
+              {/* While recording, the composer becomes the recorder. */}
+              {recording ? (
+                <div className="flex flex-1 items-center gap-3 rounded-full border border-destructive/40 bg-destructive/10 px-3 py-1.5">
+                  <motion.span
+                    className="h-2.5 w-2.5 rounded-full bg-destructive"
+                    animate={{ opacity: [1, 0.25, 1] }}
+                    transition={{ duration: 1.2, repeat: Infinity }}
+                  />
+                  <span className="text-sm tabular-nums">Recording {mmss(recordSecs)}</span>
+                  <div className="ml-auto flex items-center gap-1">
+                    <IconButton label="Delete recording" onClick={() => stopRecording(false)}>
+                      <IconTrash className="h-4 w-4 text-destructive" />
+                    </IconButton>
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => stopRecording(true)}
+                      aria-label="Stop recording"
+                      className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                    >
+                      <IconStop className="h-4 w-4" />
+                    </motion.button>
+                  </div>
+                </div>
+              ) : null}
+
               <input ref={fileRef} type="file" accept={ACCEPT} multiple hidden onChange={(e) => onPickFiles(e.target.files)} />
-              <IconButton label="Attach" onClick={() => fileRef.current?.click()}>
-                <IconPaperclip className="h-4.5 w-4.5" />
-              </IconButton>
-              <span data-emoji-toggle>
-                <IconButton
-                  label="Emoji"
-                  onClick={() => {
-                    setEmojiMounted(true);
-                    setEmojiOpen((v) => !v);
-                  }}
-                >
-                  <IconSmile className="h-4.5 w-4.5" />
+              {!recording && (
+                <IconButton label="Attach" onClick={() => fileRef.current?.click()}>
+                  <IconPaperclip className="h-4.5 w-4.5" />
                 </IconButton>
-              </span>
+              )}
+              {!recording && (
+                <span data-emoji-toggle>
+                  <IconButton
+                    label="Emoji"
+                    onClick={() => {
+                      setEmojiMounted(true);
+                      setEmojiOpen((v) => !v);
+                    }}
+                  >
+                    <IconSmile className="h-4.5 w-4.5" />
+                  </IconButton>
+                </span>
+              )}
+              {!recording && (
+                <IconButton label="Record voice note" onClick={startRecording}>
+                  <IconMic className="h-4.5 w-4.5" />
+                </IconButton>
+              )}
+              {!recording && (
               <Input
                 value={draft}
                 onChange={(e) => onDraftChange(e.target.value)}
@@ -952,6 +1063,8 @@ export function ChatView() {
                 }}
                 placeholder={pending.length ? "Add a description…" : "Type a message… use @ to mention"}
               />
+              )}
+              {!recording && (
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.88, rotate: -12 }}
@@ -963,6 +1076,7 @@ export function ChatView() {
               >
                 <IconSend className="h-4 w-4" />
               </motion.button>
+              )}
             </div>
           </>
         )}
@@ -1164,6 +1278,7 @@ function MessageBubble({
   selectMode,
   selected,
   onSelectToggle,
+  onSenderClick,
 }: {
   message: Message;
   mine: boolean;
@@ -1179,6 +1294,7 @@ function MessageBubble({
   selectMode: boolean;
   selected: boolean;
   onSelectToggle: () => void;
+  onSenderClick: () => void;
 }) {
   const long = m.body.length > LONG_BODY;
   const shown = long && !expanded ? `${m.body.slice(0, LONG_BODY)}…` : m.body;
@@ -1214,12 +1330,31 @@ function MessageBubble({
       }}
       onClick={() => selectMode && onSelectToggle()}
       className={cn(
-        "group flex items-center gap-2 rounded-lg px-0.5 py-0.5 transition-colors",
+        "group flex items-end gap-2 rounded-lg px-0.5 py-0.5 transition-colors",
         mine ? "justify-end" : "justify-start",
         selectMode && "cursor-pointer hover:bg-accent/40",
         selected && "bg-primary/10"
       )}
     >
+      {/* Sender's photo on incoming messages — tap it for their profile. */}
+      {!mine && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSenderClick();
+          }}
+          title={fullName(m.sender)}
+          className="mb-4 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-[11px] font-semibold text-primary"
+        >
+          {m.sender.avatarDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={m.sender.avatarDataUrl} alt={fullName(m.sender)} className="h-full w-full object-cover" />
+          ) : (
+            initial(fullName(m.sender))
+          )}
+        </button>
+      )}
       {selectMode && (
         <motion.span
           initial={{ scale: 0, opacity: 0 }}
@@ -1274,7 +1409,16 @@ function MessageBubble({
             {m.attachments.length > 0 && (
               <div className="mb-1 flex flex-col gap-1.5">
                 {m.attachments.map((a) =>
-                  isImage(a.mimeType) ? (
+                  isAudio(a.mimeType) ? (
+                    <audio
+                      key={a.id}
+                      src={a.data}
+                      controls
+                      preload="metadata"
+                      className="h-9 w-56 max-w-full"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : isImage(a.mimeType) ? (
                     <motion.button
                       key={a.id}
                       type="button"

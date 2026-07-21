@@ -1,9 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardStats } from "@/components/dashboard/dashboard-stats";
+import { UserDashboard } from "@/components/dashboard/user-dashboard";
 
 const modules = [
   { name: "Leads", href: "/leads", description: "Track incoming business opportunities" },
@@ -21,33 +20,24 @@ export default async function DashboardHomePage() {
   if (landing) redirect(landing.href);
   const admin = user ? isAdmin(user) : false;
 
-  return (
-    <div className="flex min-h-full flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Welcome back{user ? `, ${user.name.split(" ")[0]}` : ""}
-          {admin ? " — live overview across all modules" : ""}
-        </p>
-      </div>
-
-      {admin ? (
-        <DashboardStats />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {modules.map((m) => (
-            <Link key={m.href} href={m.href}>
-              <Card className="p-4 transition-colors hover:border-primary/40">
-                <CardHeader className="p-0">
-                  <CardTitle className="text-base">{m.name}</CardTitle>
-                  <CardDescription>{m.description}</CardDescription>
-                </CardHeader>
-                <CardContent className="p-0" />
-              </Card>
-            </Link>
-          ))}
+  // Admins keep the cross-module overview; everyone else gets their own day.
+  if (admin) {
+    return (
+      <div className="flex min-h-full flex-col gap-6">
+        <div>
+          <h1 className="text-xl font-semibold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Welcome back{user ? `, ${user.name.split(" ")[0]}` : ""} — live overview across all modules
+          </p>
         </div>
-      )}
+        <DashboardStats />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-full flex-col">
+      <UserDashboard firstName={user?.name.split(" ")[0] ?? "there"} />
     </div>
   );
 }

@@ -382,6 +382,23 @@ export function IconSmile(props: IconProps) {
   );
 }
 
+export function IconMic(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="9" y="2" width="6" height="11" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0M12 17v5" />
+    </svg>
+  );
+}
+
+export function IconStop(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function IconMenu(props: IconProps) {
   return (
     <svg {...base(props)}>

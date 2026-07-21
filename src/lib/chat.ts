@@ -37,10 +37,11 @@ export function emitToMembers(memberUserIds: string[], event: string, payload: u
   for (const id of memberUserIds) emitToUser(id, event, payload);
 }
 
-/** Attachments are images and documents only — explicitly no video. */
+/** Attachments are images, audio (voice notes) and documents — never video. */
 export function allowedMime(m: string) {
   if (m.startsWith("video/")) return false;
   if (m.startsWith("image/")) return true;
+  if (m.startsWith("audio/")) return true;
   const docPrefixes = [
     "application/pdf",
     "application/msword",
