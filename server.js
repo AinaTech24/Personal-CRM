@@ -71,6 +71,9 @@ app.prepare().then(() => {
 
   // Exposed so Next.js API routes (running in the same process) can emit events.
   globalThis.__io = io;
+  // …and can ask who's currently connected, so a push notification isn't sent
+  // to someone who is sitting in the app and already got an in-app toast.
+  globalThis.__online = online;
 
   httpServer.listen(port, () => {
     console.log(`> Aina CRM ready on http://${hostname}:${port}`);

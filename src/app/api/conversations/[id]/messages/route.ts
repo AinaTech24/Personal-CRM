@@ -3,7 +3,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { allowedMime, emitToMembers, isMember, memberIdsOf, messageInclude } from "@/lib/chat";
-import { previewText, sendPushToUsers } from "@/lib/push";
+import { sendPushToUsers } from "@/lib/push";
+import { notificationCopy } from "@/lib/message-preview";
+import { isUserOnline } from "@/lib/socket-emit";
 
 /** Messages in a conversation (oldest→newest), minus ones this user deleted for themselves. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -91,33 +93,39 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }),
   ]);
 
-  const members = await memberIdsOf(id);
-  emitToMembers(members, "message", { conversationId: id, message });
+  const [members, conversation] = await Promise.all([
+    memberIdsOf(id),
+    db.conversation.findUnique({ where: { id }, select: { type: true, title: true } }),
+  ]);
 
-  // Notify everyone else's devices, without making the sender wait on it.
-  // Anyone with the app open already has the message via the socket above, and
-  // a slow or unreachable push service must not stall — or fail — a send that
-  // is already committed. Safe to leave running: this is a long-lived Node
-  // server (server.js), not a function that gets frozen after the response.
-  const recipients = members.filter((m) => m !== user.id);
+  // The conversation rides along so a client that isn't on the Messages page —
+  // and so has no conversation list loaded — can still name the chat in a toast.
+  emitToMembers(members, "message", { conversationId: id, message, conversation });
+
+  const senderName = [user.name, user.surname].filter(Boolean).join(" ") || "Someone";
+  const copy = notificationCopy({
+    isGroup: conversation?.type === "GROUP",
+    groupTitle: conversation?.title,
+    senderName,
+    body: message.body,
+    attachmentCount: message.attachments.length,
+    attachmentName: message.attachments[0]?.name,
+  });
+
+  // Push only to people who aren't currently connected. Anyone with the app
+  // open already got the message over the socket and an in-app toast, and
+  // buzzing their phone for something they just watched arrive is noise.
+  const recipients = members.filter((m) => m !== user.id && !isUserOnline(m));
   if (recipients.length) {
-    const senderName = [user.name, user.surname].filter(Boolean).join(" ") || "Someone";
-    const preview = previewText(message.body, message.attachments.length, message.attachments[0]?.name);
-
-    void db.conversation
-      .findUnique({ where: { id }, select: { type: true, title: true } })
-      .then((conversation) => {
-        // In a group the chat name is the useful heading and the sender goes
-        // inline; in a direct chat the sender *is* the conversation.
-        const isGroup = conversation?.type === "GROUP";
-        return sendPushToUsers(recipients, {
-          title: isGroup ? conversation?.title || "Group chat" : senderName,
-          body: isGroup ? `${senderName}: ${preview}` : preview,
-          url: `/messages?c=${id}`,
-          tag: `conv-${id}`,
-        });
-      })
-      .catch((err) => console.error("[push] message notification failed", err));
+    // Fired off rather than awaited: a slow or unreachable push service must
+    // not stall — or fail — a send that is already committed. Safe to leave
+    // running because this is a long-lived Node server (server.js), not a
+    // function that gets frozen once the response is returned.
+    void sendPushToUsers(recipients, {
+      ...copy,
+      url: `/messages?c=${id}`,
+      tag: `conv-${id}`,
+    }).catch((err) => console.error("[push] message notification failed", err));
   }
 
   return NextResponse.json({ message }, { status: 201 });

@@ -77,10 +77,5 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
   }
 }
 
-/** Trims a message to something that reads well in a notification banner. */
-export function previewText(body: string, attachmentCount: number, attachmentName?: string) {
-  const text = body.trim();
-  if (text) return text.length > 120 ? `${text.slice(0, 119)}…` : text;
-  if (attachmentCount > 1) return `${attachmentCount} attachments`;
-  return attachmentName ? `📎 ${attachmentName}` : "Sent an attachment";
-}
+// previewText/notificationCopy live in message-preview.ts so the browser can
+// use them too — this module can't be bundled client-side.

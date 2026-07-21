@@ -12,7 +12,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <SocketProvider userId={user.id} departmentId={user.departmentId} isAdmin={isAdmin(user)}>
       <SearchProvider>
-        <DashboardShell isAdmin={isAdmin(user)} name={user.name} email={user.email}>
+        <DashboardShell isAdmin={isAdmin(user)} userId={user.id} name={user.name} email={user.email}>
           {children}
         </DashboardShell>
       </SearchProvider>

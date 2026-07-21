@@ -12,12 +12,18 @@ interface ToastItem {
   title: string;
   description?: string;
   variant: ToastVariant;
+  onClick?: () => void;
+  /** Leading visual — a sender's photo, say, in place of the variant icon. */
+  avatarDataUrl?: string | null;
 }
 
 interface ToastInput {
   title: string;
   description?: string;
   variant?: ToastVariant;
+  /** Makes the toast clickable; runs, then dismisses it. */
+  onClick?: () => void;
+  avatarDataUrl?: string | null;
 }
 
 interface ToastContextValue {
@@ -105,28 +111,53 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   exit={{ opacity: 0, y: -24, scale: 0.9 }}
                   transition={{ type: "spring", stiffness: 400, damping: 32 }}
                   style={{ zIndex: 100 - index }}
+                  onClick={
+                    t.onClick
+                      ? () => {
+                          t.onClick?.();
+                          dismiss(t.id);
+                        }
+                      : undefined
+                  }
                   className={cn(
                     "pointer-events-auto absolute left-0 right-0 top-0 flex gap-3 rounded-lg border bg-popover px-3.5 py-3 text-popover-foreground shadow-lg",
                     t.description ? "items-start" : "items-center",
+                    t.onClick && "cursor-pointer transition-colors hover:bg-accent",
                     style.ring
                   )}
                 >
-                  <span
-                    className={cn(
-                      "flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
-                      t.description && "mt-0.5",
-                      style.accent
-                    )}
-                  >
-                    {style.icon}
-                  </span>
+                  {t.avatarDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={t.avatarDataUrl}
+                      alt=""
+                      className={cn("h-6 w-6 shrink-0 rounded-full object-cover", t.description && "mt-0.5")}
+                    />
+                  ) : (
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
+                        t.description && "mt-0.5",
+                        style.accent
+                      )}
+                    >
+                      {style.icon}
+                    </span>
+                  )}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium leading-snug">{t.title}</p>
-                    {t.description && <p className="mt-0.5 text-xs text-muted-foreground">{t.description}</p>}
+                    <p className="truncate text-sm font-medium leading-snug">{t.title}</p>
+                    {t.description && (
+                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{t.description}</p>
+                    )}
                   </div>
                   <button
                     type="button"
-                    onClick={() => dismiss(t.id)}
+                    onClick={(e) => {
+                      // Otherwise this bubbles into the toast's own click and
+                      // navigates instead of just closing it.
+                      e.stopPropagation();
+                      dismiss(t.id);
+                    }}
                     aria-label="Dismiss"
                     className={cn(
                       "shrink-0 text-muted-foreground transition-colors hover:text-foreground",

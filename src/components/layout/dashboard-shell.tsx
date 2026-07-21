@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { MessageToaster } from "@/components/layout/message-toaster";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "aina-sidebar-collapsed";
@@ -14,11 +15,13 @@ const STORAGE_KEY = "aina-sidebar-collapsed";
  */
 export function DashboardShell({
   isAdmin,
+  userId,
   name,
   email,
   children,
 }: {
   isAdmin: boolean;
+  userId: string;
   name: string;
   email: string;
   children: React.ReactNode;
@@ -61,6 +64,10 @@ export function DashboardShell({
         animate && "md:[transition:grid-template-columns_300ms_ease-in-out]"
       )}
     >
+      {/* Lives in the shell, not the chat view, so an incoming message still
+          surfaces while you're somewhere else in the CRM. */}
+      <MessageToaster meId={userId} />
+
       <Sidebar isAdmin={isAdmin} collapsed={collapsed} onToggle={toggle} />
       <div className="flex min-w-0 flex-col overflow-hidden">
         <Topbar name={name} email={email} isAdmin={isAdmin} onOpenMenu={() => setMobileOpen(true)} />
