@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { format, isToday, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,9 @@ interface ChatUser {
   surname: string | null;
   avatarDataUrl: string | null;
   role?: string;
+  email?: string;
+  mobile?: string | null;
+  department?: { id: string; name: string } | null;
 }
 interface Attachment {
   id: string;
@@ -181,12 +184,16 @@ export function ChatView() {
   const [emojiMounted, setEmojiMounted] = useState(false);
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const [groupInfoOpen, setGroupInfoOpen] = useState(false);
+  const [reactPickerFor, setReactPickerFor] = useState<Message | null>(null);
+  const [infoUser, setInfoUser] = useState<ChatUser | null>(null);
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
 
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const emojiPanelRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastTypingEmit = useRef(0);
   const stopTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -330,6 +337,27 @@ export function ChatView() {
       socket.off("conversation", loadConversations);
     };
   }, [socket, upsertMessage, loadConversations, me.id]);
+
+  /* Place the context menu once it's measured, flipping it up and/or left so it
+     always stays fully on screen regardless of where the click landed. */
+  useLayoutEffect(() => {
+    if (!ctx) {
+      setMenuPos(null);
+      return;
+    }
+    const el = menuRef.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    const pad = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // Prefer down-right; flip when it would overflow, then clamp to the viewport.
+    let left = ctx.x + width + pad > vw ? ctx.x - width : ctx.x;
+    let top = ctx.y + height + pad > vh ? ctx.y - height : ctx.y;
+    left = Math.max(pad, Math.min(left, vw - width - pad));
+    top = Math.max(pad, Math.min(top, vh - height - pad));
+    setMenuPos({ left, top });
+  }, [ctx]);
 
   /* close the header menu on an outside click */
   useEffect(() => {
@@ -889,7 +917,7 @@ export function ChatView() {
                       }}
                       className="flex items-center justify-center rounded p-1"
                     >
-                      <AnimatedEmoji emoji={e} className="h-6 w-6" />
+                      <AnimatedEmoji emoji={e} sizePx={24} playOnHover />
                     </motion.button>
                   ))}
                 </div>
@@ -923,7 +951,6 @@ export function ChatView() {
               />
               <motion.button
                 type="button"
-                whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.88, rotate: -12 }}
                 transition={{ type: "spring", stiffness: 600, damping: 20 }}
                 onClick={send}
@@ -942,16 +969,18 @@ export function ChatView() {
       <AnimatePresence>
         {ctx && (
           <motion.div
+            ref={menuRef}
             initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.94 }}
             transition={{ duration: 0.12 }}
-            style={{ left: Math.min(ctx.x, (typeof window !== "undefined" ? window.innerWidth : 800) - 230), top: ctx.y }}
+            // Measured and flipped so the menu never runs off any edge.
+            style={{ left: menuPos?.left ?? ctx.x, top: menuPos?.top ?? ctx.y, visibility: menuPos ? "visible" : "hidden" }}
             onClick={(e) => e.stopPropagation()}
             className="fixed z-50 w-52 overflow-hidden rounded-xl border border-border bg-popover py-1 shadow-2xl"
           >
             {!ctx.message.deletedForEveryone && (
-              <div className="flex justify-around border-b border-border px-1 pb-1.5 pt-1">
+              <div className="flex items-center justify-around border-b border-border px-1 pb-1.5 pt-1">
                 {QUICK_REACTIONS.map((e) => (
                   <motion.button
                     key={e}
@@ -961,9 +990,22 @@ export function ChatView() {
                     onClick={() => react(ctx.message, e)}
                     className="flex items-center justify-center rounded p-0.5"
                   >
-                    <AnimatedEmoji emoji={e} className="h-6 w-6" />
+                    <AnimatedEmoji emoji={e} sizePx={24} playOnHover />
                   </motion.button>
                 ))}
+                <motion.button
+                  type="button"
+                  aria-label="More reactions"
+                  whileHover={{ scale: 1.2 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => {
+                    setReactPickerFor(ctx.message);
+                    setCtx(null);
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded-full border border-border text-muted-foreground hover:text-foreground"
+                >
+                  <IconPlus className="h-3.5 w-3.5" />
+                </motion.button>
               </div>
             )}
             {!ctx.message.deletedForEveryone && (
@@ -985,6 +1027,14 @@ export function ChatView() {
                 </MenuItem>
               </>
             )}
+            <MenuItem
+              onClick={() => {
+                setInfoUser(active?.members.find((u) => u.id === ctx.message.senderId) ?? ctx.message.sender);
+                setCtx(null);
+              }}
+            >
+              <IconUsers className="h-4 w-4" /> Info
+            </MenuItem>
             <MenuItem onClick={() => remove(ctx.message, "me")} danger>
               <IconTrash className="h-4 w-4" /> Delete for me
             </MenuItem>
@@ -1008,6 +1058,38 @@ export function ChatView() {
           }}
         />
       )}
+
+      {reactPickerFor && (
+        <Dialog open onOpenChange={(v) => !v && setReactPickerFor(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Pick a reaction</DialogTitle>
+            </DialogHeader>
+            <DialogBody>
+              <div className="grid grid-cols-8 gap-1">
+                {EMOJIS.map((e) => (
+                  <motion.button
+                    key={e}
+                    type="button"
+                    whileHover={{ scale: 1.25 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => {
+                      const target = reactPickerFor;
+                      setReactPickerFor(null);
+                      if (target) react(target, e);
+                    }}
+                    className="flex items-center justify-center rounded p-1"
+                  >
+                    <AnimatedEmoji emoji={e} sizePx={26} playOnHover />
+                  </motion.button>
+                ))}
+              </div>
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {infoUser && <UserInfoDialog user={infoUser} online={onlineIds.has(infoUser.id)} onClose={() => setInfoUser(null)} />}
 
       {preview && <AttachmentPreview attachment={preview} onClose={() => setPreview(null)} />}
       {forwardOf && (
@@ -1060,7 +1142,6 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
     <motion.button
       type="button"
       aria-label={label}
-      whileHover={{ scale: 1.12 }}
       whileTap={{ scale: 0.9 }}
       onClick={onClick}
       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -1133,6 +1214,11 @@ function MessageBubble({
         e.preventDefault();
         onContext(e.clientX, e.clientY);
       }}
+      // Double-click opens the same actions (delete for me / everyone, info…).
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        onContext(e.clientX, e.clientY);
+      }}
       onClick={() => selectMode && onSelectToggle()}
       className={cn(
         "group flex items-center gap-2 rounded-lg px-0.5 py-0.5 transition-colors",
@@ -1154,7 +1240,6 @@ function MessageBubble({
         </motion.span>
       )}
       <motion.div
-        whileHover={{ scale: 1.01 }}
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
         className={cn(
           "relative max-w-[78%] rounded-3xl px-3.5 py-2 text-sm shadow-sm",
@@ -1200,7 +1285,6 @@ function MessageBubble({
                     <motion.button
                       key={a.id}
                       type="button"
-                      whileHover={{ scale: 1.02 }}
                       onClick={() => onOpenAttachment(a)}
                       className="overflow-hidden rounded-xl"
                     >
@@ -1211,7 +1295,6 @@ function MessageBubble({
                     <motion.button
                       key={a.id}
                       type="button"
-                      whileHover={{ scale: 1.015 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => onOpenAttachment(a)}
                       className={cn(
@@ -1433,6 +1516,58 @@ function Avatar({ title, group, online, image }: { title: string; group: boolean
         />
       )}
     </div>
+  );
+}
+
+function UserInfoDialog({ user, online, onClose }: { user: ChatUser; online: boolean; onClose: () => void }) {
+  const rows: { label: string; value: string }[] = [
+    { label: "Name", value: fullName(user) || "—" },
+    { label: "Email", value: user.email ?? "—" },
+    { label: "Contact", value: user.mobile || "—" },
+    { label: "Department", value: user.department?.name ?? "—" },
+    { label: "Role", value: user.role ? user.role.replace(/_/g, " ").toLowerCase() : "—" },
+  ];
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Contact info</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <div className="flex flex-col items-center gap-2">
+            <div className="relative">
+              <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-2xl font-semibold text-primary">
+                {user.avatarDataUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={user.avatarDataUrl} alt={fullName(user)} className="h-full w-full object-cover" />
+                ) : (
+                  initial(fullName(user))
+                )}
+              </div>
+              <span
+                className={cn(
+                  "absolute bottom-1 right-1 h-4 w-4 rounded-full border-2 border-popover",
+                  online ? "bg-emerald-500" : "bg-muted-foreground/40"
+                )}
+              />
+            </div>
+            <p className="text-base font-medium">{fullName(user)}</p>
+            <p className={cn("text-xs", online ? "text-emerald-500" : "text-muted-foreground")}>
+              {online ? "Active now" : "Offline"}
+            </p>
+          </div>
+
+          <div className="mt-4 divide-y divide-border/60 rounded-md border border-border">
+            {rows.map((r) => (
+              <div key={r.label} className="flex items-center justify-between gap-4 px-3 py-2.5 text-sm">
+                <span className="text-muted-foreground">{r.label}</span>
+                <span className="truncate text-right font-medium capitalize">{r.value}</span>
+              </div>
+            ))}
+          </div>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }
 

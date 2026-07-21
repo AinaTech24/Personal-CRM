@@ -42,20 +42,46 @@ export function countEmoji(text: string) {
   return text.match(emojiRe())?.length ?? 0;
 }
 
-export function AnimatedEmoji({ emoji, className }: { emoji: string; className?: string }) {
+export function AnimatedEmoji({
+  emoji,
+  className,
+  sizePx,
+  playOnHover = false,
+}: {
+  emoji: string;
+  className?: string;
+  /** Explicit box size; keeps the static glyph the same size as the animation. */
+  sizePx?: number;
+  /** Render the plain glyph until hovered — a grid of animations is expensive. */
+  playOnHover?: boolean;
+}) {
   const [failed, setFailed] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const cls = className ?? "h-5 w-5";
+  const boxStyle = sizePx ? { width: sizePx, height: sizePx } : undefined;
+  const hoverHandlers = playOnHover
+    ? { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) }
+    : {};
 
-  if (failed) {
+  // Static glyph: the fallback, and the resting state when playOnHover is set.
+  if (failed || (playOnHover && !hovered)) {
     return (
-      <span className={cn("inline-block leading-none", cls)} role="img" aria-label={emoji}>
+      <span
+        {...hoverHandlers}
+        role="img"
+        aria-label={emoji}
+        style={{ ...boxStyle, fontSize: sizePx ? sizePx * 0.88 : undefined, lineHeight: 1 }}
+        className={cn("inline-flex select-none items-center justify-center", !sizePx && cls)}
+      >
         {emoji}
       </span>
     );
   }
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
+      {...hoverHandlers}
       src={animatedEmojiUrl(emoji)}
       alt={emoji}
       // Not lazy: these are a few KB each, and lazy-loading can leave them
@@ -63,7 +89,8 @@ export function AnimatedEmoji({ emoji, className }: { emoji: string; className?:
       decoding="async"
       draggable={false}
       onError={() => setFailed(true)}
-      className={cn("inline-block select-none align-[-0.2em] object-contain", cls)}
+      style={boxStyle}
+      className={cn("inline-block select-none align-[-0.2em] object-contain", !sizePx && cls)}
     />
   );
 }

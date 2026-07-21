@@ -5,7 +5,19 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { addUserToAinaFamily, emitToMembers } from "@/lib/chat";
 
-const memberSelect = { select: { id: true, name: true, surname: true, avatarDataUrl: true, role: true } };
+// Enough for the in-chat "Info" card — you already share a conversation with them.
+const memberSelect = {
+  select: {
+    id: true,
+    name: true,
+    surname: true,
+    avatarDataUrl: true,
+    role: true,
+    email: true,
+    mobile: true,
+    department: { select: { id: true, name: true } },
+  },
+};
 
 /** Shape a conversation for the client: resolve the display title and unread count. */
 function serialize(
@@ -17,7 +29,20 @@ function serialize(
     description: string | null;
     imageDataUrl: string | null;
     updatedAt: Date;
-    members: { userId: string; lastReadAt: Date | null; user: { id: string; name: string; surname: string | null; avatarDataUrl: string | null; role: string } }[];
+    members: {
+      userId: string;
+      lastReadAt: Date | null;
+      user: {
+        id: string;
+        name: string;
+        surname: string | null;
+        avatarDataUrl: string | null;
+        role: string;
+        email: string;
+        mobile: string | null;
+        department: { id: string; name: string } | null;
+      };
+    }[];
     messages: { id: string; body: string; createdAt: Date; senderId: string; sender: { name: string } }[];
   },
   meId: string
