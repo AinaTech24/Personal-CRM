@@ -736,14 +736,17 @@ export function ChatView() {
 
   if (loading) {
     return (
-      <div className="flex h-[calc(100dvh-7rem-var(--safe-top,0px)-var(--safe-bottom,0px))] items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <EightDotsRotate className="h-9 w-9" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-[calc(100dvh-7rem-var(--safe-top,0px)-var(--safe-bottom,0px))] overflow-hidden rounded-xl border border-border bg-card/30">
+    // h-full, not a viewport calc: subtracting a hardcoded 7rem for the topbar
+    // and padding was 24px off, leaving dead space under the panel, and it went
+    // further out whenever the topbar grew by the status-bar inset.
+    <div className="flex h-full overflow-hidden rounded-xl border border-border bg-card/30">
       {/* Conversation list */}
       <div className={cn("flex w-full flex-col border-r border-border sm:w-72 lg:w-80", activeId && "hidden sm:flex")}>
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
