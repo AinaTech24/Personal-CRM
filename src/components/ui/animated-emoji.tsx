@@ -27,8 +27,14 @@ export function emojiCodepoints(emoji: string) {
   return [...emoji].map((c) => c.codePointAt(0)!.toString(16)).join("_");
 }
 
+/** Animated (WebP) — plays as soon as it's rendered. */
 export function animatedEmojiUrl(emoji: string) {
   return `${CDN}/${emojiCodepoints(emoji)}/512.webp`;
+}
+
+/** Still frame (PNG) — same Noto artwork, no animation cost. */
+export function staticEmojiUrl(emoji: string) {
+  return `${CDN}/${emojiCodepoints(emoji)}/512.png`;
 }
 
 /** True when the text is nothing but emoji (and whitespace). */
@@ -47,13 +53,16 @@ export function AnimatedEmoji({
   className,
   sizePx,
   playOnHover = false,
+  lazy = false,
 }: {
   emoji: string;
   className?: string;
-  /** Explicit box size; keeps the static glyph the same size as the animation. */
+  /** Explicit box size; keeps the still frame the same size as the animation. */
   sizePx?: number;
-  /** Render the plain glyph until hovered — a grid of animations is expensive. */
+  /** Show the still frame until hovered — a grid of animations is expensive. */
   playOnHover?: boolean;
+  /** For long scrolling grids, only fetch what comes into view. */
+  lazy?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -63,8 +72,8 @@ export function AnimatedEmoji({
     ? { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) }
     : {};
 
-  // Static glyph: the fallback, and the resting state when playOnHover is set.
-  if (failed || (playOnHover && !hovered)) {
+  // Last resort only: the CDN is unreachable or the set lacks this emoji.
+  if (failed) {
     return (
       <span
         {...hoverHandlers}
@@ -78,14 +87,16 @@ export function AnimatedEmoji({
     );
   }
 
+  // Same Noto artwork throughout — the still frame at rest, animating on hover.
+  const src = !playOnHover || hovered ? animatedEmojiUrl(emoji) : staticEmojiUrl(emoji);
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       {...hoverHandlers}
-      src={animatedEmojiUrl(emoji)}
+      src={src}
       alt={emoji}
-      // Not lazy: these are a few KB each, and lazy-loading can leave them
-      // unloaded inside popovers that never register as "in viewport".
+      loading={lazy ? "lazy" : undefined}
       decoding="async"
       draggable={false}
       onError={() => setFailed(true)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { format, isToday, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -28,10 +28,12 @@ import {
   IconFile,
   IconImage,
   IconDots,
+  IconInfo,
 } from "@/components/icons";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { AnimatedEmoji, TextWithAnimatedEmoji, isEmojiOnly, countEmoji } from "@/components/ui/animated-emoji";
+import { NOTO_EMOJI, NOTO_CATEGORIES } from "@/lib/noto-emoji";
 import { cn } from "@/lib/utils";
 
 /* ---------------------------------- types --------------------------------- */
@@ -95,7 +97,6 @@ interface PendingAttachment {
 
 /* -------------------------------- constants ------------------------------- */
 
-const EMOJIS = "😀 😄 😁 😂 🤣 😊 😍 😘 😎 🤩 🥳 🤔 😴 😅 😇 🙂 😉 😌 😔 😢 😭 😡 👍 👎 👏 🙏 💪 🔥 ✨ 🎉 ❤️ 💯 👀 ✅ ❌ ⚡ 🚀 🎯 📌 📎".split(" ");
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const ACCEPT = "image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip";
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -649,6 +650,17 @@ export function ChatView() {
                 </p>
               </div>
 
+              {/* Quick info: contact card for a direct chat, group info for a group. */}
+              <IconButton
+                label="Info"
+                onClick={() => {
+                  if (active.type === "GROUP") setGroupInfoOpen(true);
+                  else if (otherMember) setInfoUser(otherMember);
+                }}
+              >
+                <IconInfo className="h-4.5 w-4.5" />
+              </IconButton>
+
               {active.type === "GROUP" && (
                 <div className="relative" data-thread-menu>
                   <IconButton label="More" onClick={() => setThreadMenuOpen((v) => !v)}>
@@ -902,24 +914,15 @@ export function ChatView() {
                     pointerEvents: emojiOpen ? "auto" : "none",
                     transition: "opacity 200ms cubic-bezier(0.16,1,0.3,1), transform 200ms cubic-bezier(0.16,1,0.3,1)",
                   }}
-                  className="absolute bottom-full left-3 mb-1 grid w-64 origin-bottom-left grid-cols-8 gap-1 rounded-xl border border-border bg-popover p-2 shadow-lg"
+                  className="absolute bottom-full left-3 mb-1 w-72 origin-bottom-left overflow-hidden rounded-xl border border-border bg-popover shadow-lg"
                 >
-                  {EMOJIS.map((e) => (
-                    <motion.button
-                      key={e}
-                      type="button"
-                      whileHover={{ scale: 1.25 }}
-                      whileTap={{ scale: 0.9 }}
-                      tabIndex={emojiOpen ? 0 : -1}
-                      onClick={() => {
-                        setDraft((prev) => prev + e);
-                        setEmojiOpen(false);
-                      }}
-                      className="flex items-center justify-center rounded p-1"
-                    >
-                      <AnimatedEmoji emoji={e} sizePx={24} playOnHover />
-                    </motion.button>
-                  ))}
+                  <EmojiGrid
+                    active={emojiOpen}
+                    onPick={(char) => {
+                      setDraft((prev) => prev + char);
+                      setEmojiOpen(false);
+                    }}
+                  />
                 </div>
               )}
 
@@ -1066,24 +1069,14 @@ export function ChatView() {
               <DialogTitle>Pick a reaction</DialogTitle>
             </DialogHeader>
             <DialogBody>
-              <div className="grid grid-cols-8 gap-1">
-                {EMOJIS.map((e) => (
-                  <motion.button
-                    key={e}
-                    type="button"
-                    whileHover={{ scale: 1.25 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => {
-                      const target = reactPickerFor;
-                      setReactPickerFor(null);
-                      if (target) react(target, e);
-                    }}
-                    className="flex items-center justify-center rounded p-1"
-                  >
-                    <AnimatedEmoji emoji={e} sizePx={26} playOnHover />
-                  </motion.button>
-                ))}
-              </div>
+              <EmojiGrid
+                active
+                onPick={(char) => {
+                  const target = reactPickerFor;
+                  setReactPickerFor(null);
+                  if (target) react(target, char);
+                }}
+              />
             </DialogBody>
           </DialogContent>
         </Dialog>
@@ -1514,6 +1507,61 @@ function Avatar({ title, group, online, image }: { title: string; group: boolean
           animate={{ scale: online ? 1 : 0.85 }}
           className={cn("absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card", online ? "bg-emerald-500" : "bg-muted-foreground/40")}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The whole Noto animated set, scrollable. Emoji render as a still frame and
+ * only animate on hover, and the list grows as you scroll so opening the panel
+ * never renders 881 images at once.
+ */
+function EmojiGrid({ active, onPick }: { active: boolean; onPick: (char: string) => void }) {
+  const PAGE = 160;
+  const [limit, setLimit] = useState(PAGE);
+
+  // Reset paging whenever the panel is dismissed.
+  useEffect(() => {
+    if (!active) setLimit(PAGE);
+  }, [active]);
+
+  const shown = NOTO_EMOJI.slice(0, limit);
+
+  return (
+    <div
+      className="max-h-72 overflow-y-auto p-2"
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
+          setLimit((n) => Math.min(n + PAGE, NOTO_EMOJI.length));
+        }
+      }}
+    >
+      <div className="grid grid-cols-8 gap-1">
+        {shown.map(([cp, char, catIdx], i) => (
+          <Fragment key={cp}>
+            {(i === 0 || shown[i - 1][2] !== catIdx) && (
+              <p className="col-span-8 px-1 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                {NOTO_CATEGORIES[catIdx]}
+              </p>
+            )}
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.25 }}
+              whileTap={{ scale: 0.9 }}
+              tabIndex={active ? 0 : -1}
+              onClick={() => onPick(char)}
+              title={char}
+              className="flex items-center justify-center rounded p-1"
+            >
+              <AnimatedEmoji emoji={char} sizePx={24} playOnHover lazy />
+            </motion.button>
+          </Fragment>
+        ))}
+      </div>
+      {limit < NOTO_EMOJI.length && (
+        <p className="py-2 text-center text-[10px] text-muted-foreground">Scroll for more…</p>
       )}
     </div>
   );
