@@ -5,6 +5,40 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { emitToMembers, isMember, memberIdsOf } from "@/lib/chat";
 
+/**
+ * Permanently delete a conversation and everything in it.
+ *
+ * The auto-managed "Aina Family" group can't be deleted — every user belongs to
+ * it and it would simply be recreated. Groups are admin-only; a direct chat can
+ * be removed by either participant.
+ */
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+
+  const conversation = await db.conversation.findUnique({
+    where: { id },
+    select: { id: true, type: true, isSystem: true },
+  });
+  if (!conversation) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!(await isMember(user.id, id))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  if (conversation.isSystem) {
+    return NextResponse.json({ error: "The Aina Family group can't be deleted" }, { status: 400 });
+  }
+  if (conversation.type === "GROUP" && !isAdmin(user)) {
+    return NextResponse.json({ error: "Only admins can delete a group" }, { status: 403 });
+  }
+
+  // Tell everyone before the rows disappear.
+  const members = await memberIdsOf(id);
+  await db.conversation.delete({ where: { id } });
+  emitToMembers(members, "conversation:deleted", { conversationId: id });
+
+  return NextResponse.json({ ok: true });
+}
+
 const patchSchema = z.object({
   title: z.string().min(1).max(80).optional(),
   description: z.string().max(1000).nullable().optional(),

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EightDotsRotate } from "@/components/ui/loader";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -27,7 +28,6 @@ import {
   IconSelect,
   IconFile,
   IconImage,
-  IconDots,
   IconInfo,
   IconMic,
   IconStop,
@@ -187,8 +187,9 @@ export function ChatView() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   // The emoji grid mounts on first open and then stays (CSS handles show/hide).
   const [emojiMounted, setEmojiMounted] = useState(false);
-  const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const [groupInfoOpen, setGroupInfoOpen] = useState(false);
+  const [unpinTarget, setUnpinTarget] = useState<Message | null>(null);
+  const [deleteChat, setDeleteChat] = useState<Conversation | null>(null);
   const [reactPickerFor, setReactPickerFor] = useState<Message | null>(null);
   const [infoUser, setInfoUser] = useState<ChatUser | null>(null);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
@@ -337,7 +338,16 @@ export function ChatView() {
     socket.on("read", onRead);
     socket.on("typing", onTyping);
     socket.on("stop_typing", onStopTyping);
+    // Someone else deleted a chat we're in — drop it everywhere.
+    const onConversationDeleted = ({ conversationId }: { conversationId: string }) => {
+      setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+      if (activeIdRef.current === conversationId) {
+        setActiveId(null);
+        setMessages([]);
+      }
+    };
     socket.on("conversation", loadConversations);
+    socket.on("conversation:deleted", onConversationDeleted);
     return () => {
       socket.off("message", onMessage);
       socket.off("message:update", onUpdate);
@@ -346,6 +356,7 @@ export function ChatView() {
       socket.off("typing", onTyping);
       socket.off("stop_typing", onStopTyping);
       socket.off("conversation", loadConversations);
+      socket.off("conversation:deleted", onConversationDeleted);
     };
   }, [socket, upsertMessage, loadConversations, me.id]);
 
@@ -369,17 +380,6 @@ export function ChatView() {
     top = Math.max(pad, Math.min(top, vh - height - pad));
     setMenuPos({ left, top });
   }, [ctx]);
-
-  /* close the header menu on an outside click */
-  useEffect(() => {
-    if (!threadMenuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if ((e.target as HTMLElement | null)?.closest?.("[data-thread-menu]")) return;
-      setThreadMenuOpen(false);
-    };
-    window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
-  }, [threadMenuOpen]);
 
   /* close the emoji panel on an outside click — AnimatePresence plays the same
      animation in reverse, so it closes exactly the way it opened */
@@ -591,6 +591,28 @@ export function ChatView() {
     if (res.ok && data?.message) upsertMessage(data.message);
   }
 
+  /** Unpinning is confirmed first — it's a shared, visible change for everyone. */
+  function requestPinToggle(message: Message) {
+    setCtx(null);
+    if (message.pinnedAt) setUnpinTarget(message);
+    else togglePin(message);
+  }
+
+  async function deleteConversation(conversation: Conversation) {
+    const res = await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      return toast.error("Couldn't delete the chat", d.error);
+    }
+    playSound("delete");
+    toast.success("Chat deleted");
+    if (activeIdRef.current === conversation.id) {
+      setActiveId(null);
+      setMessages([]);
+    }
+    setConversations((prev) => prev.filter((c) => c.id !== conversation.id));
+  }
+
   async function togglePin(message: Message) {
     setCtx(null);
     const res = await fetch(`/api/messages/${message.id}`, {
@@ -692,29 +714,52 @@ export function ChatView() {
           {conversations.map((c) => {
             const other = c.type === "DIRECT" ? c.members.find((m) => m.id !== me.id) : null;
             return (
-              <motion.button
+              <div
                 key={c.id}
-                type="button"
-                whileHover={{ x: 2 }}
-                transition={{ type: "spring", stiffness: 500, damping: 32 }}
-                onClick={() => openConversation(c.id)}
+                // Suppress the browser menu here and offer our own delete instead.
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (!c.isSystem) setDeleteChat(c);
+                }}
                 className={cn(
-                  "flex w-full items-center gap-3 border-b border-border/50 px-4 py-3 text-left transition-colors hover:bg-accent/50",
+                  "group/chat relative border-b border-border/50 transition-colors hover:bg-accent/50",
                   activeId === c.id && "bg-accent/60"
                 )}
               >
-                <Avatar title={c.title} group={c.type === "GROUP"} online={other ? onlineIds.has(other.id) : undefined} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-medium">{c.title}</span>
-                    {c.lastMessage && <span className="shrink-0 text-[11px] text-muted-foreground">{fmtWhen(c.lastMessage.createdAt)}</span>}
+                <button
+                  type="button"
+                  onClick={() => openConversation(c.id)}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                >
+                  <Avatar title={c.title} group={c.type === "GROUP"} image={c.imageDataUrl} online={other ? onlineIds.has(other.id) : undefined} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium">{c.title}</span>
+                      {c.lastMessage && <span className="shrink-0 text-[11px] text-muted-foreground">{fmtWhen(c.lastMessage.createdAt)}</span>}
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {c.lastMessage ? `${c.type === "GROUP" ? `${c.lastMessage.senderName}: ` : ""}${c.lastMessage.body}` : "No messages yet"}
+                    </p>
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {c.lastMessage ? `${c.type === "GROUP" ? `${c.lastMessage.senderName}: ` : ""}${c.lastMessage.body}` : "No messages yet"}
-                  </p>
-                </div>
-                {c.unread > 0 && <motion.span layout className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />}
-              </motion.button>
+                  {c.unread > 0 && <motion.span layout className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />}
+                </button>
+
+                {/* Appears on hover, bottom-right of the row. */}
+                {!c.isSystem && (
+                  <button
+                    type="button"
+                    aria-label={`Delete chat with ${c.title}`}
+                    title="Delete chat permanently"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteChat(c);
+                    }}
+                    className="absolute bottom-1.5 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/chat:opacity-100"
+                  >
+                    <IconTrash className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
@@ -754,33 +799,6 @@ export function ChatView() {
                 <IconInfo className="h-4.5 w-4.5" />
               </IconButton>
 
-              {active.type === "GROUP" && (
-                <div className="relative" data-thread-menu>
-                  <IconButton label="More" onClick={() => setThreadMenuOpen((v) => !v)}>
-                    <IconDots className="h-4.5 w-4.5" />
-                  </IconButton>
-                  <AnimatePresence>
-                    {threadMenuOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                        transition={{ duration: 0.12 }}
-                        className="absolute right-0 top-full z-40 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-popover py-1 shadow-xl"
-                      >
-                        <MenuItem
-                          onClick={() => {
-                            setThreadMenuOpen(false);
-                            setGroupInfoOpen(true);
-                          }}
-                        >
-                          <IconUsers className="h-4 w-4" /> Group info
-                        </MenuItem>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
             </div>
 
             {/* Pinned bar */}
@@ -792,6 +810,12 @@ export function ChatView() {
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   onClick={() => scrollToMessage(pinned[pinned.length - 1].id)}
+                  // Right-click the pinned bar to unpin (asks first).
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setUnpinTarget(pinned[pinned.length - 1]);
+                  }}
+                  title="Click to jump · right-click to unpin"
                   className="flex w-full items-center gap-2 overflow-hidden border-b border-border bg-amber-500/10 px-4 py-2 text-left text-xs"
                 >
                   <IconPin className="h-3.5 w-3.5 shrink-0 text-amber-500" />
@@ -1160,7 +1184,7 @@ export function ChatView() {
                 <MenuItem onClick={() => { setSelectMode(true); setSelectedIds(new Set([ctx.message.id])); setCtx(null); }}>
                   <IconSelect className="h-4 w-4" /> Select
                 </MenuItem>
-                <MenuItem onClick={() => togglePin(ctx.message)}>
+                <MenuItem onClick={() => requestPinToggle(ctx.message)}>
                   <IconPin className="h-4 w-4" /> {ctx.message.pinnedAt ? "Unpin" : "Pin"}
                 </MenuItem>
               </>
@@ -1216,6 +1240,32 @@ export function ChatView() {
           </DialogContent>
         </Dialog>
       )}
+
+      <ConfirmDialog
+        open={!!unpinTarget}
+        onOpenChange={(v) => !v && setUnpinTarget(null)}
+        title="Unpin this message?"
+        description="It will no longer show in the pinned bar for anyone in this chat."
+        confirmLabel="Unpin"
+        onConfirm={async () => {
+          const target = unpinTarget;
+          setUnpinTarget(null);
+          if (target) await togglePin(target);
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!deleteChat}
+        onOpenChange={(v) => !v && setDeleteChat(null)}
+        title={`Delete chat with ${deleteChat?.title ?? ""}?`}
+        description="This permanently removes the conversation and every message in it, for everyone. It can't be undone."
+        confirmLabel="Delete permanently"
+        onConfirm={async () => {
+          const target = deleteChat;
+          setDeleteChat(null);
+          if (target) await deleteConversation(target);
+        }}
+      />
 
       {infoUser && <UserInfoDialog user={infoUser} online={onlineIds.has(infoUser.id)} onClose={() => setInfoUser(null)} />}
 
