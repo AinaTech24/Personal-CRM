@@ -28,17 +28,18 @@ export function RecordingWave({ stream, className }: { stream: MediaStream | nul
   const containerRef = useRef<HTMLDivElement>(null);
   const barRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const levels = useRef<number[]>([]);
-  const [bars, setBars] = useState(MIN_BARS);
+  const [width, setWidth] = useState(0);
+  // Below this the strip is too cramped to read as a waveform, so it isn't
+  // drawn at all — the pulsing dot and timer alongside still say "recording".
+  const canShow = width >= MIN_BARS * PITCH;
+  const bars = canShow ? Math.floor(width / PITCH) : 0;
 
   // Track the available width. ResizeObserver rather than a window listener:
   // the composer also changes width when attachments or the reply bar appear.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const measure = () => {
-      const width = el.clientWidth;
-      if (width > 0) setBars(Math.max(MIN_BARS, Math.floor(width / PITCH)));
-    };
+    const measure = () => setWidth(el.clientWidth);
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
