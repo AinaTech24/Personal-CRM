@@ -150,8 +150,11 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "h-screen min-w-0 flex-col overflow-hidden border-r border-border bg-card/40",
-        mobile ? "flex w-64" : "hidden md:flex"
+        "h-screen min-w-0 flex-col overflow-hidden border-r border-border",
+        // The translucent fill only works in the desktop grid, where it sits on
+        // the page background. The drawer floats over the content, so it needs
+        // to be opaque or you read the dashboard straight through the menu.
+        mobile ? "flex w-64 bg-card" : "hidden bg-card/40 md:flex"
       )}
     >
       <div className={cn("flex h-14 shrink-0 items-center px-3", collapsed ? "justify-center" : "justify-between")}>
