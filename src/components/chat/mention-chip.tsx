@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,9 @@ export interface MentionedUser {
 const SHOW_DELAY = 120;
 const HIDE_DELAY = 160;
 const CARD_W = 232;
+/** Roughly the tallest the card gets, used to decide whether it fits above. */
+const CARD_MAX_H = 150;
+const GUTTER = 8;
 
 /**
  * A highlighted @mention that reveals the person's details on hover.
@@ -40,7 +43,7 @@ export function MentionChip({
   mine: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ left: number; top: number; below: boolean } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; below: boolean; maxWidth: number } | null>(null);
   const ref = useRef<HTMLSpanElement>(null);
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -54,15 +57,33 @@ export function MentionChip({
     if (!user) return;
     clearTimers();
     showTimer.current = setTimeout(() => {
-      const rect = ref.current?.getBoundingClientRect();
-      if (!rect) return;
-      // Flip below when there isn't room above, so the card never sits offscreen.
-      const below = rect.top < 190;
-      setPos({
-        left: Math.min(Math.max(rect.left, 8), window.innerWidth - CARD_W - 8),
-        top: below ? rect.bottom + 8 : rect.top - 8,
-        below,
-      });
+      const el = ref.current;
+      const rect = el?.getBoundingClientRect();
+      if (!el || !rect) return;
+
+      // Stay within the message thread, not just the window. Clamping to the
+      // viewport let the card sit over the sidebar or the conversation list
+      // whenever the thread was narrower than the page.
+      const thread = el.closest("[data-chat-thread]");
+      const bounds = thread ? thread.getBoundingClientRect() : null;
+      const boxLeft = bounds?.left ?? 0;
+      const boxRight = bounds?.right ?? window.innerWidth;
+      const boxWidth = bounds?.width ?? window.innerWidth;
+
+      // Width first: a narrow thread shrinks the card rather than being
+      // overflowed by it, and the clamp below has to use the real width.
+      // No minimum: a floor wider than the thread would poke back out, which is
+      // the whole thing being fixed.
+      const width = Math.min(CARD_W, Math.max(0, boxWidth - GUTTER * 2));
+      const minLeft = boxLeft + GUTTER;
+      const maxLeft = boxRight - width - GUTTER;
+      const left = Math.max(minLeft, Math.min(rect.left, Math.max(minLeft, maxLeft)));
+
+      // Prefer above; drop below only when the top of the thread is too close.
+      const roomAbove = rect.top - (bounds?.top ?? 0);
+      const below = roomAbove < CARD_MAX_H + GUTTER;
+
+      setPos({ left, top: below ? rect.bottom + 8 : rect.top - 8, below, maxWidth: width });
       setOpen(true);
     }, SHOW_DELAY);
   }
@@ -72,6 +93,19 @@ export function MentionChip({
     // A grace period so moving the pointer from chip to card doesn't close it.
     hideTimer.current = setTimeout(() => setOpen(false), HIDE_DELAY);
   }
+
+  // The card is fixed-positioned, so scrolling the thread would strand it next
+  // to whichever message has slid into that spot. Close instead of chasing.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => {
+      clearTimers();
+      setOpen(false);
+    };
+    // Capture: the thread scrolls, and scroll events don't bubble to window.
+    window.addEventListener("scroll", close, true);
+    return () => window.removeEventListener("scroll", close, true);
+  }, [open]);
 
   const fullName = [user?.name, user?.surname].filter(Boolean).join(" ");
 
@@ -103,7 +137,7 @@ export function MentionChip({
               position: "fixed",
               left: pos.left,
               top: pos.top,
-              width: CARD_W,
+              width: pos.maxWidth,
               transform: pos.below
                 ? `translateY(${open ? 0 : -6}px)`
                 : `translateY(${open ? "-100%" : "calc(-100% + 6px)"})`,

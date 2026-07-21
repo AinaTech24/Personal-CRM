@@ -875,7 +875,9 @@ export function ChatView() {
               )}
             </AnimatePresence>
 
-            <div ref={scrollRef} className="flex-1 space-y-1 overflow-y-auto p-4">
+            {/* Marked so a mention's hover card can keep itself inside the
+                thread rather than spilling over the sidebar or the page. */}
+            <div ref={scrollRef} data-chat-thread className="flex-1 space-y-1 overflow-y-auto p-4">
               {loadingThread ? (
                 <div className="flex h-full flex-1 items-center justify-center">
                   <EightDotsRotate className="h-7 w-7" />
