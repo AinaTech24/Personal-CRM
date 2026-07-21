@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { DEFAULT_POLICY } from "@/lib/attendance";
+import { parseShifts } from "@/lib/attendance-settings";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -17,6 +18,7 @@ export async function GET() {
       requireApproval: row?.requireApproval ?? DEFAULT_POLICY.requireApproval,
       requireHalfDayReason: row?.requireHalfDayReason ?? DEFAULT_POLICY.requireHalfDayReason,
       workingWeekdays: row?.workingWeekdays ?? DEFAULT_POLICY.workingWeekdays.join(","),
+      shifts: parseShifts(row?.shifts),
     },
   });
 }
@@ -32,6 +34,21 @@ const bodySchema = z
       .string()
       .regex(/^([0-6])(,[0-6])*$/, "Must be day numbers 0–6")
       .refine((v) => new Set(v.split(",")).size === v.split(",").length, "Duplicate days"),
+    // Optional check-in/check-out windows for full and half days.
+    shifts: z
+      .array(
+        z.object({
+          name: z.string().min(1).max(60),
+          type: z.enum(["FULL_DAY", "HALF_DAY"]),
+          checkInStart: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Use HH:mm"),
+          checkInEnd: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Use HH:mm"),
+          checkOutStart: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Use HH:mm"),
+          checkOutEnd: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "Use HH:mm"),
+        })
+      )
+      .max(12)
+      .optional()
+      .default([]),
   })
   // A half day can't require more time than a full day.
   .refine((v) => v.halfDayMinutes < v.fullDayMinutes, {
@@ -47,12 +64,13 @@ export async function PUT(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const d = parsed.data;
+  const { shifts, ...rest } = parsed.data;
+  const data = { ...rest, shifts };
 
   await db.attendanceSettings.upsert({
     where: { id: "default" },
-    create: { id: "default", ...d },
-    update: d,
+    create: { id: "default", ...data },
+    update: data,
   });
 
   return NextResponse.json({ ok: true });

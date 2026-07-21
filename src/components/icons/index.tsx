@@ -382,6 +382,70 @@ export function IconSmile(props: IconProps) {
   );
 }
 
+export function IconReply(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <polyline points="9 17 4 12 9 7" />
+      <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+    </svg>
+  );
+}
+
+export function IconForward(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <polyline points="15 17 20 12 15 7" />
+      <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
+    </svg>
+  );
+}
+
+export function IconPin(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 17v5" />
+      <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+    </svg>
+  );
+}
+
+export function IconCopy(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </svg>
+  );
+}
+
+export function IconSelect(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect width="18" height="18" x="3" y="3" rx="3" />
+      <path d="m8 12 3 3 5-6" />
+    </svg>
+  );
+}
+
+export function IconFile(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+    </svg>
+  );
+}
+
+export function IconImage(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21" />
+    </svg>
+  );
+}
+
 export function IconPaperclip(props: IconProps) {
   return (
     <svg {...base(props)}>

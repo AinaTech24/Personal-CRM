@@ -85,6 +85,7 @@ model User {
   invoicesCreated  Invoice[] @relation("InvoiceCreatedBy")
   paymentsRecorded Payment[]
 
+  leaves             UserLeave[]       @relation("UserLeaves")
   attendance         Attendance[]      @relation("AttendanceUser")
   attendanceApproved Attendance[]      @relation("AttendanceApprover")
   attendanceAudits   AttendanceAudit[] @relation("AttendanceAuditActor")
@@ -743,8 +744,35 @@ model AttendanceAudit {
 /**
  * Configurable classification thresholds and policy. Single row, id "default".
  */
+enum LeaveType {
+  FULL_DAY
+  HALF_DAY
+}
+
+/// An approved absence. Full-day leave blocks check-in entirely; half-day leave
+/// restricts the user to the half-day shift windows.
+model UserLeave {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation("UserLeaves", fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime  @db.Date
+  type        LeaveType @default(FULL_DAY)
+  reason      String?
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, date])
+  @@index([date])
+}
+
 model AttendanceSettings {
   id                   String   @id @default("default")
+  /**
+   * Admin-defined check-in/check-out windows, e.g.
+   * [{ name, type: "FULL_DAY"|"HALF_DAY", checkInStart, checkInEnd, checkOutStart, checkOutEnd }]
+   * with "HH:mm" IST times. Empty/absent means no time restriction.
+   */
+  shifts               Json?
   /**
    * Minutes worked to count as a full Present day. Default 8h.
    */

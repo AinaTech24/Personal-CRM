@@ -18,6 +18,13 @@ import {
   IconX,
   IconTrash,
   IconCheck,
+  IconReply,
+  IconForward,
+  IconPin,
+  IconCopy,
+  IconSelect,
+  IconFile,
+  IconImage,
 } from "@/components/icons";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -92,14 +99,11 @@ const fmtWhen = (s: string) => (isToday(parseISO(s)) ? fmtTime(s) : format(parse
 const isImage = (m: string) => m.startsWith("image/");
 const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
-function fileIcon(mime: string) {
-  if (isImage(mime)) return "🖼️";
-  if (mime.includes("pdf")) return "📕";
-  if (mime.includes("sheet") || mime.includes("excel") || mime.includes("csv")) return "📗";
-  if (mime.includes("presentation") || mime.includes("powerpoint")) return "📙";
-  if (mime.includes("zip")) return "🗜️";
-  if (mime.startsWith("text/")) return "📄";
-  return "📎";
+/** Icon for a file, drawn from the app's icon set (never an OS emoji). */
+function FileIcon({ mime, className }: { mime: string; className?: string }) {
+  const cls = className ?? "h-4 w-4";
+  if (isImage(mime)) return <IconImage className={cls} />;
+  return <IconFile className={cls} />;
 }
 
 function readFile(file: File): Promise<PendingAttachment> {
@@ -165,6 +169,8 @@ export function ChatView() {
   const [forwardOf, setForwardOf] = useState<Message | null>(null);
   const [preview, setPreview] = useState<Attachment | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
@@ -449,6 +455,47 @@ export function ChatView() {
     }
   }
 
+  /** Copy one or more messages to the clipboard (sender + text, newest last). */
+  async function copyMessages(list: Message[]) {
+    setCtx(null);
+    const text = list
+      .filter((m) => !m.deletedForEveryone)
+      .map((m) => (list.length > 1 ? `${fullName(m.sender)}: ${m.body || "[attachment]"}` : m.body || "[attachment]"))
+      .join("\n");
+    if (!text) return toast.error("Nothing to copy");
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(list.length > 1 ? `Copied ${list.length} messages` : "Copied");
+    } catch {
+      toast.error("Couldn't copy to clipboard");
+    }
+  }
+
+  function exitSelect() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const selectedMessages = useMemo(() => messages.filter((m) => selectedIds.has(m.id)), [messages, selectedIds]);
+
+  /** Delete every selected message for me (bulk). */
+  async function deleteSelected() {
+    const list = [...selectedIds];
+    exitSelect();
+    await Promise.all(list.map((id) => fetch(`/api/messages/${id}?scope=me`, { method: "DELETE" })));
+    setMessages((prev) => prev.filter((m) => !list.includes(m.id)));
+    playSound("delete");
+  }
+
   const mentionMatches = useMemo(() => {
     if (!mention || !active) return [];
     const q = mention.query.toLowerCase();
@@ -540,11 +587,15 @@ export function ChatView() {
                   onClick={() => scrollToMessage(pinned[pinned.length - 1].id)}
                   className="flex w-full items-center gap-2 overflow-hidden border-b border-border bg-amber-500/10 px-4 py-2 text-left text-xs"
                 >
-                  <span>📌</span>
-                  <span className="truncate text-muted-foreground">
-                    <span className="font-medium text-foreground">{pinned.length} pinned</span>
-                    {" — "}
-                    {pinned[pinned.length - 1].body || "Attachment"}
+                  <IconPin className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-foreground">
+                      {pinned[pinned.length - 1].body || pinned[pinned.length - 1].attachments[0]?.name || "Attachment"}
+                    </span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      Pinned by {fullName(pinned[pinned.length - 1].sender)}
+                      {pinned.length > 1 ? ` · ${pinned.length} pinned` : ""}
+                    </span>
                   </span>
                 </motion.button>
               )}
@@ -580,6 +631,9 @@ export function ChatView() {
                       onQuoteClick={scrollToMessage}
                       onReact={react}
                       meId={me.id}
+                      selectMode={selectMode}
+                      selected={selectedIds.has(m.id)}
+                      onSelectToggle={() => toggleSelected(m.id)}
                     />
                   ))}
                 </AnimatePresence>
@@ -651,7 +705,7 @@ export function ChatView() {
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={a.data} alt={a.name} className="h-9 w-9 rounded object-cover" />
                         ) : (
-                          <span className="text-base">{fileIcon(a.mimeType)}</span>
+                          <FileIcon mime={a.mimeType} className="h-5 w-5 text-muted-foreground" />
                         )}
                         <span className="min-w-0">
                           <span className="block max-w-32 truncate">{a.name}</span>
@@ -662,6 +716,40 @@ export function ChatView() {
                         </button>
                       </motion.div>
                     ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Selection toolbar */}
+            <AnimatePresence>
+              {selectMode && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="flex items-center gap-2 overflow-hidden border-t border-border bg-accent/40 px-3 py-2"
+                >
+                  <span className="text-sm font-medium">{selectedIds.size} selected</span>
+                  <div className="ml-auto flex items-center gap-1">
+                    <IconButton label="Copy selected" onClick={() => copyMessages(selectedMessages)}>
+                      <IconCopy className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton
+                      label="Forward selected"
+                      onClick={() => {
+                        const first = selectedMessages[0];
+                        if (first) setForwardOf(first);
+                      }}
+                    >
+                      <IconForward className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton label="Delete selected" onClick={deleteSelected}>
+                      <IconTrash className="h-4 w-4 text-destructive" />
+                    </IconButton>
+                    <IconButton label="Cancel selection" onClick={exitSelect}>
+                      <IconX className="h-4 w-4" />
+                    </IconButton>
                   </div>
                 </motion.div>
               )}
@@ -790,17 +878,29 @@ export function ChatView() {
             )}
             {!ctx.message.deletedForEveryone && (
               <>
-                <MenuItem onClick={() => { setReplyTo(ctx.message); setCtx(null); }}>↩️ Reply</MenuItem>
-                <MenuItem onClick={() => { setForwardOf(ctx.message); setCtx(null); }}>↪️ Forward</MenuItem>
-                <MenuItem onClick={() => togglePin(ctx.message)}>📌 {ctx.message.pinnedAt ? "Unpin" : "Pin"}</MenuItem>
+                <MenuItem onClick={() => { setReplyTo(ctx.message); setCtx(null); }}>
+                  <IconReply className="h-4 w-4" /> Reply
+                </MenuItem>
+                <MenuItem onClick={() => { setForwardOf(ctx.message); setCtx(null); }}>
+                  <IconForward className="h-4 w-4" /> Forward
+                </MenuItem>
+                <MenuItem onClick={() => copyMessages([ctx.message])}>
+                  <IconCopy className="h-4 w-4" /> Copy
+                </MenuItem>
+                <MenuItem onClick={() => { setSelectMode(true); setSelectedIds(new Set([ctx.message.id])); setCtx(null); }}>
+                  <IconSelect className="h-4 w-4" /> Select
+                </MenuItem>
+                <MenuItem onClick={() => togglePin(ctx.message)}>
+                  <IconPin className="h-4 w-4" /> {ctx.message.pinnedAt ? "Unpin" : "Pin"}
+                </MenuItem>
               </>
             )}
             <MenuItem onClick={() => remove(ctx.message, "me")} danger>
-              <IconTrash className="h-3.5 w-3.5" /> Delete for me
+              <IconTrash className="h-4 w-4" /> Delete for me
             </MenuItem>
             {ctx.message.senderId === me.id && !ctx.message.deletedForEveryone && (
               <MenuItem onClick={() => remove(ctx.message, "everyone")} danger>
-                <IconTrash className="h-3.5 w-3.5" /> Delete for everyone
+                <IconTrash className="h-4 w-4" /> Delete for everyone
               </MenuItem>
             )}
           </motion.div>
@@ -885,6 +985,9 @@ function MessageBubble({
   onQuoteClick,
   onReact,
   meId,
+  selectMode,
+  selected,
+  onSelectToggle,
 }: {
   message: Message;
   mine: boolean;
@@ -897,6 +1000,9 @@ function MessageBubble({
   onQuoteClick: (id: string) => void;
   onReact: (m: Message, emoji: string) => void;
   meId: string;
+  selectMode: boolean;
+  selected: boolean;
+  onSelectToggle: () => void;
 }) {
   const long = m.body.length > LONG_BODY;
   const shown = long && !expanded ? `${m.body.slice(0, LONG_BODY)}…` : m.body;
@@ -923,8 +1029,26 @@ function MessageBubble({
         e.preventDefault();
         onContext(e.clientX, e.clientY);
       }}
-      className={cn("group flex px-0.5 py-0.5", mine ? "justify-end" : "justify-start")}
+      onClick={() => selectMode && onSelectToggle()}
+      className={cn(
+        "group flex items-center gap-2 rounded-lg px-0.5 py-0.5 transition-colors",
+        mine ? "justify-end" : "justify-start",
+        selectMode && "cursor-pointer hover:bg-accent/40",
+        selected && "bg-primary/10"
+      )}
     >
+      {selectMode && (
+        <motion.span
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className={cn(
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+            selected ? "border-primary bg-primary text-primary-foreground" : "border-input"
+          )}
+        >
+          {selected && <IconCheck className="h-3 w-3" />}
+        </motion.span>
+      )}
       <motion.div
         whileHover={{ scale: 1.01 }}
         transition={{ type: "spring", stiffness: 500, damping: 30 }}
@@ -933,13 +1057,13 @@ function MessageBubble({
           mine ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-muted"
         )}
       >
-        {m.pinnedAt && <span className="absolute -top-1.5 right-2 text-[10px]">📌</span>}
+        {m.pinnedAt && <IconPin className="absolute -top-1.5 right-2 h-3 w-3 opacity-70" />}
 
         {!mine && group && !m.deletedForEveryone && <p className="mb-0.5 text-[11px] font-medium opacity-70">{fullName(m.sender)}</p>}
 
         {m.forwardedFromName && !m.deletedForEveryone && (
           <p className={cn("mb-0.5 text-[11px] italic", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
-            ↪️ Forwarded from {m.forwardedFromName}
+            <IconForward className="mr-1 inline h-3 w-3" />Forwarded from {m.forwardedFromName}
           </p>
         )}
 
@@ -962,7 +1086,7 @@ function MessageBubble({
         )}
 
         {m.deletedForEveryone ? (
-          <p className={cn("italic", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>🚫 This message was deleted</p>
+          <p className={cn("italic", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>This message was deleted</p>
         ) : (
           <>
             {m.attachments.length > 0 && (
@@ -991,7 +1115,7 @@ function MessageBubble({
                         mine ? "border-primary-foreground/30 hover:bg-primary-foreground/10" : "border-border hover:bg-background/60"
                       )}
                     >
-                      <span className="text-lg">{fileIcon(a.mimeType)}</span>
+                      <FileIcon mime={a.mimeType} className="h-5 w-5 shrink-0" />
                       <span className="min-w-0">
                         <span className="block max-w-44 truncate text-xs font-medium">{a.name}</span>
                         <span className={cn("text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>{fmtSize(a.size)}</span>
@@ -1068,7 +1192,7 @@ function AttachmentPreview({ attachment: a, onClose }: { attachment: Attachment;
       <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle className="truncate pr-6">
-            {fileIcon(a.mimeType)} {a.name}
+            <span className="flex items-center gap-2"><FileIcon mime={a.mimeType} className="h-4 w-4 shrink-0" />{a.name}</span>
           </DialogTitle>
         </DialogHeader>
         <DialogBody>
@@ -1079,7 +1203,7 @@ function AttachmentPreview({ attachment: a, onClose }: { attachment: Attachment;
             <iframe src={a.data} title={a.name} className="h-[60vh] w-full rounded-lg border border-border" />
           ) : (
             <div className="flex flex-col items-center gap-3 py-10 text-center">
-              <span className="text-5xl">{fileIcon(a.mimeType)}</span>
+              <FileIcon mime={a.mimeType} className="h-14 w-14 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
                 {a.name} · {fmtSize(a.size)}
               </p>

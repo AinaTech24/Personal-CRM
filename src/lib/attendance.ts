@@ -29,12 +29,56 @@ export function weekdayOfKey(key: string): number {
   return dateFromKey(key).getUTCDay();
 }
 
+/** An admin-defined check-in/check-out window, in IST "HH:mm". */
+export interface AttendanceShift {
+  name: string;
+  type: "FULL_DAY" | "HALF_DAY";
+  checkInStart: string;
+  checkInEnd: string;
+  checkOutStart: string;
+  checkOutEnd: string;
+}
+
 export interface AttendancePolicy {
   fullDayMinutes: number;
   halfDayMinutes: number;
   requireApproval: boolean;
   requireHalfDayReason: boolean;
   workingWeekdays: number[]; // JS getDay() numbers
+  shifts: AttendanceShift[];
+}
+
+/** Current IST wall-clock as minutes past midnight. */
+export function istMinutesOfDay(instant: Date = new Date()): number {
+  const shifted = new Date(instant.getTime() + IST_OFFSET_MINUTES * 60_000);
+  return shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
+}
+
+/** "HH:mm" → minutes past midnight; NaN when unparseable. */
+export function hhmmToMinutes(hhmm: string): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+  if (!m) return NaN;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+/** Is `minutes` inside [start, end]? Windows that wrap past midnight are supported. */
+export function withinWindow(minutes: number, start: string, end: string): boolean {
+  const s = hhmmToMinutes(start);
+  const e = hhmmToMinutes(end);
+  if (Number.isNaN(s) || Number.isNaN(e)) return true; // unconfigured → don't block
+  return s <= e ? minutes >= s && minutes <= e : minutes >= s || minutes <= e;
+}
+
+/**
+ * The shifts a user may check in on right now. `allowedTypes` narrows by
+ * entitlement — someone on half-day leave may only use HALF_DAY shifts.
+ */
+export function shiftsOpenForCheckIn(
+  shifts: AttendanceShift[],
+  allowedTypes: AttendanceShift["type"][],
+  atMinutes: number
+): AttendanceShift[] {
+  return shifts.filter((s) => allowedTypes.includes(s.type) && withinWindow(atMinutes, s.checkInStart, s.checkInEnd));
 }
 
 export const DEFAULT_POLICY: AttendancePolicy = {
@@ -43,6 +87,7 @@ export const DEFAULT_POLICY: AttendancePolicy = {
   requireApproval: true,
   requireHalfDayReason: false,
   workingWeekdays: [1, 2, 3, 4, 5, 6], // Mon–Sat
+  shifts: [],
 };
 
 /** Parses the stored "1,2,3,4,5,6" weekday string into numbers. */

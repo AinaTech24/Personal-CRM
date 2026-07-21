@@ -33,7 +33,9 @@ export async function POST() {
   const policy = await getAttendancePolicy();
   const workedMinutes = computeWorkedMinutes(record.checkIn, now) ?? 0;
   const calculatedStatus = classifyStatus(workedMinutes, policy);
-  const autoApprove = !policy.requireApproval;
+  // A full Present day that was both checked in and out needs no sign-off —
+  // it's auto-approved. Half days and absences still follow the approval policy.
+  const autoApprove = !policy.requireApproval || calculatedStatus === "PRESENT";
 
   const updated = await db.attendance.update({
     where: { id: record.id },

@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { EightDotsRotate } from "@/components/ui/loader";
 import { IconTrash, IconPlus, IconMailCheck } from "@/components/icons";
+import { Dropdown } from "@/components/ui/dropdown";
 import { useToast } from "@/components/providers/toast-provider";
 
 const WEEKDAYS = [
@@ -20,6 +21,23 @@ const WEEKDAYS = [
   { value: 5, label: "Fri" },
   { value: 6, label: "Sat" },
 ];
+
+interface Shift {
+  name: string;
+  type: "FULL_DAY" | "HALF_DAY";
+  checkInStart: string;
+  checkInEnd: string;
+  checkOutStart: string;
+  checkOutEnd: string;
+}
+
+interface LeaveRow {
+  id: string;
+  date: string;
+  type: "FULL_DAY" | "HALF_DAY";
+  reason: string | null;
+  user: { id: string; name: string; surname: string | null; email: string };
+}
 
 interface Holiday {
   id: string;
@@ -46,12 +64,23 @@ export function AttendanceSettingsPanel() {
   const [addingHoliday, setAddingHoliday] = useState(false);
   const [sendingReports, setSendingReports] = useState(false);
 
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [leaves, setLeaves] = useState<LeaveRow[]>([]);
+  const [staff, setStaff] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [leaveUserId, setLeaveUserId] = useState("");
+  const [leaveDate, setLeaveDate] = useState("");
+  const [leaveType, setLeaveType] = useState<"FULL_DAY" | "HALF_DAY">("FULL_DAY");
+  const [leaveReason, setLeaveReason] = useState("");
+  const [savingLeave, setSavingLeave] = useState(false);
+
   useEffect(() => {
     Promise.all([
       fetch("/api/attendance-settings").then((r) => r.json()),
       fetch("/api/holidays").then((r) => r.json()),
+      fetch("/api/leaves").then((r) => r.json()).catch(() => ({ leaves: [] })),
+      fetch("/api/users/assignable?scope=all").then((r) => r.json()).catch(() => ({ users: [] })),
     ])
-      .then(([s, h]) => {
+      .then(([s, h, lv, us]) => {
         if (s.settings) {
           setFullDayHours(String(s.settings.fullDayMinutes / 60));
           setHalfDayHours(String(s.settings.halfDayMinutes / 60));
@@ -64,7 +93,10 @@ export function AttendanceSettingsPanel() {
               .filter((n) => !Number.isNaN(n))
           );
         }
+        setShifts(Array.isArray(s.settings?.shifts) ? s.settings.shifts : []);
         setHolidays(h.holidays ?? []);
+        setLeaves(lv.leaves ?? []);
+        setStaff(us.users ?? []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -94,6 +126,7 @@ export function AttendanceSettingsPanel() {
           requireApproval,
           requireHalfDayReason,
           workingWeekdays: workingDays.join(","),
+          shifts,
         }),
       });
       const json = await res.json();
@@ -128,6 +161,53 @@ export function AttendanceSettingsPanel() {
     const res = await fetch(`/api/holidays/${id}`, { method: "DELETE" });
     if (!res.ok) return toast.error("Couldn't remove holiday");
     setHolidays((prev) => prev.filter((h) => h.id !== id));
+  }
+
+
+  function addShift() {
+    setShifts((prev) => [
+      ...prev,
+      {
+        name: prev.length ? `Shift ${prev.length + 1}` : "Morning",
+        type: "FULL_DAY",
+        checkInStart: "09:00",
+        checkInEnd: "11:00",
+        checkOutStart: "17:00",
+        checkOutEnd: "21:00",
+      },
+    ]);
+  }
+  function updateShift(i: number, patch: Partial<Shift>) {
+    setShifts((prev) => prev.map((s, x) => (x === i ? { ...s, ...patch } : s)));
+  }
+  function removeShift(i: number) {
+    setShifts((prev) => prev.filter((_, x) => x !== i));
+  }
+
+  async function addLeave() {
+    if (!leaveUserId || !leaveDate) return toast.error("Pick a user and a date");
+    setSavingLeave(true);
+    try {
+      const res = await fetch("/api/leaves", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: leaveUserId, date: leaveDate, type: leaveType, reason: leaveReason.trim() || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) return toast.error("Couldn't save leave", json.error);
+      setLeaves((prev) => [json.leave, ...prev.filter((l) => l.id !== json.leave.id)]);
+      setLeaveDate("");
+      setLeaveReason("");
+      toast.success(leaveType === "FULL_DAY" ? "Marked on leave (day set to Absent)" : "Half-day leave saved");
+    } finally {
+      setSavingLeave(false);
+    }
+  }
+
+  async function removeLeave(id: string) {
+    const res = await fetch(`/api/leaves/${id}`, { method: "DELETE" });
+    if (!res.ok) return toast.error("Couldn't remove leave");
+    setLeaves((prev) => prev.filter((l) => l.id !== id));
   }
 
   async function sendMonthlyReports() {
@@ -207,6 +287,143 @@ export function AttendanceSettingsPanel() {
               {saving ? "Saving..." : "Save settings"}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Shifts — allowed check-in / check-out windows */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">Check-in / check-out times</p>
+              <p className="text-xs text-muted-foreground">
+                Define one or more windows for full and half days. Users can only check in during a window they&apos;re
+                entitled to. Leave this empty to allow check-in at any time.
+              </p>
+            </div>
+            <Button type="button" size="sm" variant="outline" onClick={addShift}>
+              <IconPlus className="h-4 w-4" />
+              Add
+            </Button>
+          </div>
+
+          {shifts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No time windows — check-in is allowed any time.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {shifts.map((s, i) => (
+                <div key={i} className="grid grid-cols-2 gap-2 rounded-md border border-border p-3 sm:grid-cols-6">
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-[11px]">Name</Label>
+                    <Input value={s.name} onChange={(e) => updateShift(i, { name: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-[11px]">Type</Label>
+                    <Dropdown
+                      value={s.type}
+                      onChange={(v) => updateShift(i, { type: v as Shift["type"] })}
+                      options={[
+                        { value: "FULL_DAY", label: "Full day" },
+                        { value: "HALF_DAY", label: "Half day" },
+                      ]}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-[11px]">Check-in from</Label>
+                    <Input type="time" value={s.checkInStart} onChange={(e) => updateShift(i, { checkInStart: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-[11px]">Check-in to</Label>
+                    <Input type="time" value={s.checkInEnd} onChange={(e) => updateShift(i, { checkInEnd: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-[11px]">Check-out from</Label>
+                    <Input type="time" value={s.checkOutStart} onChange={(e) => updateShift(i, { checkOutStart: e.target.value })} />
+                  </div>
+                  <div className="flex items-end gap-1">
+                    <div className="flex flex-1 flex-col gap-1">
+                      <Label className="text-[11px]">Check-out to</Label>
+                      <Input type="time" value={s.checkOutEnd} onChange={(e) => updateShift(i, { checkOutEnd: e.target.value })} />
+                    </div>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => removeShift(i)} aria-label="Remove shift">
+                      <IconTrash className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground">Saved with &ldquo;Save settings&rdquo; above.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Leave */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 p-5">
+          <div>
+            <p className="text-sm font-medium">Leave</p>
+            <p className="text-xs text-muted-foreground">
+              Full-day leave blocks check-in and marks that day Absent with the reason. Half-day leave lets the user
+              check in only during a half-day window.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="flex flex-col gap-1.5">
+              <Label>User</Label>
+              <Dropdown
+                value={leaveUserId}
+                onChange={setLeaveUserId}
+                placeholder="Select user"
+                options={staff.map((u) => ({ value: u.id, label: u.name }))}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Date</Label>
+              <DatePicker value={leaveDate} onChange={setLeaveDate} placeholder="Pick a date" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Type</Label>
+              <Dropdown
+                value={leaveType}
+                onChange={(v) => setLeaveType(v as "FULL_DAY" | "HALF_DAY")}
+                options={[
+                  { value: "FULL_DAY", label: "Full day" },
+                  { value: "HALF_DAY", label: "Half day" },
+                ]}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Reason</Label>
+              <Input value={leaveReason} onChange={(e) => setLeaveReason(e.target.value)} placeholder="e.g. Sick leave" />
+            </div>
+            <div className="flex items-end">
+              <Button type="button" onClick={addLeave} disabled={savingLeave} className="w-full">
+                <IconPlus className="h-4 w-4" />
+                {savingLeave ? "Saving…" : "Mark leave"}
+              </Button>
+            </div>
+          </div>
+
+          {leaves.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No leave recorded.</p>
+          ) : (
+            <div className="flex max-h-56 flex-col divide-y divide-border/60 overflow-y-auto rounded-md border border-border">
+              {leaves.map((l) => (
+                <div key={l.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                  <span className="min-w-0">
+                    <span className="tabular-nums text-muted-foreground">{l.date}</span> ·{" "}
+                    {[l.user.name, l.user.surname].filter(Boolean).join(" ")} ·{" "}
+                    <span className="text-xs">{l.type === "FULL_DAY" ? "Full day" : "Half day"}</span>
+                    {l.reason ? <span className="text-xs text-muted-foreground"> — {l.reason}</span> : null}
+                  </span>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => removeLeave(l.id)} aria-label="Remove leave">
+                    <IconTrash className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
