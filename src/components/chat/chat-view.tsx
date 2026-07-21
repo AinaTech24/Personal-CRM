@@ -1092,7 +1092,12 @@ export function ChatView() {
 
               {/* While recording, the composer becomes the recorder. */}
               {recording ? (
-                <div className="flex flex-1 items-center gap-3 rounded-full border border-destructive/40 bg-destructive/10 px-3 py-1.5">
+                <div
+                  // min-w-0: without it this flex box can't shrink below its
+                  // content, and the waveform inside would push the recorder
+                  // wider than the screen on a phone.
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-full border border-destructive/40 bg-destructive/10 px-3 py-1.5"
+                >
                   <motion.span
                     className="h-2.5 w-2.5 rounded-full bg-destructive"
                     animate={{ opacity: [1, 0.25, 1] }}

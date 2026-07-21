@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
-const BARS = 28;
 const MIN_SCALE = 0.12;
+/** Bar width + gap. The count is derived from this so the wave fills its box. */
+const PITCH = 6;
+const MIN_BARS = 12;
 
 /**
  * Live waveform for an in-progress recording.
@@ -14,13 +16,49 @@ const MIN_SCALE = 0.12;
  * as silence, which is the only way this doubles as a "is it hearing me?"
  * indicator.
  *
- * Bar heights are written straight to the DOM from a rAF loop. Putting 28
- * values through React state sixty times a second would re-render the whole
- * composer for a decoration.
+ * Bar heights are written straight to the DOM from a rAF loop. Putting a
+ * hundred-odd values through React state sixty times a second would re-render
+ * the whole composer for a decoration.
+ *
+ * The bar count is measured from the rendered width rather than fixed, so the
+ * wave spans the composer instead of leaving most of it empty — and still fits
+ * when the window is narrow.
  */
 export function RecordingWave({ stream, className }: { stream: MediaStream | null; className?: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const barRefs = useRef<(HTMLSpanElement | null)[]>([]);
-  const levels = useRef<number[]>(new Array(BARS).fill(MIN_SCALE));
+  const levels = useRef<number[]>([]);
+  const [bars, setBars] = useState(MIN_BARS);
+
+  // Track the available width. ResizeObserver rather than a window listener:
+  // the composer also changes width when attachments or the reply bar appear.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const width = el.clientWidth;
+      if (width > 0) setBars(Math.max(MIN_BARS, Math.floor(width / PITCH)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    // Belt and braces: ResizeObserver callbacks ride the rendering steps, which
+    // some environments starve. A window resize is the common case anyway.
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  // Keep the history the same length as the bars, preserving what's already
+  // there so a resize doesn't blank the wave mid-recording.
+  if (levels.current.length !== bars) {
+    const next = new Array(bars).fill(MIN_SCALE);
+    const keep = Math.min(bars, levels.current.length);
+    for (let i = 0; i < keep; i++) next[bars - keep + i] = levels.current[levels.current.length - keep + i];
+    levels.current = next;
+  }
 
   useEffect(() => {
     if (!stream) return;
@@ -43,7 +81,7 @@ export function RecordingWave({ stream, className }: { stream: MediaStream | nul
 
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
-      // ~30fps is plenty for 28 bars and halves the work on a busy tab.
+      // ~30fps is plenty for a waveform and halves the work on a busy tab.
       if (now - last < 33) return;
       last = now;
 
@@ -63,7 +101,8 @@ export function RecordingWave({ stream, className }: { stream: MediaStream | nul
       levels.current.push(Math.max(MIN_SCALE, scaled));
       levels.current.shift();
 
-      for (let i = 0; i < BARS; i++) {
+      // Read the live length: a resize can change it between frames.
+      for (let i = 0; i < levels.current.length; i++) {
         const el = barRefs.current[i];
         if (el) el.style.transform = `scaleY(${levels.current[i]})`;
       }
@@ -80,14 +119,22 @@ export function RecordingWave({ stream, className }: { stream: MediaStream | nul
   }, [stream]);
 
   return (
-    <div className={cn("flex h-6 items-center gap-[3px]", className)} aria-hidden>
-      {Array.from({ length: BARS }, (_, i) => (
+    <div
+      ref={containerRef}
+      // No `w-full`: the bars don't shrink, so a width driven by content would
+      // let a stale (too high) bar count force the whole composer wider than the
+      // screen. Width comes from the flex parent, extra bars are clipped, and
+      // the observer trims the count on the next frame.
+      className={cn("flex h-6 min-w-0 items-center justify-between gap-[3px] overflow-hidden", className)}
+      aria-hidden
+    >
+      {Array.from({ length: bars }, (_, i) => (
         <span
           key={i}
           ref={(el) => {
             barRefs.current[i] = el;
           }}
-          className="h-full w-[3px] origin-center rounded-full bg-current"
+          className="h-full w-[3px] shrink-0 origin-center rounded-full bg-current"
           style={{ transform: `scaleY(${MIN_SCALE})`, transition: "transform 90ms linear" }}
         />
       ))}
