@@ -34,7 +34,10 @@ const DialogContent = React.forwardRef<
       ref={ref}
       data-slot="dialog-content"
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 flex w-full max-h-[85vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg",
+        // w-full would run flush to both screen edges on a phone, so leave a
+        // gutter; the height cap keeps the dialog clear of the notch and home
+        // indicator, and dvh (not vh) accounts for mobile browser chrome.
+        "fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] max-h-[min(85dvh,calc(100dvh-var(--safe-top,0px)-var(--safe-bottom,0px)-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg",
         size === "lg" ? "max-w-2xl" : "max-w-md",
         className
       )}
@@ -72,18 +75,18 @@ export function useDialogState<T>(value: T | null | undefined) {
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn("flex shrink-0 flex-col gap-1.5 border-b border-border px-6 py-4 pr-10", className)}
+    className={cn("flex shrink-0 flex-col gap-1.5 border-b border-border px-4 py-4 pr-10 sm:px-6 sm:pr-10", className)}
     {...props}
   />
 );
 
 const DialogBody = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex-1 overflow-y-auto p-6", className)} {...props} />
+  <div className={cn("flex-1 overflow-y-auto p-4 sm:p-6", className)} {...props} />
 );
 
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn("flex shrink-0 items-center justify-end gap-2 border-t border-border px-6 py-3", className)}
+    className={cn("flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-3 sm:px-6", className)}
     {...props}
   />
 );

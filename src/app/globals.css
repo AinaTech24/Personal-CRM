@@ -72,6 +72,21 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Installed to an iPhone home screen, the app runs standalone with no browser
+   chrome, and `viewport-fit=cover` + a translucent status bar deliberately
+   extend it under the notch and home indicator so the background reaches the
+   screen edges. Anything pinned to an edge then has to inset its own content
+   back out of those regions — otherwise the topbar sits under the clock and
+   can't be tapped, and the chat composer hides behind the home indicator.
+   These resolve to 0px in a normal browser, so the same classes are inert on
+   desktop and in a regular mobile tab. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

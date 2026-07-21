@@ -150,7 +150,9 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "h-screen min-w-0 flex-col overflow-hidden border-r border-border",
+        // Padding (not margin) keeps the fill edge-to-edge under the notch and
+        // home indicator while the logo, nav and toggle stay clear of both.
+        "h-screen min-w-0 flex-col overflow-hidden border-r border-border pt-[var(--safe-top,0px)] pb-[var(--safe-bottom,0px)] pl-[var(--safe-left,0px)]",
         // The translucent fill only works in the desktop grid, where it sits on
         // the page background. The drawer floats over the content, so it needs
         // to be opaque or you read the dashboard straight through the menu.

@@ -17,7 +17,9 @@ export function Topbar({
   onOpenMenu?: () => void;
 }) {
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-1.5 border-b border-border bg-background px-3 sm:px-5">
+    // The bar grows by the status-bar inset and pads its contents down past it,
+    // so the menu button and logo stay tappable in the installed iOS app.
+    <header className="sticky top-0 z-30 flex h-[calc(3.5rem+var(--safe-top,0px))] shrink-0 items-center gap-1.5 border-b border-border bg-background pt-[var(--safe-top,0px)] pl-[calc(0.75rem+var(--safe-left,0px))] pr-[calc(0.75rem+var(--safe-right,0px))] sm:pl-[calc(1.25rem+var(--safe-left,0px))] sm:pr-[calc(1.25rem+var(--safe-right,0px))]">
       {/* On mobile the sidebar lives in a drawer, opened from here. */}
       <button
         type="button"

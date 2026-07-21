@@ -995,7 +995,7 @@ export function ChatView() {
             </AnimatePresence>
 
             {/* Composer */}
-            <div className="relative flex items-center gap-1.5 border-t border-border p-3">
+            <div className="relative flex items-center gap-1.5 border-t border-border p-3 pb-[calc(0.75rem+var(--safe-bottom,0px))]">
               <AnimatePresence>
                 {mention && mentionMatches.length > 0 && (
                   <motion.div
