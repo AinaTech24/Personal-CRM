@@ -51,13 +51,17 @@ function serialize(
   const others = conv.members.filter((m) => m.userId !== meId).map((m) => m.user);
   const last = conv.messages[0] ?? null;
   const title = conv.type === "GROUP" ? conv.title ?? "Group" : others[0] ? [others[0].name, others[0].surname].filter(Boolean).join(" ") : "Unknown";
+  // A direct chat borrows the other person's photo, the same way it already
+  // borrows their name — the conversation row itself only has a picture when
+  // it's a group, which left every DM on a fallback initial.
+  const imageDataUrl = conv.type === "GROUP" ? conv.imageDataUrl : others[0]?.avatarDataUrl ?? null;
   const unread = last && me && (!me.lastReadAt || last.createdAt > me.lastReadAt) && last.senderId !== meId ? 1 : 0;
   return {
     id: conv.id,
     type: conv.type,
     isSystem: conv.isSystem,
     description: conv.description,
-    imageDataUrl: conv.imageDataUrl,
+    imageDataUrl,
     title,
     members: conv.members.map((m) => m.user),
     // When each member last opened the thread — drives the "Seen" tick.
