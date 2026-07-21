@@ -58,6 +58,10 @@ export function MeetingsView() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  // The dialog stays mounted so it can animate closed, but it seeds its form
+  // from the meeting at mount — so bump this on every open to remount it clean
+  // rather than reopening onto the last visit's half-finished edits.
+  const [openSeq, setOpenSeq] = useState(0);
   const [editing, setEditing] = useState<Meeting | null>(null);
 
   const load = useCallback(async () => {
@@ -99,11 +103,13 @@ export function MeetingsView() {
 
   function openCreate() {
     setEditing(null);
+    setOpenSeq((n) => n + 1);
     setDialogOpen(true);
   }
 
   function openMeeting(m: Meeting) {
     setEditing(m);
+    setOpenSeq((n) => n + 1);
     setDialogOpen(true);
   }
 
@@ -141,18 +147,18 @@ export function MeetingsView() {
         </div>
       )}
 
-      {dialogOpen && (
-        <MeetingDialog
-          meeting={editing}
-          users={users}
-          canManage={!editing || isAdmin || editing.organizer.id === meId}
-          onClose={() => setDialogOpen(false)}
-          onSaved={() => {
-            setDialogOpen(false);
-            load();
-          }}
-        />
-      )}
+      <MeetingDialog
+        key={openSeq}
+        open={dialogOpen}
+        meeting={editing}
+        users={users}
+        canManage={!editing || isAdmin || editing.organizer.id === meId}
+        onClose={() => setDialogOpen(false)}
+        onSaved={() => {
+          setDialogOpen(false);
+          load();
+        }}
+      />
     </div>
   );
 }
@@ -227,12 +233,14 @@ function MeetingCard({ meeting: m, meId, onOpen }: { meeting: Meeting; meId: str
 }
 
 function MeetingDialog({
+  open,
   meeting,
   users,
   canManage,
   onClose,
   onSaved,
 }: {
+  open: boolean;
   meeting: Meeting | null;
   users: MeetingUser[];
   canManage: boolean;
@@ -307,7 +315,7 @@ function MeetingDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{editingId ? (readOnly ? "Meeting details" : "Edit meeting") : "New meeting"}</DialogTitle>

@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EightDotsRotate } from "@/components/ui/loader";
-import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, useDialogState } from "@/components/ui/dialog";
 import {
   IconPlus,
   IconSend,
@@ -192,6 +192,11 @@ export function ChatView() {
   const [deleteChat, setDeleteChat] = useState<Conversation | null>(null);
   const [reactPickerFor, setReactPickerFor] = useState<Message | null>(null);
   const [infoUser, setInfoUser] = useState<ChatUser | null>(null);
+  // These dialogs only exist while there's something to show them for, so they
+  // need their subject kept alive through the close animation.
+  const infoUserDialog = useDialogState(infoUser);
+  const previewDialog = useDialogState(preview);
+  const forwardDialog = useDialogState(forwardOf);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordSecs, setRecordSecs] = useState(0);
@@ -1224,25 +1229,23 @@ export function ChatView() {
         />
       )}
 
-      {reactPickerFor && (
-        <Dialog open onOpenChange={(v) => !v && setReactPickerFor(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Pick a reaction</DialogTitle>
-            </DialogHeader>
-            <DialogBody>
-              <EmojiGrid
-                active
-                onPick={(char) => {
-                  const target = reactPickerFor;
-                  setReactPickerFor(null);
-                  if (target) react(target, char);
-                }}
-              />
-            </DialogBody>
-          </DialogContent>
-        </Dialog>
-      )}
+      <Dialog open={!!reactPickerFor} onOpenChange={(v) => !v && setReactPickerFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Pick a reaction</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <EmojiGrid
+              active={!!reactPickerFor}
+              onPick={(char) => {
+                const target = reactPickerFor;
+                setReactPickerFor(null);
+                if (target) react(target, char);
+              }}
+            />
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={!!unpinTarget}
@@ -1270,12 +1273,22 @@ export function ChatView() {
         }}
       />
 
-      {infoUser && <UserInfoDialog user={infoUser} online={onlineIds.has(infoUser.id)} onClose={() => setInfoUser(null)} />}
+      {infoUserDialog.value && (
+        <UserInfoDialog
+          open={infoUserDialog.open}
+          user={infoUserDialog.value}
+          online={onlineIds.has(infoUserDialog.value.id)}
+          onClose={() => setInfoUser(null)}
+        />
+      )}
 
-      {preview && <AttachmentPreview attachment={preview} onClose={() => setPreview(null)} />}
-      {forwardOf && (
+      {previewDialog.value && (
+        <AttachmentPreview open={previewDialog.open} attachment={previewDialog.value} onClose={() => setPreview(null)} />
+      )}
+      {forwardDialog.value && (
         <ForwardDialog
-          message={forwardOf}
+          open={forwardDialog.open}
+          message={forwardDialog.value}
           conversations={conversations.filter((c) => c.id !== activeId)}
           onClose={() => setForwardOf(null)}
           onDone={(n) => {
@@ -1285,18 +1298,17 @@ export function ChatView() {
           }}
         />
       )}
-      {newOpen && (
-        <NewConversationDialog
-          users={users.filter((u) => u.id !== me.id)}
-          isAdmin={me.isAdmin}
-          onClose={() => setNewOpen(false)}
-          onCreated={async (id) => {
-            setNewOpen(false);
-            await loadConversations();
-            openConversation(id);
-          }}
-        />
-      )}
+      <NewConversationDialog
+        open={newOpen}
+        users={users.filter((u) => u.id !== me.id)}
+        isAdmin={me.isAdmin}
+        onClose={() => setNewOpen(false)}
+        onCreated={async (id) => {
+          setNewOpen(false);
+          await loadConversations();
+          openConversation(id);
+        }}
+      />
     </div>
   );
 }
@@ -1592,9 +1604,9 @@ function MessageBubble({
   );
 }
 
-function AttachmentPreview({ attachment: a, onClose }: { attachment: Attachment; onClose: () => void }) {
+function AttachmentPreview({ open, attachment: a, onClose }: { open: boolean; attachment: Attachment; onClose: () => void }) {
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle className="truncate pr-6">
@@ -1630,11 +1642,13 @@ function AttachmentPreview({ attachment: a, onClose }: { attachment: Attachment;
 }
 
 function ForwardDialog({
+  open,
   message,
   conversations,
   onClose,
   onDone,
 }: {
+  open: boolean;
   message: Message;
   conversations: Conversation[];
   onClose: () => void;
@@ -1662,7 +1676,7 @@ function ForwardDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Forward message</DialogTitle>
@@ -1785,7 +1799,7 @@ function EmojiGrid({ active, onPick }: { active: boolean; onPick: (char: string)
   );
 }
 
-function UserInfoDialog({ user, online, onClose }: { user: ChatUser; online: boolean; onClose: () => void }) {
+function UserInfoDialog({ open, user, online, onClose }: { open: boolean; user: ChatUser; online: boolean; onClose: () => void }) {
   const rows: { label: string; value: string }[] = [
     { label: "Name", value: fullName(user) || "—" },
     { label: "Email", value: user.email ?? "—" },
@@ -1794,7 +1808,7 @@ function UserInfoDialog({ user, online, onClose }: { user: ChatUser; online: boo
     { label: "Role", value: user.role ? user.role.replace(/_/g, " ").toLowerCase() : "—" },
   ];
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Contact info</DialogTitle>
@@ -1990,11 +2004,13 @@ function GroupInfoDialog({
 }
 
 function NewConversationDialog({
+  open,
   users,
   isAdmin,
   onClose,
   onCreated,
 }: {
+  open: boolean;
   users: ChatUser[];
   isAdmin: boolean;
   onClose: () => void;
@@ -2041,12 +2057,16 @@ function NewConversationDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      {/* Fixed height: switching between Direct message and Group swaps in a
+          name field and a submit button, and letting the dialog resize to fit
+          made it jump around under the cursor. The user list absorbs the
+          difference instead. */}
+      <DialogContent className="h-[32rem]">
         <DialogHeader>
           <DialogTitle>New conversation</DialogTitle>
         </DialogHeader>
-        <DialogBody>
+        <DialogBody className="flex min-h-0 flex-col overflow-y-hidden">
           {isAdmin && (
             <div className="mb-3 flex gap-1 rounded-md bg-muted p-1">
               {(["direct", "group"] as const).map((m) => (
@@ -2068,7 +2088,7 @@ function NewConversationDialog({
             </div>
           )}
 
-          <div className="max-h-72 overflow-y-auto rounded-md border border-border">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border">
             {users.length === 0 ? (
               <p className="px-3 py-4 text-sm text-muted-foreground">No users available.</p>
             ) : (

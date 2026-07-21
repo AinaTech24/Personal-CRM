@@ -52,6 +52,24 @@ const DialogContent = React.forwardRef<
 ));
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
+/**
+ * Keeps a dialog's contents alive while it animates closed.
+ *
+ * Dialogs driven by "render only when there's something to show" —
+ * `{target && <Foo target={target} />}` — unmount the moment that state
+ * clears, so Radix never gets the chance to play the exit animation and the
+ * dialog just blinks out. Pass the state through here instead: `open` follows
+ * it immediately (starting the animation) while `value` holds the last real
+ * one until the animation has finished and Radix unmounts on its own.
+ */
+export function useDialogState<T>(value: T | null | undefined) {
+  const [last, setLast] = React.useState(value ?? null);
+  // Adjusting state during render (rather than in an effect) so a reopen with
+  // fresh data never paints a frame of the previous dialog's contents.
+  if (value != null && value !== last) setLast(value);
+  return { open: value != null, value: (value ?? last) as T | null };
+}
+
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn("flex shrink-0 flex-col gap-1.5 border-b border-border px-6 py-4 pr-10", className)}

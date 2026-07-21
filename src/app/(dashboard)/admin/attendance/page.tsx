@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { EightDotsRotate } from "@/components/ui/loader";
-import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, useDialogState } from "@/components/ui/dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { IconFileSpreadsheet, IconSettings, IconCheck, IconX, IconPencil } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
@@ -120,6 +120,8 @@ export default function AdminAttendancePage() {
   const [to, setTo] = useState("");
   const [period, setPeriod] = useState("custom");
   const [editing, setEditing] = useState<AdminRecord | null>(null);
+  // Keeps the record around while the dialog animates closed.
+  const editingDialog = useDialogState(editing);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [overviewYear, setOverviewYear] = useState(CURRENT_YEAR);
   const [teamYear, setTeamYear] = useState<TeamYearResponse | null>(null);
@@ -386,9 +388,11 @@ export default function AdminAttendancePage() {
         </CardContent>
       </Card>
 
-      {editing && (
+      {editingDialog.value && (
         <OverrideDialog
-          record={editing}
+          key={editingDialog.value.id}
+          open={editingDialog.open}
+          record={editingDialog.value}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -401,10 +405,12 @@ export default function AdminAttendancePage() {
 }
 
 function OverrideDialog({
+  open,
   record,
   onClose,
   onSaved,
 }: {
+  open: boolean;
   record: AdminRecord;
   onClose: () => void;
   onSaved: () => void;
@@ -439,7 +445,7 @@ function OverrideDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Override attendance</DialogTitle>
