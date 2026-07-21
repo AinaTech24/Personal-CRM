@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EightDotsRotate } from "@/components/ui/loader";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
+import { usePushNotifications } from "@/components/providers/use-push-notifications";
 import {
   IconBell,
   IconBuildingCog,
@@ -96,17 +97,66 @@ function deviceLabel(userAgent: string | null): string {
   return os ? `${browser} on ${os}` : browser;
 }
 
+/**
+ * Turns push notifications on for this device.
+ *
+ * Deliberately per-device rather than per-account: the browser permission and
+ * the push subscription both belong to the device, so someone can have their
+ * phone buzz while their desk browser stays quiet.
+ */
+function PushToggle() {
+  const { state, busy, enable, disable } = usePushNotifications();
+
+  const detail: Record<typeof state, string> = {
+    on: "This device will buzz when you get a message.",
+    off: "Get a notification on this device when someone messages you.",
+    denied: "Blocked in your browser settings — allow notifications for this site, then try again.",
+    unconfigured: "Not set up on the server yet (the VAPID keys are missing).",
+    unsupported:
+      "This browser can't do push. On an iPhone, add the app to your home screen first, then turn it on from there.",
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
+      <div className="flex items-center gap-2.5">
+        <IconBell className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div>
+          <p className="text-sm font-medium">Push notifications on this device</p>
+          <p className="text-xs text-muted-foreground">{detail[state]}</p>
+        </div>
+      </div>
+      <ToggleSwitch
+        checked={state === "on"}
+        onChange={(v) => (v ? enable() : disable())}
+        label="Toggle push notifications"
+        disabled={busy || state === "unsupported" || state === "unconfigured" || state === "denied"}
+      />
+    </div>
+  );
+}
+
 /** Small reusable toggle switch, matching the one used on the SMTP settings page. */
-function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
+function ToggleSwitch({
+  checked,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label?: string;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         checked ? "bg-primary" : "bg-input"
       )}
     >
@@ -685,6 +735,9 @@ export function SettingsDialog({
                           Control which events notify you in-app.
                         </p>
                       </div>
+
+                      <PushToggle />
+
                       {loadingNotif ? (
                         <div className="flex justify-center min-h-[200px] flex-1 items-center">
                           <EightDotsRotate className="h-7 w-7" />

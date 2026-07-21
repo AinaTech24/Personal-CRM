@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { allowedMime, emitToMembers, isMember, memberIdsOf, messageInclude } from "@/lib/chat";
+import { previewText, sendPushToUsers } from "@/lib/push";
 
 /** Messages in a conversation (oldest→newest), minus ones this user deleted for themselves. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -90,7 +91,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }),
   ]);
 
-  emitToMembers(await memberIdsOf(id), "message", { conversationId: id, message });
+  const members = await memberIdsOf(id);
+  emitToMembers(members, "message", { conversationId: id, message });
+
+  // Notify everyone else's devices, without making the sender wait on it.
+  // Anyone with the app open already has the message via the socket above, and
+  // a slow or unreachable push service must not stall — or fail — a send that
+  // is already committed. Safe to leave running: this is a long-lived Node
+  // server (server.js), not a function that gets frozen after the response.
+  const recipients = members.filter((m) => m !== user.id);
+  if (recipients.length) {
+    const senderName = [user.name, user.surname].filter(Boolean).join(" ") || "Someone";
+    const preview = previewText(message.body, message.attachments.length, message.attachments[0]?.name);
+
+    void db.conversation
+      .findUnique({ where: { id }, select: { type: true, title: true } })
+      .then((conversation) => {
+        // In a group the chat name is the useful heading and the sender goes
+        // inline; in a direct chat the sender *is* the conversation.
+        const isGroup = conversation?.type === "GROUP";
+        return sendPushToUsers(recipients, {
+          title: isGroup ? conversation?.title || "Group chat" : senderName,
+          body: isGroup ? `${senderName}: ${preview}` : preview,
+          url: `/messages?c=${id}`,
+          tag: `conv-${id}`,
+        });
+      })
+      .catch((err) => console.error("[push] message notification failed", err));
+  }
 
   return NextResponse.json({ message }, { status: 201 });
 }

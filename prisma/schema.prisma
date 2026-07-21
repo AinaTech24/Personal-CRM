@@ -97,6 +97,32 @@ model User {
   conversationMemberships ConversationMember[]
   messagesSent            Message[]            @relation("MessageSender")
   messageReactions        MessageReaction[]    @relation("MessageReactionUser")
+  pushSubscriptions       PushSubscription[]
+}
+
+/// A browser/device push endpoint, so a user can be notified about a new
+/// message while the app is closed. One row per device — the same person on a
+/// phone and a laptop has two, and each can expire independently.
+model PushSubscription {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// The push service URL. Unique because re-subscribing on the same device
+  /// returns the same endpoint, and we want an upsert rather than a duplicate.
+  /// VarChar, not Text: MySQL can't build a unique index on TEXT without a
+  /// prefix length, and 500 stays under InnoDB's 3072-byte key limit.
+  endpoint String @unique @db.VarChar(500)
+  p256dh   String @db.Text
+  auth     String @db.Text
+
+  /// Labels the row in Settings so a user can tell their devices apart.
+  userAgent String? @db.Text
+  createdAt DateTime @default(now())
+  /// Cleared out when the push service reports the endpoint is dead (404/410).
+  lastUsedAt DateTime?
+
+  @@index([userId])
 }
 
 model Invite {

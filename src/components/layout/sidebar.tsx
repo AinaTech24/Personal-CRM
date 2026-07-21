@@ -21,6 +21,7 @@ import {
   IconChevronLeft,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
+import { useSocket } from "@/components/providers/socket-provider";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -69,7 +70,9 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const [pendingCount, setPendingCount] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
+  const { socket } = useSocket();
 
   // Which modules an admin has hidden from regular users. Admins see everything.
   useEffect(() => {
@@ -89,6 +92,58 @@ export function Sidebar({
   const visibleMainNav = isAdmin
     ? mainNav
     : mainNav.filter((item) => item.href === "/" || !hiddenModules.includes(item.href.replace(/^\//, "")));
+
+  // Unread chat messages, for the badge on Messages. Driven by the socket so it
+  // reacts the moment something arrives; the poll is a backstop for a dropped
+  // connection or a read that happened in another tab.
+  useEffect(() => {
+    let active = true;
+    const load = () =>
+      fetch("/api/messages/unread-count")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (active && d) setUnreadMessages(d.total ?? 0);
+        })
+        .catch(() => {});
+
+    load();
+    const id = setInterval(load, 60_000);
+
+    if (socket) {
+      // "message" fires for our own sends too, and "read" only tells us the
+      // clock moved — in both cases the server holds the truth, so re-ask.
+      socket.on("message", load);
+      socket.on("read", load);
+      socket.on("conversation:deleted", load);
+    }
+    // Coming back to the tab, the count may have moved while we were away.
+    const onVisible = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      active = false;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      if (socket) {
+        socket.off("message", load);
+        socket.off("read", load);
+        socket.off("conversation:deleted", load);
+      }
+    };
+  }, [socket]);
+
+  // Opening a chat clears its unread state, but that happens inside the chat
+  // view — refresh when the route changes so the badge doesn't lag behind.
+  useEffect(() => {
+    if (!pathname.startsWith("/messages")) return;
+    const t = setTimeout(() => {
+      fetch("/api/messages/unread-count")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d && setUnreadMessages(d.total ?? 0))
+        .catch(() => {});
+    }, 600);
+    return () => clearTimeout(t);
+  }, [pathname]);
 
   // Poll pending attendance so the Attendance item can flag new check-ins. Admin only.
   useEffect(() => {
@@ -115,9 +170,17 @@ export function Sidebar({
     collapsed ? "opacity-0" : "opacity-100"
   );
 
-  function renderItem(item: NavItem, active: boolean, badgeCount = 0) {
+  function renderItem(item: NavItem, active: boolean, badgeCount = 0, tone: "attention" | "count" = "attention") {
+    // Unread messages are a running tally, not something needing triage, so they
+    // get a plain count pill rather than the pinging "look at me" dot.
+    const isCount = tone === "count";
     return (
-      <Tooltip key={item.href} label={collapsed ? item.label : ""} side="right" wrapperClassName="w-full">
+      <Tooltip
+        key={item.href}
+        label={collapsed ? (badgeCount > 0 ? `${item.label} (${badgeCount})` : item.label) : ""}
+        side="right"
+        wrapperClassName="w-full"
+      >
         <Link
           href={item.href}
           onClick={onNavigate}
@@ -128,18 +191,31 @@ export function Sidebar({
         >
           <span className="relative shrink-0">
             <item.icon className="h-4 w-4" />
-            {badgeCount > 0 && (
-              // Green dot with a blue ping — a new/pending check-in needs attention.
-              <span className="absolute -right-1 -top-1 flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-card" />
-              </span>
-            )}
+            {badgeCount > 0 &&
+              (isCount ? (
+                // Collapsed, the rail is too narrow for a number, so the icon
+                // carries a dot instead — the tooltip still gives the count.
+                collapsed && (
+                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-card" />
+                )
+              ) : (
+                <span className="absolute -right-1 -top-1 flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-card" />
+                </span>
+              ))}
           </span>
           <span className={cn("flex-1", labelClass)}>{item.label}</span>
           {badgeCount > 0 && !collapsed && (
-            <span className="rounded-full bg-emerald-500/15 px-1.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-              {badgeCount}
+            <span
+              className={cn(
+                "min-w-5 rounded-full px-1.5 text-center text-[10px] font-semibold tabular-nums",
+                isCount
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-emerald-500/15 font-medium text-emerald-600 dark:text-emerald-400"
+              )}
+            >
+              {badgeCount > 99 ? "99+" : badgeCount}
             </span>
           )}
         </Link>
@@ -178,6 +254,7 @@ export function Sidebar({
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 py-2">
         {visibleMainNav.map((item) => {
           const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+          if (item.href === "/messages") return renderItem(item, active, unreadMessages, "count");
           return renderItem(item, active);
         })}
 

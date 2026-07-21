@@ -62,3 +62,49 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL).then((r) => r ?? Response.error())));
   }
 });
+
+/* ------------------------------ push messages ----------------------------- */
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    // A push with a non-JSON body still deserves a notification: iOS drops the
+    // subscription if a push arrives and nothing is shown.
+    data = { title: "Aina CRM", body: event.data ? event.data.text() : "New activity" };
+  }
+
+  const title = data.title || "Aina CRM";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || "",
+      icon: data.icon || "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      // Same tag = one chat replaces its own previous notification instead of
+      // stacking a banner per message.
+      tag: data.tag || "aina-message",
+      renotify: true,
+      data: { url: data.url || "/messages" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/messages";
+
+  // Focus an existing window if the app is already open rather than spawning a
+  // second one, then steer it to the conversation.
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (new URL(client.url).origin === self.location.origin && "focus" in client) {
+          if ("navigate" in client) client.navigate(target).catch(() => {});
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(target);
+    })
+  );
+});

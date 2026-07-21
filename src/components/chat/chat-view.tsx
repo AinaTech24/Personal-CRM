@@ -256,6 +256,22 @@ export function ChatView() {
     [socket]
   );
 
+  // Deep link from a push notification: /messages?c=<conversationId> opens that
+  // chat directly, so tapping a banner lands on the message rather than the
+  // list. Runs once the conversations are in, and only if the id is really ours.
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (deepLinked.current || loading || conversations.length === 0) return;
+    const wanted = new URLSearchParams(window.location.search).get("c");
+    if (!wanted) return;
+    deepLinked.current = true;
+    if (conversations.some((c) => c.id === wanted)) {
+      openConversation(wanted);
+      // Drop the parameter so a refresh doesn't keep yanking the user back here.
+      window.history.replaceState({}, "", "/messages");
+    }
+  }, [loading, conversations, openConversation]);
+
   // Smooth auto-scroll to the newest message.
   useEffect(() => {
     const el = scrollRef.current;
