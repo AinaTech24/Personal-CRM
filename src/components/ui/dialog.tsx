@@ -17,6 +17,7 @@ const DialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
+    data-slot="dialog-overlay"
     className={cn("fixed inset-0 z-50 bg-black/60", className)}
     {...props}
   />
@@ -31,6 +32,7 @@ const DialogContent = React.forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
+      data-slot="dialog-content"
       className={cn(
         "fixed left-1/2 top-1/2 z-50 flex w-full max-h-[85vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg",
         size === "lg" ? "max-w-2xl" : "max-w-md",

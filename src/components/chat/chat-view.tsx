@@ -1209,8 +1209,11 @@ export function ChatView() {
         )}
       </AnimatePresence>
 
-      {groupInfoOpen && active && (
+      {/* Stays mounted while open so Radix can play the close animation; React
+          would otherwise unmount it the instant the flag flips. */}
+      {active && (
         <GroupInfoDialog
+          open={groupInfoOpen}
           conversation={active}
           canEdit={me.isAdmin}
           onClose={() => setGroupInfoOpen(false)}
@@ -1835,11 +1838,13 @@ function UserInfoDialog({ user, online, onClose }: { user: ChatUser; online: boo
 }
 
 function GroupInfoDialog({
+  open,
   conversation,
   canEdit,
   onClose,
   onSaved,
 }: {
+  open: boolean;
   conversation: Conversation;
   canEdit: boolean;
   onClose: () => void;
@@ -1851,6 +1856,15 @@ function GroupInfoDialog({
   const [image, setImage] = useState<string | null>(conversation.imageDataUrl);
   const [saving, setSaving] = useState(false);
   const pickRef = useRef<HTMLInputElement>(null);
+
+  // The dialog outlives a single opening now, so refresh the fields each time
+  // it opens (and whenever the conversation changes underneath it).
+  useEffect(() => {
+    if (!open) return;
+    setTitle(conversation.title);
+    setDescription(conversation.description ?? "");
+    setImage(conversation.imageDataUrl);
+  }, [open, conversation.id, conversation.title, conversation.description, conversation.imageDataUrl]);
 
   async function onPickImage(files: FileList | null) {
     const file = files?.[0];
@@ -1881,7 +1895,7 @@ function GroupInfoDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Group info</DialogTitle>
