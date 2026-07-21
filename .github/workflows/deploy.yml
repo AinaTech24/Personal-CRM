@@ -64,11 +64,16 @@ jobs:
 
       - name: Deploy to Hostinger VPS
         uses: appleboy/ssh-action@v1
+        env:
+          # Optional pin for where the checkout lives; blank means auto-detect.
+          DEPLOY_APP_DIR: ${{ secrets.VPS_APP_DIR }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
+          # Only vars named here are forwarded to the remote shell.
+          envs: DEPLOY_APP_DIR
           command_timeout: 25m
           script: |
             set -e
@@ -103,14 +108,43 @@ jobs:
               printf '   %-4s %s (%s)\n' "$tool" "$(command -v "$tool")" "$($tool -v 2>&1 | head -1)"
             done
 
+            echo "=== Locating the app ==="
+            # This pointed at a hardcoded /var/www/ainacrm that doesn't exist on
+            # this server, so every run died here: `cd` to a missing directory
+            # aborts instantly under `set -e`, which is why the runs failed after
+            # about ten seconds with no useful output.
+            # Set the VPS_APP_DIR secret to pin it; otherwise try the usual spots.
+            APP_DIR="$DEPLOY_APP_DIR"
+            if [ -z "$APP_DIR" ]; then
+              for candidate in \
+                "$HOME/aina-crm" \
+                /home/aina/aina-crm \
+                /var/www/ainacrm \
+                /var/www/aina-crm \
+                "$HOME/ainacrm"; do
+                if [ -f "$candidate/package.json" ]; then APP_DIR="$candidate"; break; fi
+              done
+            fi
+            if [ -z "$APP_DIR" ] || [ ! -f "$APP_DIR/package.json" ]; then
+              echo "!! Could not find the app checkout (no package.json)."
+              echo "   Looked in: \$HOME/aina-crm, /home/aina/aina-crm,"
+              echo "              /var/www/ainacrm, /var/www/aina-crm, \$HOME/ainacrm"
+              echo "   HOME=$HOME"
+              echo "   Candidate dirs that do exist:"
+              ls -d /home/*/aina*crm /var/www/* 2>/dev/null || echo "     (none)"
+              echo "   Fix: add a VPS_APP_DIR secret with the full path."
+              exit 1
+            fi
+            echo "Using $APP_DIR"
+            cd "$APP_DIR"
+
             echo "=== Free disk and memory ==="
             # Both have bitten this deploy before: a full disk breaks npm ci, and
             # next build is the peak-memory step on a small VPS.
-            df -h /var/www | tail -1
+            df -h "$APP_DIR" | tail -1
             free -h | head -2 || true
 
             echo "=== Pulling latest code ==="
-            cd /var/www/ainacrm
             git fetch --all --prune
             git pull --ff-only
             echo "Now at: $(git rev-parse --short HEAD) $(git log -1 --pretty=%s)"
