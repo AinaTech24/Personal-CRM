@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { format, isToday, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EightDotsRotate } from "@/components/ui/loader";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
@@ -25,9 +27,11 @@ import {
   IconSelect,
   IconFile,
   IconImage,
+  IconDots,
 } from "@/components/icons";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { AnimatedEmoji, TextWithAnimatedEmoji, isEmojiOnly, countEmoji } from "@/components/ui/animated-emoji";
 import { cn } from "@/lib/utils";
 
 /* ---------------------------------- types --------------------------------- */
@@ -71,6 +75,8 @@ interface Conversation {
   type: "DIRECT" | "GROUP";
   isSystem: boolean;
   title: string;
+  description: string | null;
+  imageDataUrl: string | null;
   members: ChatUser[];
   reads: { userId: string; lastReadAt: string | null }[];
   lastMessage: { body: string; senderName: string; createdAt: string } | null;
@@ -171,11 +177,16 @@ export function ChatView() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // The emoji grid mounts on first open and then stays (CSS handles show/hide).
+  const [emojiMounted, setEmojiMounted] = useState(false);
+  const [threadMenuOpen, setThreadMenuOpen] = useState(false);
+  const [groupInfoOpen, setGroupInfoOpen] = useState(false);
 
   const activeIdRef = useRef<string | null>(null);
   activeIdRef.current = activeId;
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const emojiPanelRef = useRef<HTMLDivElement>(null);
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastTypingEmit = useRef(0);
   const stopTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -319,6 +330,36 @@ export function ChatView() {
       socket.off("conversation", loadConversations);
     };
   }, [socket, upsertMessage, loadConversations, me.id]);
+
+  /* close the header menu on an outside click */
+  useEffect(() => {
+    if (!threadMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.("[data-thread-menu]")) return;
+      setThreadMenuOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [threadMenuOpen]);
+
+  /* close the emoji panel on an outside click — AnimatePresence plays the same
+     animation in reverse, so it closes exactly the way it opened */
+  useEffect(() => {
+    if (!emojiOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (emojiPanelRef.current?.contains(t as Node)) return;
+      if (t?.closest?.("[data-emoji-toggle]")) return;
+      setEmojiOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setEmojiOpen(false);
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [emojiOpen]);
 
   /* close context menu on outside click / Escape */
   useEffect(() => {
@@ -508,7 +549,7 @@ export function ChatView() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
+      <div className="flex h-[calc(100vh-7rem)] items-center justify-center">
         <EightDotsRotate className="h-9 w-9" />
       </div>
     );
@@ -567,13 +608,46 @@ export function ChatView() {
               <button type="button" onClick={() => setActiveId(null)} className="sm:hidden" aria-label="Back">
                 <IconChevronLeft className="h-5 w-5" />
               </button>
-              <Avatar title={active.title} group={active.type === "GROUP"} online={otherMember ? otherOnline : undefined} />
-              <div className="min-w-0">
+              <Avatar
+                title={active.title}
+                group={active.type === "GROUP"}
+                image={active.imageDataUrl}
+                online={otherMember ? otherOnline : undefined}
+              />
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{active.title}</p>
                 <p className="truncate text-xs text-muted-foreground">
                   {active.type === "GROUP" ? `${active.members.length} members` : otherOnline ? <span className="text-emerald-500">Active now</span> : "Offline"}
                 </p>
               </div>
+
+              {active.type === "GROUP" && (
+                <div className="relative" data-thread-menu>
+                  <IconButton label="More" onClick={() => setThreadMenuOpen((v) => !v)}>
+                    <IconDots className="h-4.5 w-4.5" />
+                  </IconButton>
+                  <AnimatePresence>
+                    {threadMenuOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                        transition={{ duration: 0.12 }}
+                        className="absolute right-0 top-full z-40 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-popover py-1 shadow-xl"
+                      >
+                        <MenuItem
+                          onClick={() => {
+                            setThreadMenuOpen(false);
+                            setGroupInfoOpen(true);
+                          }}
+                        >
+                          <IconUsers className="h-4 w-4" /> Group info
+                        </MenuItem>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
 
             {/* Pinned bar */}
@@ -603,7 +677,7 @@ export function ChatView() {
 
             <div ref={scrollRef} className="flex-1 space-y-1 overflow-y-auto p-4">
               {loadingThread ? (
-                <div className="flex justify-center py-8">
+                <div className="flex h-full flex-1 items-center justify-center">
                   <EightDotsRotate className="h-7 w-7" />
                 </div>
               ) : messages.length === 0 ? (
@@ -785,41 +859,57 @@ export function ChatView() {
                 )}
               </AnimatePresence>
 
-              <AnimatePresence>
-                {emojiOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    className="absolute bottom-full left-3 mb-1 grid w-64 grid-cols-8 gap-1 rounded-xl border border-border bg-popover p-2 shadow-lg"
-                  >
-                    {EMOJIS.map((e) => (
-                      <motion.button
-                        key={e}
-                        type="button"
-                        whileHover={{ scale: 1.25 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => {
-                          setDraft((prev) => prev + e);
-                          setEmojiOpen(false);
-                        }}
-                        className="rounded p-1 text-lg"
-                      >
-                        {e}
-                      </motion.button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Mounted once opened, then kept and animated purely with CSS so the
+                  open and close animations are the exact same curve reversed — and
+                  a closed panel can never linger as an invisible click-blocker. */}
+              {emojiMounted && (
+                <div
+                  ref={emojiPanelRef}
+                  aria-hidden={!emojiOpen}
+                  // Inline styles (not utility classes) so the open/close curve is
+                  // identical and can't be dropped by CSS tree-shaking.
+                  style={{
+                    opacity: emojiOpen ? 1 : 0,
+                    transform: emojiOpen ? "translateY(0) scale(1)" : "translateY(8px) scale(0.95)",
+                    pointerEvents: emojiOpen ? "auto" : "none",
+                    transition: "opacity 200ms cubic-bezier(0.16,1,0.3,1), transform 200ms cubic-bezier(0.16,1,0.3,1)",
+                  }}
+                  className="absolute bottom-full left-3 mb-1 grid w-64 origin-bottom-left grid-cols-8 gap-1 rounded-xl border border-border bg-popover p-2 shadow-lg"
+                >
+                  {EMOJIS.map((e) => (
+                    <motion.button
+                      key={e}
+                      type="button"
+                      whileHover={{ scale: 1.25 }}
+                      whileTap={{ scale: 0.9 }}
+                      tabIndex={emojiOpen ? 0 : -1}
+                      onClick={() => {
+                        setDraft((prev) => prev + e);
+                        setEmojiOpen(false);
+                      }}
+                      className="flex items-center justify-center rounded p-1"
+                    >
+                      <AnimatedEmoji emoji={e} className="h-6 w-6" />
+                    </motion.button>
+                  ))}
+                </div>
+              )}
 
               <input ref={fileRef} type="file" accept={ACCEPT} multiple hidden onChange={(e) => onPickFiles(e.target.files)} />
               <IconButton label="Attach" onClick={() => fileRef.current?.click()}>
                 <IconPaperclip className="h-4.5 w-4.5" />
               </IconButton>
-              <IconButton label="Emoji" onClick={() => setEmojiOpen((v) => !v)}>
-                <IconSmile className="h-4.5 w-4.5" />
-              </IconButton>
+              <span data-emoji-toggle>
+                <IconButton
+                  label="Emoji"
+                  onClick={() => {
+                    setEmojiMounted(true);
+                    setEmojiOpen((v) => !v);
+                  }}
+                >
+                  <IconSmile className="h-4.5 w-4.5" />
+                </IconButton>
+              </span>
               <Input
                 value={draft}
                 onChange={(e) => onDraftChange(e.target.value)}
@@ -869,9 +959,9 @@ export function ChatView() {
                     whileHover={{ scale: 1.3 }}
                     whileTap={{ scale: 0.9 }}
                     onClick={() => react(ctx.message, e)}
-                    className="rounded p-0.5 text-lg"
+                    className="flex items-center justify-center rounded p-0.5"
                   >
-                    {e}
+                    <AnimatedEmoji emoji={e} className="h-6 w-6" />
                   </motion.button>
                 ))}
               </div>
@@ -906,6 +996,18 @@ export function ChatView() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {groupInfoOpen && active && (
+        <GroupInfoDialog
+          conversation={active}
+          canEdit={me.isAdmin}
+          onClose={() => setGroupInfoOpen(false)}
+          onSaved={() => {
+            setGroupInfoOpen(false);
+            loadConversations();
+          }}
+        />
+      )}
 
       {preview && <AttachmentPreview attachment={preview} onClose={() => setPreview(null)} />}
       {forwardOf && (
@@ -1006,6 +1108,8 @@ function MessageBubble({
 }) {
   const long = m.body.length > LONG_BODY;
   const shown = long && !expanded ? `${m.body.slice(0, LONG_BODY)}…` : m.body;
+  // A message that's just a few emoji renders them large, like iOS/WhatsApp.
+  const emojiOnly = isEmojiOnly(m.body) && countEmoji(m.body) <= 3 && m.attachments.length === 0;
 
   // group identical emoji into counts
   const grouped = useMemo(() => {
@@ -1127,16 +1231,24 @@ function MessageBubble({
             )}
 
             {m.body && (
-              <p className="whitespace-pre-wrap break-words">
-                {shown.split(/(\s+)/).map((tok, i) =>
-                  tok.startsWith("@") && tok.length > 1 ? (
-                    <span key={i} className={cn("font-medium", mine ? "underline" : "text-primary")}>
-                      {tok}
+              <p className={cn("whitespace-pre-wrap break-words", emojiOnly && "py-1")}>
+                <TextWithAnimatedEmoji
+                  text={shown}
+                  emojiClass={emojiOnly ? "h-11 w-11" : "h-[1.15em] w-[1.15em]"}
+                  renderText={(chunk, key) => (
+                    <span key={key}>
+                      {chunk.split(/(\s+)/).map((tok, i) =>
+                        tok.startsWith("@") && tok.length > 1 ? (
+                          <span key={i} className={cn("font-medium", mine ? "underline" : "text-primary")}>
+                            {tok}
+                          </span>
+                        ) : (
+                          <span key={i}>{tok}</span>
+                        )
+                      )}
                     </span>
-                  ) : (
-                    <span key={i}>{tok}</span>
-                  )
-                )}
+                  )}
+                />
                 {long && (
                   <button
                     type="button"
@@ -1172,10 +1284,10 @@ function MessageBubble({
                   whileHover={{ scale: 1.2 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={() => onReact(m, emoji)}
-                  className={cn("text-[11px] leading-none", info.mine && "font-bold")}
+                  className={cn("flex items-center gap-0.5 leading-none", info.mine && "font-bold")}
                 >
-                  {emoji}
-                  {info.count > 1 && <span className="ml-0.5 text-[9px] text-muted-foreground">{info.count}</span>}
+                  <AnimatedEmoji emoji={emoji} className="h-3.5 w-3.5" />
+                  {info.count > 1 && <span className="text-[9px] text-muted-foreground">{info.count}</span>}
                 </motion.button>
               ))}
             </motion.div>
@@ -1300,11 +1412,18 @@ function ForwardDialog({
   );
 }
 
-function Avatar({ title, group, online }: { title: string; group: boolean; online?: boolean }) {
+function Avatar({ title, group, online, image }: { title: string; group: boolean; online?: boolean; image?: string | null }) {
   return (
     <div className="relative shrink-0">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-        {group ? <IconUsers className="h-5 w-5" /> : initial(title)}
+      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-sm font-semibold text-primary">
+        {image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={image} alt={title} className="h-full w-full object-cover" />
+        ) : group ? (
+          <IconUsers className="h-5 w-5" />
+        ) : (
+          initial(title)
+        )}
       </div>
       {online !== undefined && (
         <motion.span
@@ -1314,6 +1433,139 @@ function Avatar({ title, group, online }: { title: string; group: boolean; onlin
         />
       )}
     </div>
+  );
+}
+
+function GroupInfoDialog({
+  conversation,
+  canEdit,
+  onClose,
+  onSaved,
+}: {
+  conversation: Conversation;
+  canEdit: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [title, setTitle] = useState(conversation.title);
+  const [description, setDescription] = useState(conversation.description ?? "");
+  const [image, setImage] = useState<string | null>(conversation.imageDataUrl);
+  const [saving, setSaving] = useState(false);
+  const pickRef = useRef<HTMLInputElement>(null);
+
+  async function onPickImage(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return toast.error("Pick an image file");
+    if (file.size > 3 * 1024 * 1024) return toast.error("Image must be under 3MB");
+    const a = await readFile(file);
+    setImage(a.data);
+    if (pickRef.current) pickRef.current.value = "";
+  }
+
+  async function save() {
+    if (!title.trim()) return toast.error("Group name is required");
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/conversations/${conversation.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title.trim(), description: description.trim() || null, imageDataUrl: image }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't save group info", data.error);
+      toast.success("Group info updated");
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Group info</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative">
+              <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-2xl font-semibold text-primary">
+                {image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={image} alt={title} className="h-full w-full object-cover" />
+                ) : (
+                  <IconUsers className="h-10 w-10" />
+                )}
+              </div>
+              {canEdit && (
+                <>
+                  <input ref={pickRef} type="file" accept="image/*" hidden onChange={(e) => onPickImage(e.target.files)} />
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.92 }}
+                    onClick={() => pickRef.current?.click()}
+                    aria-label="Change group picture"
+                    className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-popover bg-primary text-primary-foreground"
+                  >
+                    <IconImage className="h-4 w-4" />
+                  </motion.button>
+                </>
+              )}
+            </div>
+            {canEdit && image && (
+              <button type="button" onClick={() => setImage(null)} className="text-xs text-muted-foreground hover:text-destructive">
+                Remove picture
+              </button>
+            )}
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="grp-name">Name</Label>
+              <Input id="grp-name" value={title} disabled={!canEdit} onChange={(e) => setTitle(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="grp-desc">Description</Label>
+              <Textarea
+                id="grp-desc"
+                value={description}
+                disabled={!canEdit}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What's this group for?"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label>{conversation.members.length} members</Label>
+              <div className="max-h-44 overflow-y-auto rounded-md border border-border">
+                {conversation.members.map((m) => (
+                  <div key={m.id} className="flex items-center gap-2 border-b border-border/50 px-3 py-2 last:border-0">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                      {initial(fullName(m))}
+                    </span>
+                    <span className="truncate text-sm">{fullName(m)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {canEdit && (
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={save} disabled={saving}>
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
+            </div>
+          )}
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }
 

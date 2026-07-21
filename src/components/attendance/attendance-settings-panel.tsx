@@ -227,7 +227,7 @@ export function AttendanceSettingsPanel() {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-16">
+      <div className="flex justify-center min-h-[200px] flex-1 items-center">
         <EightDotsRotate className="h-9 w-9" />
       </div>
     );

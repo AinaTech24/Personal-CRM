@@ -258,7 +258,7 @@ export default function AdminAttendancePage() {
               todayKey={teamYear.todayKey}
             />
           ) : (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center min-h-[55vh] flex-1 items-center">
               <EightDotsRotate className="h-8 w-8" />
             </div>
           )}
@@ -307,7 +307,7 @@ export default function AdminAttendancePage() {
       <Card>
         <CardContent className="p-0">
           {loading ? (
-            <div className="flex justify-center py-12">
+            <div className="flex justify-center min-h-[55vh] flex-1 items-center">
               <EightDotsRotate className="h-9 w-9" />
             </div>
           ) : records.length === 0 ? (

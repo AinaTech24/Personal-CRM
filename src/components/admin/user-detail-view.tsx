@@ -71,7 +71,7 @@ export function UserDetailView({ userId }: { userId: string }) {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
+      <div className="flex justify-center min-h-[55vh] flex-1 items-center">
         <EightDotsRotate className="h-9 w-9" />
       </div>
     );

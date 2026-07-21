@@ -121,7 +121,7 @@ export function MeetingsView() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16">
+        <div className="flex justify-center min-h-[55vh] flex-1 items-center">
           <EightDotsRotate className="h-9 w-9" />
         </div>
       ) : meetings.length === 0 ? (

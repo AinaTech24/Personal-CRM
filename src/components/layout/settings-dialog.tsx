@@ -686,7 +686,7 @@ export function SettingsDialog({
                         </p>
                       </div>
                       {loadingNotif ? (
-                        <div className="flex justify-center py-6">
+                        <div className="flex justify-center min-h-[200px] flex-1 items-center">
                           <EightDotsRotate className="h-7 w-7" />
                         </div>
                       ) : (
@@ -776,7 +776,7 @@ export function SettingsDialog({
                           )}
                         </div>
                         {loadingSessions ? (
-                          <div className="flex justify-center py-4">
+                          <div className="flex justify-center min-h-[200px] flex-1 items-center">
                             <EightDotsRotate className="h-6 w-6" />
                           </div>
                         ) : (

@@ -84,7 +84,7 @@ export default function AdminSettingsPage() {
       <Card>
         <CardContent className="p-5">
           {loading ? (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center min-h-[200px] flex-1 items-center">
               <EightDotsRotate className="h-8 w-8" />
             </div>
           ) : (
@@ -141,7 +141,7 @@ export default function AdminSettingsPage() {
             </p>
           </div>
           {loading ? (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center min-h-[200px] flex-1 items-center">
               <EightDotsRotate className="h-8 w-8" />
             </div>
           ) : (

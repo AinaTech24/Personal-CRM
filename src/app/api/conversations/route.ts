@@ -14,6 +14,8 @@ function serialize(
     type: "DIRECT" | "GROUP";
     title: string | null;
     isSystem: boolean;
+    description: string | null;
+    imageDataUrl: string | null;
     updatedAt: Date;
     members: { userId: string; lastReadAt: Date | null; user: { id: string; name: string; surname: string | null; avatarDataUrl: string | null; role: string } }[];
     messages: { id: string; body: string; createdAt: Date; senderId: string; sender: { name: string } }[];
@@ -29,6 +31,8 @@ function serialize(
     id: conv.id,
     type: conv.type,
     isSystem: conv.isSystem,
+    description: conv.description,
+    imageDataUrl: conv.imageDataUrl,
     title,
     members: conv.members.map((m) => m.user),
     // When each member last opened the thread — drives the "Seen" tick.

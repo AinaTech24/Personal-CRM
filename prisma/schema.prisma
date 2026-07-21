@@ -845,6 +845,10 @@ model Conversation {
   type        ConversationType
   /// Group name; null for 1:1 direct chats.
   title       String?
+  /// Group description, shown in Group info.
+  description String?          @db.Text
+  /// Group avatar as a base64 data URL (same storage approach as user avatars).
+  imageDataUrl String?         @db.LongText
   /// True for the auto-managed "Aina Family" group every user belongs to.
   isSystem    Boolean          @default(false)
   createdById String?
