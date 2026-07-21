@@ -37,6 +37,7 @@ import { useToast } from "@/components/providers/toast-provider";
 import { AnimatedEmoji, TextWithAnimatedEmoji, isEmojiOnly, countEmoji } from "@/components/ui/animated-emoji";
 import { NOTO_EMOJI, NOTO_CATEGORIES } from "@/lib/noto-emoji";
 import { cn } from "@/lib/utils";
+import { displayUrl, extractUrls, tokenizeLinks } from "@/lib/links";
 
 /* ---------------------------------- types --------------------------------- */
 
@@ -1402,6 +1403,12 @@ function MessageBubble({
   const shown = long && !expanded ? `${m.body.slice(0, LONG_BODY)}…` : m.body;
   // A message that's just a few emoji renders them large, like iOS/WhatsApp.
   const emojiOnly = isEmojiOnly(m.body) && countEmoji(m.body) <= 3 && m.attachments.length === 0;
+  // Taken from the full body, not the truncated `shown`, so a link past the
+  // "Read more" cut still unfurls.
+  const firstLink = useMemo(
+    () => (m.deletedForEveryone ? undefined : extractUrls(m.body)[0]),
+    [m.body, m.deletedForEveryone]
+  );
 
   // group identical emoji into counts
   const grouped = useMemo(() => {
@@ -1559,13 +1566,37 @@ function MessageBubble({
                   emojiClass={emojiOnly ? "h-11 w-11" : "h-[1.15em] w-[1.15em]"}
                   renderText={(chunk, key) => (
                     <span key={key}>
-                      {chunk.split(/(\s+)/).map((tok, i) =>
-                        tok.startsWith("@") && tok.length > 1 ? (
-                          <span key={i} className={cn("font-medium", mine ? "underline" : "text-primary")}>
-                            {tok}
-                          </span>
+                      {tokenizeLinks(chunk).map((part, pi) =>
+                        part.type === "url" ? (
+                          <a
+                            key={pi}
+                            href={part.href}
+                            target="_blank"
+                            // noreferrer as well as noopener: the linked site has
+                            // no business knowing which CRM page it came from.
+                            rel="noopener noreferrer nofollow"
+                            // The bubble has its own click handlers (menu,
+                            // double-click); following a link shouldn't fire them.
+                            onClick={(e) => e.stopPropagation()}
+                            className={cn(
+                              "break-all underline underline-offset-2",
+                              mine ? "text-primary-foreground" : "text-primary"
+                            )}
+                          >
+                            {part.value}
+                          </a>
                         ) : (
-                          <span key={i}>{tok}</span>
+                          <span key={pi}>
+                            {part.value.split(/(\s+)/).map((tok, i) =>
+                              tok.startsWith("@") && tok.length > 1 ? (
+                                <span key={i} className={cn("font-medium", mine ? "underline" : "text-primary")}>
+                                  {tok}
+                                </span>
+                              ) : (
+                                <span key={i}>{tok}</span>
+                              )
+                            )}
+                          </span>
                         )
                       )}
                     </span>
@@ -1582,6 +1613,10 @@ function MessageBubble({
                 )}
               </p>
             )}
+
+            {/* Unfurl the first link. Only one: a message with five links would
+                otherwise become a wall of cards. */}
+            {firstLink && <LinkPreview url={firstLink} mine={mine} />}
           </>
         )}
 
@@ -1617,6 +1652,101 @@ function MessageBubble({
         </AnimatePresence>
       </motion.div>
     </motion.div>
+  );
+}
+
+interface LinkPreviewData {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  siteName?: string;
+}
+
+// Shared across bubbles so the same link pasted repeatedly is fetched once per
+// session; the server caches too, but this avoids the round trip entirely.
+const linkPreviewCache = new Map<string, LinkPreviewData | null>();
+const linkPreviewInFlight = new Map<string, Promise<LinkPreviewData | null>>();
+
+function loadLinkPreview(url: string): Promise<LinkPreviewData | null> {
+  const cached = linkPreviewCache.get(url);
+  if (cached !== undefined) return Promise.resolve(cached);
+
+  // Several bubbles can mount at once with the same link — share the request.
+  const existing = linkPreviewInFlight.get(url);
+  if (existing) return existing;
+
+  const p = fetch(`/api/link-preview?url=${encodeURIComponent(url)}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => (d?.preview ?? null) as LinkPreviewData | null)
+    .catch(() => null)
+    .then((value) => {
+      linkPreviewCache.set(url, value);
+      linkPreviewInFlight.delete(url);
+      return value;
+    });
+  linkPreviewInFlight.set(url, p);
+  return p;
+}
+
+/**
+ * Card for the first link in a message. Renders nothing at all until there's
+ * something worth showing, so an unfurlable link never leaves a skeleton or an
+ * error box sitting in the thread.
+ */
+function LinkPreview({ url, mine }: { url: string; mine: boolean }) {
+  const [data, setData] = useState<LinkPreviewData | null>(() => linkPreviewCache.get(url) ?? null);
+
+  useEffect(() => {
+    let active = true;
+    loadLinkPreview(url).then((d) => {
+      if (active) setData(d);
+    });
+    return () => {
+      active = false;
+    };
+  }, [url]);
+
+  if (!data) return null;
+
+  return (
+    <a
+      href={data.url}
+      target="_blank"
+      rel="noopener noreferrer nofollow"
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "mt-1.5 block overflow-hidden rounded-lg border transition-colors",
+        mine
+          ? "border-primary-foreground/25 bg-primary-foreground/10 hover:bg-primary-foreground/15"
+          : "border-border bg-background/60 hover:bg-accent/50"
+      )}
+    >
+      {data.image && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={data.image}
+          alt=""
+          loading="lazy"
+          className="h-32 w-full object-cover"
+          // A dead or hotlink-blocked image shouldn't leave a broken icon.
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+        />
+      )}
+      <div className="px-2.5 py-2">
+        <p className={cn("text-[10px] uppercase tracking-wide", mine ? "text-primary-foreground/60" : "text-muted-foreground")}>
+          {data.siteName || displayUrl(data.url, 32)}
+        </p>
+        {data.title && <p className="mt-0.5 line-clamp-2 text-xs font-medium leading-snug">{data.title}</p>}
+        {data.description && (
+          <p className={cn("mt-0.5 line-clamp-2 text-[11px] leading-snug", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
+            {data.description}
+          </p>
+        )}
+      </div>
+    </a>
   );
 }
 
