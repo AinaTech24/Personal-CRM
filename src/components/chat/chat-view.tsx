@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { displayUrl, extractUrls, tokenizeLinks } from "@/lib/links";
 import { tokenizeMentions } from "@/lib/mentions";
 import { MentionChip } from "@/components/chat/mention-chip";
+import { RecordingWave } from "@/components/chat/recording-wave";
 
 /* ---------------------------------- types --------------------------------- */
 
@@ -203,6 +204,7 @@ export function ChatView() {
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordSecs, setRecordSecs] = useState(0);
+  const [recordStream, setRecordStream] = useState<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordSecsRef = useRef(0);
@@ -530,10 +532,14 @@ export function ChatView() {
       const rec = new MediaRecorder(stream);
       const chunks: BlobPart[] = [];
       recorderRef.current = rec;
+      // Held so the waveform can analyse the same live stream; cleared on stop
+      // to release the microphone.
+      setRecordStream(stream);
 
       rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
       rec.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        setRecordStream(null);
         if (recordTimer.current) clearInterval(recordTimer.current);
         const seconds = recordSecsRef.current;
         setRecording(false);
@@ -1092,8 +1098,11 @@ export function ChatView() {
                     animate={{ opacity: [1, 0.25, 1] }}
                     transition={{ duration: 1.2, repeat: Infinity }}
                   />
-                  <span className="text-sm tabular-nums">Recording {mmss(recordSecs)}</span>
-                  <div className="ml-auto flex items-center gap-1">
+                  {/* The wave takes the slack so the timer and controls stay put
+                      as the duration grows. */}
+                  <RecordingWave stream={recordStream} className="min-w-0 flex-1 text-destructive/70" />
+                  <span className="shrink-0 text-sm tabular-nums">{mmss(recordSecs)}</span>
+                  <div className="ml-auto flex shrink-0 items-center gap-1">
                     <IconButton label="Delete recording" onClick={() => stopRecording(false)}>
                       <IconTrash className="h-4 w-4 text-destructive" />
                     </IconButton>

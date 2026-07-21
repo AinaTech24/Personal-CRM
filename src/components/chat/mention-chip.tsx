@@ -82,9 +82,10 @@ export function MentionChip({
         onMouseEnter={show}
         onMouseLeave={hide}
         className={cn(
-          "font-semibold",
-          // Inside our own red bubble, red-on-red is invisible — underline instead.
-          mine ? "underline decoration-2 underline-offset-2" : "text-primary",
+          // Weight alone carries it. Inside our own red bubble the primary red
+          // would be invisible, so there the inherited white just goes bold.
+          "font-bold",
+          !mine && "text-primary",
           user && "cursor-default"
         )}
       >
