@@ -50,7 +50,7 @@ export function NotFoundScene({ onReady }: { onReady?: (ok: boolean) => void }) 
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
-    camera.position.z = 7.5;
+    camera.position.z = 6;
 
     // Read the brand colour from the theme rather than hardcoding it, so the
     // scene follows if the palette changes.
@@ -58,46 +58,47 @@ export function NotFoundScene({ onReady }: { onReady?: (ok: boolean) => void }) 
     const brandColor = new THREE.Color(brand);
 
     const shell = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(2.6, 1),
+      new THREE.IcosahedronGeometry(1.9, 1),
       new THREE.MeshBasicMaterial({ color: brandColor, wireframe: true, transparent: true, opacity: 0.85 })
     );
     scene.add(shell);
 
     const core = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.6, 0),
+      new THREE.IcosahedronGeometry(1.15, 0),
       new THREE.MeshBasicMaterial({ color: brandColor, transparent: true, opacity: 0.12 })
     );
     scene.add(core);
 
     // Starfield.
-    // Scaled to the viewport: a fixed count that looks right on a phone leaves
-    // a desktop screen looking empty, and a fixed spread would clip on a wide one.
-    const STAR_COUNT = Math.round(Math.min(1600, Math.max(500, (width * height) / 1400)));
-    const spreadX = 40 * Math.max(1, width / height);
+    const STAR_COUNT = 420;
     const positions = new Float32Array(STAR_COUNT * 3);
     for (let i = 0; i < STAR_COUNT; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * spreadX;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 30;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 24 - 4;
+      positions[i * 3] = (Math.random() - 0.5) * 18;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 12;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 12 - 3;
     }
     const starGeo = new THREE.BufferGeometry();
     starGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const starMat = new THREE.PointsMaterial({ color: 0x9a9aa6, size: 0.06, transparent: true, opacity: 0.7 });
+    const starMat = new THREE.PointsMaterial({ color: 0x9a9aa6, size: 0.045, transparent: true, opacity: 0.7 });
     const stars = new THREE.Points(starGeo, starMat);
     scene.add(stars);
 
     // Pointer lean, eased so the scene follows rather than snaps.
     const target = { x: 0, y: 0 };
     const onPointer = (e: PointerEvent) => {
-      // Against the viewport, not the element: the canvas is the whole page now.
-      target.x = (e.clientX / window.innerWidth - 0.5) * 0.5;
-      target.y = (e.clientY / window.innerHeight - 0.5) * 0.5;
+      const r = mount.getBoundingClientRect();
+      target.x = ((e.clientX - r.left) / r.width - 0.5) * 0.6;
+      target.y = ((e.clientY - r.top) / r.height - 0.5) * 0.6;
     };
     window.addEventListener("pointermove", onPointer);
 
     const onResize = () => {
-      const w = mount.clientWidth || width;
-      const h = mount.clientHeight || height;
+      const w = mount.clientWidth;
+      const h = mount.clientHeight;
+      // Skip zero rather than falling back to the size captured at mount: if
+      // the element measured zero then — hidden tab, offscreen prerender — the
+      // fallback is also zero, and the canvas would latch at 0x0 forever.
+      if (w === 0 || h === 0) return;
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();

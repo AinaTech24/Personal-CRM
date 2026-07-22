@@ -85,11 +85,14 @@ export default function NotFound() {
             in WebGL would need a font atlas and wouldn't be selectable. */}
       </div>
 
-      {/* Sits above the scene, so the numerals read against it rather than
-          competing with the shell in the middle. */}
-      <p className="pointer-events-none select-none text-[clamp(5rem,22vw,14rem)] font-extrabold leading-none tracking-tight text-foreground/10">
-        404
-      </p>
+      {/* The numerals keep the spacing they had when the scene was a card, so
+          they still frame the shell now that it fills the page behind them. */}
+      {webglReady && (
+        <div className="pointer-events-none relative flex h-[260px] w-full max-w-[420px] items-center justify-between px-2">
+          <span className="text-7xl font-extrabold text-foreground/90 drop-shadow-sm">4</span>
+          <span className="text-7xl font-extrabold text-foreground/90 drop-shadow-sm">4</span>
+        </div>
+      )}
 
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold">Lost in space</h1>
