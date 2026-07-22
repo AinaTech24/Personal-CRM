@@ -51,6 +51,10 @@ export interface ProjectTaskItem {
   milestoneId: string | null;
   parentTaskId: string | null;
   assignedTo: { id: string; name: string } | null;
+  /** Who the assignment is attributed to — editable, defaults to the creator. */
+  assignedBy: { id: string; name: string } | null;
+  /** Who actually raised the task. Not editable; null on tasks predating the field. */
+  createdBy: { id: string; name: string } | null;
   dependsOn: { dependsOnTask: { id: string; title: string; status: string } }[];
 }
 

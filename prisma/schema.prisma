@@ -78,6 +78,8 @@ model User {
   projectDocuments     ProjectDocument[]
   projectActivities    ProjectActivity[]
   projectTasksAssigned ProjectTask[]     @relation("ProjectTaskAssignedTo")
+  projectTasksAssignedBy ProjectTask[]   @relation("ProjectTaskAssignedBy")
+  projectTasksCreated    ProjectTask[]   @relation("ProjectTaskCreatedBy")
   projectSupporting    ProjectSupporter[] @relation("ProjectSupporter")
   projectTimeEntries   ProjectTimeEntry[] @relation("ProjectTimeEntryUser")
   projectTimeLogged    ProjectTimeEntry[] @relation("ProjectTimeEntryCreatedBy")
@@ -468,6 +470,16 @@ model ProjectTask {
   progressPct  Int           @default(0)
   assignedToId String?
   assignedTo   User?         @relation("ProjectTaskAssignedTo", fields: [assignedToId], references: [id])
+  /// Who the work is attributed to as having assigned it. Defaults to whoever
+  /// filled the form, but is editable: an admin often raises a task on a
+  /// manager's behalf, and the manager is the one who actually assigned it.
+  assignedById String?
+  assignedBy   User?         @relation("ProjectTaskAssignedBy", fields: [assignedById], references: [id])
+  /// Who actually submitted the form. Never editable, so changing `assignedBy`
+  /// can't erase the record of who really created the task. Nullable only
+  /// because tasks predating this field have no one to credit.
+  createdById  String?
+  createdBy    User?         @relation("ProjectTaskCreatedBy", fields: [createdById], references: [id])
   parentTaskId String?
   parentTask   ProjectTask?  @relation("SubTasks", fields: [parentTaskId], references: [id])
   subTasks     ProjectTask[] @relation("SubTasks")

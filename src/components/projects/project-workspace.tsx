@@ -279,6 +279,14 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
               {isSubtask && <span className="text-xs text-muted-foreground">↳ Subtask · </span>}
               {t.title}
             </p>
+            {t.assignedBy && (
+              <p className="text-xs text-muted-foreground">
+                Assigned by {t.assignedBy.name}
+                {/* Only when they differ — on the usual path the two are the same
+                    person and naming them twice is noise. */}
+                {t.createdBy && t.createdBy.id !== t.assignedBy.id && ` · raised by ${t.createdBy.name}`}
+              </p>
+            )}
             {t.dependsOn.length > 0 && (
               <p className="text-xs text-muted-foreground">
                 Depends on: {t.dependsOn.map((d) => d.dependsOnTask.title).join(", ")}
@@ -523,6 +531,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
             milestones={project.milestones}
             tasks={project.tasks}
             assignableUsers={assignableUsers}
+            currentUserId={currentUserId}
             onCreated={load}
           />
         </CardHeader>

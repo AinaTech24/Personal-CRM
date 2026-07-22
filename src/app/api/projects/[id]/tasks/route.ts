@@ -11,6 +11,7 @@ const bodySchema = z.object({
   milestoneId: z.string().optional().nullable(),
   parentTaskId: z.string().optional().nullable(),
   assignedToId: z.string().optional().nullable(),
+  assignedById: z.string().optional().nullable(),
   dueDate: z.string().optional().nullable(),
   dependsOnIds: z.array(z.string()).optional().default([]),
 });
@@ -37,14 +38,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       milestoneId: data.milestoneId || null,
       parentTaskId: data.parentTaskId || null,
       assignedToId: data.assignedToId || null,
+      // Falls back to the submitter: in the ordinary case the person raising
+      // the task is the person assigning it, and making them re-pick themselves
+      // would just be a field everyone leaves alone.
+      assignedById: data.assignedById || user.id,
+      createdById: user.id,
       dueDate: data.dueDate ? new Date(data.dueDate) : null,
       dependsOn: data.dependsOnIds.length
         ? { create: data.dependsOnIds.map((dependsOnId) => ({ dependsOnId })) }
         : undefined,
     },
+    include: { assignedBy: { select: { id: true, name: true } } },
   });
 
-  await logProjectActivity(id, user.id, "task_added", { title: task.title });
+  await logProjectActivity(id, user.id, "task_added", {
+    title: task.title,
+    // Recorded only when it differs, so the activity line stays quiet in the
+    // normal case and calls out the on-behalf-of case.
+    ...(task.assignedById && task.assignedById !== user.id && { assignedByName: task.assignedBy?.name }),
+  });
   if (data.assignedToId && data.assignedToId !== user.id) {
     await notifyUser(data.assignedToId, "project_task_assigned", { projectId: id, taskTitle: task.title, actorName: user.name });
   }

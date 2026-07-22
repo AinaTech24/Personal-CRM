@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,12 +23,15 @@ export function NewProjectTaskDialog({
   milestones,
   tasks,
   assignableUsers,
+  currentUserId,
   onCreated,
 }: {
   projectId: string;
   milestones: MilestoneItem[];
   tasks: ProjectTaskItem[];
   assignableUsers: AssignableUser[];
+  /** Pre-fills "Assigned by" — usually the person raising the task. */
+  currentUserId: string | null;
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -37,11 +40,19 @@ export function NewProjectTaskDialog({
   const [milestoneId, setMilestoneId] = useState("");
   const [parentTaskId, setParentTaskId] = useState("");
   const [assignedToId, setAssignedToId] = useState("");
+  const [assignedById, setAssignedById] = useState(currentUserId ?? "");
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [dependsOnIds, setDependsOnIds] = useState<string[]>([]);
   const [dependencyToAdd, setDependencyToAdd] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // The current user is fetched after this mounts, so the initial state above
+  // is empty on first render. Fill it when it arrives — but only while the
+  // field is still untouched, so this can't overwrite a deliberate choice.
+  useEffect(() => {
+    if (currentUserId) setAssignedById((prev) => prev || currentUserId);
+  }, [currentUserId]);
 
   function reset() {
     setTitle("");
@@ -49,6 +60,7 @@ export function NewProjectTaskDialog({
     setMilestoneId("");
     setParentTaskId("");
     setAssignedToId("");
+    setAssignedById(currentUserId ?? "");
     setDueDate(null);
     setDependsOnIds([]);
     setDependencyToAdd("");
@@ -75,6 +87,7 @@ export function NewProjectTaskDialog({
           milestoneId: milestoneId || null,
           parentTaskId: parentTaskId || null,
           assignedToId: assignedToId || null,
+          assignedById: assignedById || null,
           dueDate: dueDate ? dueDate.toISOString() : null,
           dependsOnIds,
         }),
@@ -116,6 +129,9 @@ export function NewProjectTaskDialog({
               <Label htmlFor="pt-description">Description</Label>
               <Textarea id="pt-description" value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
+            {/* Assign to and Assigned by sit together: they're the two halves of
+                one decision, and splitting them across rows made the second read
+                as an unrelated field. */}
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="pt-assignee">Assign to</Label>
@@ -128,11 +144,21 @@ export function NewProjectTaskDialog({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Due date</Label>
-                <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Not set" />
+                <Label htmlFor="pt-assigner">Assigned by</Label>
+                <Dropdown
+                  id="pt-assigner"
+                  value={assignedById}
+                  onChange={setAssignedById}
+                  placeholder="Unassigned"
+                  options={assignableUsers.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label>Due date</Label>
+                <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Not set" />
+              </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="pt-milestone">Milestone</Label>
                 <Dropdown
@@ -143,16 +169,16 @@ export function NewProjectTaskDialog({
                   options={milestones.map((m) => ({ value: m.id, label: m.title }))}
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="pt-parent">Parent task (make this a subtask)</Label>
-                <Dropdown
-                  id="pt-parent"
-                  value={parentTaskId}
-                  onChange={setParentTaskId}
-                  placeholder="None"
-                  options={tasks.map((t) => ({ value: t.id, label: t.title }))}
-                />
-              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="pt-parent">Parent task (make this a subtask)</Label>
+              <Dropdown
+                id="pt-parent"
+                value={parentTaskId}
+                onChange={setParentTaskId}
+                placeholder="None"
+                options={tasks.map((t) => ({ value: t.id, label: t.title }))}
+              />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Depends on</Label>

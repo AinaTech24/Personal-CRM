@@ -12,6 +12,7 @@ const patchSchema = z.object({
   progressPct: z.number().int().min(0).max(100).optional(),
   milestoneId: z.string().nullable().optional(),
   assignedToId: z.string().nullable().optional(),
+  assignedById: z.string().nullable().optional(),
   dueDate: z.string().nullable().optional(),
   dependsOnIds: z.array(z.string()).optional(),
 });
@@ -54,6 +55,9 @@ export async function PATCH(
       ...(data.progressPct !== undefined && { progressPct: data.progressPct }),
       ...(data.milestoneId !== undefined && { milestoneId: data.milestoneId }),
       ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId }),
+      // createdById is deliberately absent: who raised the task is a fact, not
+      // a field.
+      ...(data.assignedById !== undefined && { assignedById: data.assignedById }),
       ...(data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
     },
   });

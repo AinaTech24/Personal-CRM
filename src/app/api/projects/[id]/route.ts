@@ -40,6 +40,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       tasks: {
         include: {
           assignedTo: { select: { id: true, name: true } },
+          assignedBy: { select: { id: true, name: true } },
+          createdBy: { select: { id: true, name: true } },
           dependsOn: { include: { dependsOnTask: { select: { id: true, title: true, status: true } } } },
         },
         orderBy: { createdAt: "asc" },
