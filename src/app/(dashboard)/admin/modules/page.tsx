@@ -2,19 +2,70 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
+import * as Popover from "@radix-ui/react-popover";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dropdown } from "@/components/ui/dropdown";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { EightDotsRotate } from "@/components/ui/loader";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
-import { IconExternalLink, IconPencil, IconTrash } from "@/components/icons";
+import { IconExternalLink, IconEye, IconFilter, IconPencil, IconTrash } from "@/components/icons";
 import { ADMIN_MODULES, moduleByKey, type ModuleConfig } from "@/lib/admin-modules";
 import { cn } from "@/lib/utils";
 
 type Row = Record<string, unknown> & { id: string };
+
+/** `createdAt` → "Created at". */
+function humanize(key: string) {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
+}
+
+/**
+ * Flattens a record into label/value pairs worth reading.
+ *
+ * Skips ids and internals, and renders a related object by its name rather
+ * than dumping JSON — a raw payload is not a detail view. Base64 blobs are
+ * summarised rather than printed, since one would fill the dialog.
+ */
+function readableFields(row: Row): [string, string][] {
+  const out: [string, string][] = [];
+  for (const [key, value] of Object.entries(row)) {
+    if (key === "id" || key.endsWith("Id") || key === "_count") continue;
+    if (value === null || value === undefined || value === "") continue;
+
+    if (typeof value === "string") {
+      if (value.startsWith("data:")) {
+        out.push([key, `${(value.length / 1024).toFixed(0)} KB file`]);
+        continue;
+      }
+      // ISO timestamps read better as local dates.
+      const asDate = /^\d{4}-\d{2}-\d{2}T/.test(value) ? new Date(value) : null;
+      out.push([key, asDate && !Number.isNaN(asDate.getTime()) ? asDate.toLocaleString() : value]);
+      continue;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      out.push([key, String(value)]);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      out.push([key, `${value.length} item${value.length === 1 ? "" : "s"}`]);
+      continue;
+    }
+    if (typeof value === "object") {
+      const o = value as Record<string, unknown>;
+      const name = o.name ?? o.title ?? o.email;
+      if (name) out.push([key, String(name)]);
+      continue;
+    }
+  }
+  return out;
+}
 
 /**
  * Modules management.
@@ -33,6 +84,9 @@ export default function ModulesManagementPage() {
   const [pendingDelete, setPendingDelete] = useState<Row | null>(null);
   const [renaming, setRenaming] = useState<Row | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [viewing, setViewing] = useState<Row | null>(null);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const mod: ModuleConfig = moduleByKey(activeKey);
 
@@ -52,16 +106,42 @@ export default function ModulesManagementPage() {
 
   useEffect(() => {
     setQuery("");
+    // Filters name columns of the module being left, so they mean nothing here.
+    setFilters({});
     load();
   }, [load]);
 
-  // Filter over the rendered text, so what you type matches what you can see
-  // rather than fields hidden in the payload.
+  const filterableColumns = useMemo(() => mod.columns.filter((c) => c.filterable), [mod]);
+  const activeFilterCount = Object.keys(filters).length;
+
+  /** Distinct values for a column, taken from the rows on screen. */
+  const optionsFor = useCallback(
+    (columnKey: string) => {
+      const col = mod.columns.find((c) => c.key === columnKey);
+      if (!col) return [];
+      const seen = new Set<string>();
+      for (const row of rows) {
+        const v = col.get(row);
+        if (v && v !== "—") seen.add(v);
+      }
+      return [...seen].sort();
+    },
+    [rows, mod]
+  );
+
+  // Search matches the rendered text, so what you type matches what you can
+  // see rather than fields hidden in the payload. Filters are exact on the
+  // same rendered value, which is what the options were built from.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) => mod.columns.some((c) => c.get(row).toLowerCase().includes(q)));
-  }, [rows, query, mod]);
+    return rows.filter((row) => {
+      if (q && !mod.columns.some((c) => c.get(row).toLowerCase().includes(q))) return false;
+      return Object.entries(filters).every(([key, want]) => {
+        const col = mod.columns.find((c) => c.key === key);
+        return !col || col.get(row) === want;
+      });
+    });
+  }, [rows, query, filters, mod]);
 
   async function doDelete() {
     if (!pendingDelete) return;
@@ -119,6 +199,17 @@ export default function ModulesManagementPage() {
         ))}
       </div>
 
+      {/* mode="wait" so the outgoing tab finishes before the next arrives —
+          overlapping them cross-fades two tables of different heights and the
+          card jumps. */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={activeKey}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        >
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>
@@ -127,12 +218,81 @@ export default function ModulesManagementPage() {
               {loading ? "" : `${filtered.length}${filtered.length !== rows.length ? ` of ${rows.length}` : ""}`}
             </span>
           </CardTitle>
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search ${mod.label.toLowerCase()}…`}
-            className="sm:w-64"
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`Search ${mod.label.toLowerCase()}…`}
+              className="flex-1 sm:w-64"
+            />
+            {filterableColumns.length > 0 && (
+              <Popover.Root open={filterOpen} onOpenChange={setFilterOpen}>
+                <Popover.Trigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Filters"
+                    className={cn(
+                      "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-input transition-colors hover:bg-accent",
+                      activeFilterCount > 0 && "border-primary text-primary"
+                    )}
+                  >
+                    <IconFilter className="h-4 w-4" />
+                    {activeFilterCount > 0 && (
+                      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                  </button>
+                </Popover.Trigger>
+                <Popover.Portal>
+                  <Popover.Content
+                    align="end"
+                    sideOffset={6}
+                    className="z-50 w-64 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-lg"
+                  >
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-sm font-medium">Filters</p>
+                      {activeFilterCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setFilters({})}
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
+                    {/* Options come from the rows actually loaded, so they can't
+                        list a status no record uses or miss one added later. */}
+                    <div className="flex max-h-72 flex-col gap-3 overflow-y-auto">
+                      {filterableColumns.map((c) => (
+                        <div key={c.key} className="flex flex-col gap-1">
+                          <Label className="text-xs text-muted-foreground">{c.label}</Label>
+                          <Dropdown
+                            size="sm"
+                            value={filters[c.key] ?? ""}
+                            onChange={(v) =>
+                              setFilters((prev) => {
+                                const next = { ...prev };
+                                if (v) next[c.key] = v;
+                                else delete next[c.key];
+                                return next;
+                              })
+                            }
+                            placeholder="Any"
+                            options={[
+                              { value: "", label: "Any" },
+                              ...optionsFor(c.key).map((v) => ({ value: v, label: v })),
+                            ]}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </Popover.Content>
+                </Popover.Portal>
+              </Popover.Root>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -144,7 +304,9 @@ export default function ModulesManagementPage() {
               {rows.length === 0 ? `No ${mod.label.toLowerCase()} yet.` : "Nothing matches that search."}
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            // Capped so a long list doesn't push the page down forever; the
+            // scrollbar itself is hidden app-wide.
+            <div className="max-h-[60vh] overflow-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -169,6 +331,16 @@ export default function ModulesManagementPage() {
                       ))}
                       <td className="px-2 py-2">
                         <div className="flex items-center justify-end gap-1">
+                          <Tooltip label="View">
+                            <button
+                              type="button"
+                              aria-label={`View ${mod.nameOf(row)}`}
+                              onClick={() => setViewing(row)}
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            >
+                              <IconEye className="h-4 w-4" />
+                            </button>
+                          </Tooltip>
                           {mod.hrefFor && (
                             <Tooltip label="Open">
                               <Link
@@ -218,6 +390,41 @@ export default function ModulesManagementPage() {
           )}
         </CardContent>
       </Card>
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Every field the console holds for a record, without leaving the page.
+          Built from the payload rather than the columns, so it shows more than
+          the table had room for. */}
+      <Dialog open={!!viewing} onOpenChange={(v) => !v && setViewing(null)}>
+        <DialogContent size="lg">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-6">{viewing ? mod.nameOf(viewing) : ""}</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            {viewing && (
+              <dl className="flex flex-col divide-y divide-border text-sm">
+                {readableFields(viewing).map(([key, value]) => (
+                  <div key={key} className="flex gap-4 py-1.5">
+                    <dt className="w-40 shrink-0 text-muted-foreground">{humanize(key)}</dt>
+                    <dd className="min-w-0 flex-1 break-words">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </DialogBody>
+          {viewing && mod.hrefFor && (
+            <DialogFooter>
+              <Link href={mod.hrefFor(viewing.id)}>
+                <Button type="button" variant="outline" className="gap-1.5">
+                  <IconExternalLink className="h-4 w-4" />
+                  Open in {mod.label}
+                </Button>
+              </Link>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={!!pendingDelete}

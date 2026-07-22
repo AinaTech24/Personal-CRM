@@ -18,6 +18,12 @@ export interface ModuleColumn {
   get: (row: Record<string, unknown>) => string;
   /** Hidden below `sm` — keeps a phone to the columns that identify a row. */
   secondary?: boolean;
+  /**
+   * Offer this column in the filter panel. Only for columns with few repeated
+   * values — the options are gathered from the loaded rows, so a free-text
+   * column would produce one option per record.
+   */
+  filterable?: boolean;
 }
 
 export interface ModuleConfig {
@@ -82,8 +88,8 @@ export const ADMIN_MODULES: ModuleConfig[] = [
     columns: [
       { key: "name", label: "Name", get: text("name") },
       { key: "company", label: "Company", get: text("company"), secondary: true },
-      { key: "status", label: "Status", get: label("status") },
-      { key: "owner", label: "Owner", get: text("assignedTo.name"), secondary: true },
+      { key: "status", label: "Status", get: label("status"), filterable: true },
+      { key: "owner", label: "Owner", get: text("assignedTo.name"), secondary: true, filterable: true },
       { key: "created", label: "Created", get: date("createdAt"), secondary: true },
     ],
   },
@@ -97,9 +103,9 @@ export const ADMIN_MODULES: ModuleConfig[] = [
     nameOf: (r) => text("title")(r),
     columns: [
       { key: "title", label: "Title", get: text("title") },
-      { key: "status", label: "Status", get: label("status") },
-      { key: "priority", label: "Priority", get: label("priority"), secondary: true },
-      { key: "assignee", label: "Assigned to", get: text("assignedTo.name"), secondary: true },
+      { key: "status", label: "Status", get: label("status"), filterable: true },
+      { key: "priority", label: "Priority", get: label("priority"), secondary: true, filterable: true },
+      { key: "assignee", label: "Assigned to", get: text("assignedTo.name"), secondary: true, filterable: true },
       { key: "due", label: "Due", get: date("dueDate"), secondary: true },
     ],
   },
@@ -113,8 +119,8 @@ export const ADMIN_MODULES: ModuleConfig[] = [
     nameOf: (r) => text("name")(r),
     columns: [
       { key: "name", label: "Name", get: text("name") },
-      { key: "status", label: "Status", get: label("status") },
-      { key: "department", label: "Department", get: text("department.name"), secondary: true },
+      { key: "status", label: "Status", get: label("status"), filterable: true },
+      { key: "department", label: "Department", get: text("department.name"), secondary: true, filterable: true },
       { key: "created", label: "Created", get: date("createdAt"), secondary: true },
     ],
   },
@@ -128,8 +134,8 @@ export const ADMIN_MODULES: ModuleConfig[] = [
     nameOf: (r) => text("title")(r),
     columns: [
       { key: "title", label: "Title", get: text("title") },
-      { key: "status", label: "Status", get: label("status") },
-      { key: "organizer", label: "Organizer", get: text("organizer.name"), secondary: true },
+      { key: "status", label: "Status", get: label("status"), filterable: true },
+      { key: "organizer", label: "Organizer", get: text("organizer.name"), secondary: true, filterable: true },
       { key: "startsAt", label: "Starts", get: date("startsAt"), secondary: true },
     ],
   },
@@ -143,8 +149,8 @@ export const ADMIN_MODULES: ModuleConfig[] = [
     nameOf: (r) => text("quotationNumber")(r),
     columns: [
       { key: "number", label: "Number", get: text("quotationNumber") },
-      { key: "client", label: "Client", get: text("clientName"), secondary: true },
-      { key: "status", label: "Status", get: label("status") },
+      { key: "client", label: "Client", get: text("clientName"), secondary: true, filterable: true },
+      { key: "status", label: "Status", get: label("status"), filterable: true },
       { key: "total", label: "Total", get: money("total"), secondary: true },
     ],
   },
@@ -158,8 +164,8 @@ export const ADMIN_MODULES: ModuleConfig[] = [
     nameOf: (r) => text("invoiceNumber")(r),
     columns: [
       { key: "number", label: "Number", get: text("invoiceNumber") },
-      { key: "client", label: "Client", get: text("clientName"), secondary: true },
-      { key: "status", label: "Status", get: label("status") },
+      { key: "client", label: "Client", get: text("clientName"), secondary: true, filterable: true },
+      { key: "status", label: "Status", get: label("status"), filterable: true },
       { key: "total", label: "Total", get: money("total"), secondary: true },
     ],
   },

@@ -488,6 +488,14 @@ export function IconPaperclip(props: IconProps) {
   );
 }
 
+export function IconFilter(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3.5 5.5h17l-6.5 7.5v5.5l-4 2v-7.5Z" />
+    </svg>
+  );
+}
+
 export function IconGrid(props: IconProps) {
   return (
     <svg {...base(props)}>

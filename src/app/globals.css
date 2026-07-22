@@ -188,10 +188,16 @@ button:disabled,
 }
 
 /* A dialog on its way out must never swallow clicks — if the exit animation is
-   ever throttled (background tab) and unmounting stalls, the page stays usable. */
+   ever throttled (a background tab, reduced-motion quirks) Radix keeps the node
+   mounted waiting for an animationend that isn't coming, and the overlay covers
+   the whole app.
+   `!important` is needed on the overlay specifically: Radix writes
+   `pointer-events: auto` inline on it, which beats any stylesheet rule. Without
+   this the content stops taking clicks but the overlay above it doesn't, and
+   the page looks alive while ignoring every click. */
 [data-slot="dialog-overlay"][data-state="closed"],
 [data-slot="dialog-content"][data-state="closed"] {
-  pointer-events: none;
+  pointer-events: none !important;
 }
 
 /* Respect users who ask for less motion. */
