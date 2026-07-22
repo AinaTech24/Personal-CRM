@@ -78,6 +78,9 @@ model User {
   projectDocuments     ProjectDocument[]
   projectActivities    ProjectActivity[]
   projectTasksAssigned ProjectTask[]     @relation("ProjectTaskAssignedTo")
+  projectSupporting    ProjectSupporter[] @relation("ProjectSupporter")
+  projectTimeEntries   ProjectTimeEntry[] @relation("ProjectTimeEntryUser")
+  projectTimeLogged    ProjectTimeEntry[] @relation("ProjectTimeEntryCreatedBy")
 
   quotationsCreated  Quotation[]         @relation("QuotationCreatedBy")
   quotationApprovals QuotationApproval[]
@@ -362,14 +365,63 @@ model Project {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  members    ProjectMember[]
-  milestones Milestone[]
-  tasks      ProjectTask[]
-  documents  ProjectDocument[]
-  activities ProjectActivity[]
+  /// Hours the project was budgeted for, so logged time can be read against a
+  /// plan rather than in isolation. Optional — a project may have no estimate.
+  estimatedHours Int?
+
+  members     ProjectMember[]
+  supporters  ProjectSupporter[]
+  timeEntries ProjectTimeEntry[]
+  milestones  Milestone[]
+  tasks       ProjectTask[]
+  documents   ProjectDocument[]
+  activities  ProjectActivity[]
 
   @@index([departmentId])
   @@index([status])
+}
+
+/// Someone who contributes to a project without being on its team: a reviewer,
+/// a specialist pulled in for a week, another department's lead. Kept separate
+/// from ProjectMember so team headcount and access rules stay unaffected.
+model ProjectSupporter {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("ProjectSupporter", fields: [userId], references: [id])
+  /// What they support with, e.g. "Security review". Free text, not a role enum.
+  role      String?
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+}
+
+/// One person's work on one day. Stored per day rather than as start/stop
+/// timestamps: the CRM records effort after the fact, and a day is the unit
+/// people actually report in.
+model ProjectTimeEntry {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("ProjectTimeEntryUser", fields: [userId], references: [id])
+  /// Date-only: two entries on the same day are separate rows, not merged, so
+  /// their descriptions survive.
+  workDate  DateTime @db.Date
+  /// Minutes, not fractional hours — decimal hours accumulate rounding error
+  /// across a sum, and "1h 20m" has no exact float representation.
+  minutes   Int
+  description String? @db.Text
+  createdById String
+  createdBy   User    @relation("ProjectTimeEntryCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId, workDate])
+  @@index([userId])
 }
 
 model ProjectMember {

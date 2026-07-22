@@ -23,6 +23,7 @@ const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?: string
   task_assigned: IconTasks,
   task_comment: IconTasks,
   project_member_added: IconProjects,
+  project_supporter_added: IconProjects,
   project_task_assigned: IconProjects,
   quotation_decided: IconQuotations,
 };
@@ -46,6 +47,10 @@ function notificationMessage(n: Notification): string {
       const projectName = typeof n.payload.projectName === "string" ? n.payload.projectName : "a project";
       return `${actor} added you to the project "${projectName}"`;
     }
+    case "project_supporter_added": {
+      const projectName = typeof n.payload.projectName === "string" ? n.payload.projectName : "a project";
+      return `${actor} added you as a supporter on "${projectName}"`;
+    }
     case "project_task_assigned": {
       const taskTitle = typeof n.payload.taskTitle === "string" ? n.payload.taskTitle : "a task";
       return `${actor} assigned you to the project task "${taskTitle}"`;
@@ -63,7 +68,7 @@ function notificationMessage(n: Notification): string {
 function notificationHref(n: Notification): string | null {
   if (n.type === "lead_assigned") return "/leads";
   if (n.type === "task_assigned" || n.type === "task_comment") return "/tasks";
-  if (n.type === "project_member_added" || n.type === "project_task_assigned") {
+  if (n.type === "project_member_added" || n.type === "project_supporter_added" || n.type === "project_task_assigned") {
     return typeof n.payload.projectId === "string" ? `/projects/${n.payload.projectId}` : "/projects";
   }
   if (n.type === "quotation_decided") return "/quotations";

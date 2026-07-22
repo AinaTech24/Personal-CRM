@@ -25,6 +25,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       createdBy: { select: { id: true, name: true } },
       assignedTo: { select: { id: true, name: true } },
       members: { include: { user: { select: { id: true, name: true, email: true } } } },
+      supporters: {
+        include: { user: { select: { id: true, name: true, surname: true, email: true, avatarDataUrl: true } } },
+        orderBy: { createdAt: "asc" },
+      },
+      timeEntries: {
+        include: {
+          user: { select: { id: true, name: true, surname: true, avatarDataUrl: true } },
+          createdBy: { select: { id: true, name: true } },
+        },
+        orderBy: [{ workDate: "desc" }, { createdAt: "desc" }],
+      },
       milestones: { orderBy: { dueDate: "asc" } },
       tasks: {
         include: {
@@ -46,6 +57,7 @@ const patchSchema = z.object({
   description: z.string().nullable().optional(),
   status: z.enum(["PLANNED", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"]).optional(),
   progress: z.number().int().min(0).max(100).optional(),
+  estimatedHours: z.number().int().min(0).max(100_000).nullable().optional(),
   assignedToId: z.string().nullable().optional(),
   departmentId: z.string().optional(),
   isActive: z.boolean().optional(),
@@ -75,6 +87,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.description !== undefined && { description: data.description }),
       ...(data.status !== undefined && { status: data.status }),
       ...(data.progress !== undefined && { progress: data.progress }),
+      ...(data.estimatedHours !== undefined && { estimatedHours: data.estimatedHours }),
       ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId || null }),
       ...(data.departmentId !== undefined && { departmentId: data.departmentId }),
       ...(data.isActive !== undefined && { isActive: data.isActive }),

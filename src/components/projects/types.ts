@@ -70,8 +70,34 @@ export interface ProjectActivityItem {
   actor: { name: string };
 }
 
+/**
+ * Someone helping on the project without being on the team — a reviewer, a
+ * specialist on loan. Tracked separately from members so headcount and access
+ * rules aren't affected by lending someone out.
+ */
+export interface ProjectSupporterItem {
+  id: string;
+  role: string | null;
+  notes: string | null;
+  createdAt: string;
+  user: { id: string; name: string; surname: string | null; email: string; avatarDataUrl: string | null };
+}
+
+export interface ProjectTimeEntryItem {
+  id: string;
+  workDate: string;
+  minutes: number;
+  description: string | null;
+  createdAt: string;
+  user: { id: string; name: string; surname: string | null; avatarDataUrl: string | null };
+  createdBy: { id: string; name: string };
+}
+
 export interface ProjectDetail extends ProjectSummary {
+  estimatedHours: number | null;
   members: ProjectMemberItem[];
+  supporters: ProjectSupporterItem[];
+  timeEntries: ProjectTimeEntryItem[];
   milestones: MilestoneItem[];
   tasks: ProjectTaskItem[];
   documents: ProjectDocumentItem[];

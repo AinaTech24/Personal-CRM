@@ -22,7 +22,10 @@ import {
 } from "@/components/icons";
 import { AttachmentViewerDialog } from "@/components/tasks/attachment-viewer-dialog";
 import { NewProjectTaskDialog } from "@/components/projects/new-project-task-dialog";
+import { ProjectSupportersCard } from "@/components/projects/project-supporters-card";
+import { ProjectTimePanel } from "@/components/projects/project-time-panel";
 import { useSocket } from "@/components/providers/socket-provider";
+import { formatDuration } from "@/lib/project-time";
 import { useToast } from "@/components/providers/toast-provider";
 import {
   MILESTONE_STATUSES,
@@ -52,6 +55,14 @@ function activityLabel(a: { action: string; meta: Record<string, unknown> | null
       return `${a.actor.name} added a team member`;
     case "member_removed":
       return `${a.actor.name} removed a team member`;
+    case "supporter_added":
+      return `${a.actor.name} added ${a.meta?.name ?? "someone"} as a supporter${a.meta?.role ? ` (${a.meta.role})` : ""}`;
+    case "supporter_removed":
+      return `${a.actor.name} removed ${a.meta?.name ?? "someone"} from supporters`;
+    case "time_logged":
+      return `${a.actor.name} logged ${formatDuration(Number(a.meta?.minutes) || 0)} for ${a.meta?.name ?? "someone"}`;
+    case "time_removed":
+      return `${a.actor.name} removed a ${formatDuration(Number(a.meta?.minutes) || 0)} entry`;
     case "milestone_added":
       return `${a.actor.name} added milestone "${a.meta?.title}"`;
     case "milestone_completed":
@@ -75,6 +86,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
   const { socket } = useSocket();
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [memberToAdd, setMemberToAdd] = useState("");
   const [memberError, setMemberError] = useState<string | null>(null);
@@ -99,13 +111,20 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
   async function loadAll() {
     setLoading(true);
     try {
-      const [projectRes, usersRes] = await Promise.all([
+      const [projectRes, usersRes, meRes] = await Promise.all([
         fetch(`/api/projects/${projectId}`),
         fetch("/api/users/assignable"),
+        fetch("/api/auth/me"),
       ]);
-      const [projectData, usersData] = await Promise.all([projectRes.json(), usersRes.json()]);
+      const [projectData, usersData, meData] = await Promise.all([
+        projectRes.json(),
+        usersRes.json(),
+        meRes.json(),
+      ]);
       if (projectRes.ok) setProject(projectData.project);
       if (usersRes.ok) setAssignableUsers(usersData.users);
+      // Pre-selects the logger in the time form: most entries are your own.
+      if (meRes.ok) setCurrentUserId(meData.user?.id ?? null);
     } finally {
       setLoading(false);
     }
@@ -336,7 +355,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
         </div>
         {project.description && <p className="text-sm text-muted-foreground">{project.description}</p>}
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <div className="flex flex-col gap-1.5">
             <span className="text-xs text-muted-foreground">Status</span>
             <Dropdown
@@ -373,6 +392,22 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
               value={project.endDate ? new Date(project.endDate) : null}
               onChange={(d) => patchProject({ endDate: d.toISOString() })}
               placeholder="Not set"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs text-muted-foreground">Budgeted hours</span>
+            <Input
+              type="number"
+              min={0}
+              placeholder="Not set"
+              defaultValue={project.estimatedHours ?? ""}
+              onBlur={(e) => {
+                const raw = e.target.value.trim();
+                // Empty clears the budget rather than storing 0, which would
+                // read as "budgeted for no time at all".
+                const value = raw === "" ? null : Math.max(0, Number(raw) || 0);
+                if (value !== project.estimatedHours) patchProject({ estimatedHours: value });
+              }}
             />
           </div>
         </div>
@@ -426,6 +461,8 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
           </CardContent>
         </Card>
 
+        <ProjectSupportersCard project={project} assignableUsers={assignableUsers} onChanged={load} />
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Milestones</CardTitle>
@@ -470,6 +507,13 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
           </CardContent>
         </Card>
       </div>
+
+      <ProjectTimePanel
+        project={project}
+        assignableUsers={assignableUsers}
+        currentUserId={currentUserId}
+        onChanged={load}
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

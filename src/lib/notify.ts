@@ -10,6 +10,7 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   task_assigned: "tasks",
   task_comment: "tasks",
   project_member_added: "projects",
+  project_supporter_added: "projects",
   project_task_assigned: "projects",
   quotation_decided: "quotations",
 };
@@ -17,7 +18,7 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
 export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: string; description: string }[] = [
   { value: "leads", label: "Leads", description: "When a lead is assigned to you" },
   { value: "tasks", label: "Tasks", description: "When a task is assigned to you or gets a new comment" },
-  { value: "projects", label: "Projects", description: "When you're added to a project or assigned a project task" },
+  { value: "projects", label: "Projects", description: "When you're added to a project as a member or supporter, or assigned a project task" },
   { value: "quotations", label: "Quotations", description: "When a quotation you created is approved or rejected" },
 ];
 
