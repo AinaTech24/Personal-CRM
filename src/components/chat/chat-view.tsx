@@ -1305,7 +1305,7 @@ export function ChatView() {
                       whileTap={{ scale: 0.9 }}
                       onClick={() => stopRecording(true)}
                       aria-label="Stop recording"
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                      className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground"
                     >
                       <IconStop className="h-4 w-4" />
                     </motion.button>
@@ -1351,17 +1351,19 @@ export function ChatView() {
                 />
               )}
               {!recording && (
-                <motion.button
-                  type="button"
-                  whileTap={{ scale: 0.88, rotate: -12 }}
-                  transition={{ type: "spring", stiffness: 600, damping: 20 }}
-                  onClick={send}
-                  disabled={sending || (!draft.trim() && pending.length === 0)}
-                  aria-label="Send"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
-                >
-                  <IconSend className="h-4 w-4" />
-                </motion.button>
+                <Tooltip label="Send" side="top" wrapperClassName="shrink-0">
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.88, rotate: -12 }}
+                    transition={{ type: "spring", stiffness: 600, damping: 20 }}
+                    onClick={send}
+                    disabled={sending || (!draft.trim() && pending.length === 0)}
+                    aria-label="Send"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-40"
+                  >
+                    <IconSend className="h-4 w-4" />
+                  </motion.button>
+                </Tooltip>
               )}
             </div>
           </>
@@ -1574,7 +1576,7 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
       aria-label={label}
       whileTap={{ scale: 0.9 }}
       onClick={onClick}
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
     >
       {children}
     </motion.button>
@@ -1754,7 +1756,14 @@ function MessageBubble({
       >
         {m.pinnedAt && <IconPin className="absolute -top-1.5 right-2 h-3 w-3 opacity-70" />}
 
-        {!mine && group && !m.deletedForEveryone && <p className="mb-0.5 text-[11px] font-medium opacity-70">{fullName(m.sender)}</p>}
+        {/* Name and time share a row: the timestamp had its own line under
+            every bubble, which cost a line of height on every message. */}
+        {!m.deletedForEveryone && (!mine && group) && (
+          <p className="mb-0.5 flex items-baseline gap-2 text-[11px] font-medium opacity-70">
+            <span className="min-w-0 truncate">{fullName(m.sender)}</span>
+            <span className="ml-auto shrink-0 tabular-nums opacity-80">{fmtTime(m.createdAt)}</span>
+          </p>
+        )}
 
         {m.forwardedFromName && !m.deletedForEveryone && (
           <p className={cn("mb-0.5 text-[11px] italic", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
@@ -1894,10 +1903,14 @@ function MessageBubble({
           </>
         )}
 
-        <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
-          <span>{fmtTime(m.createdAt)}</span>
-          {mine && !m.deletedForEveryone && <StatusTicks status={status} />}
-        </div>
+        {/* Own messages and direct chats have no sender row, so they keep a
+            compact footer — it also carries the delivery ticks. */}
+        {(mine || !group || m.deletedForEveryone) && (
+          <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
+            <span>{fmtTime(m.createdAt)}</span>
+            {mine && !m.deletedForEveryone && <StatusTicks status={status} />}
+          </div>
+        )}
 
         {/* Reactions */}
         <AnimatePresence>
@@ -2191,24 +2204,26 @@ function EmojiGrid({ active, onPick }: { active: boolean; onPick: (char: string)
       }}
     >
       <div className="grid grid-cols-8 gap-1">
-        {shown.map(([cp, char, catIdx], i) => (
+        {shown.map(([cp, char, catIdx, label], i) => (
           <Fragment key={cp}>
             {(i === 0 || shown[i - 1][2] !== catIdx) && (
               <p className="col-span-8 px-1 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
                 {NOTO_CATEGORIES[catIdx]}
               </p>
             )}
+            <Tooltip label={label} side="top">
             <motion.button
               type="button"
               whileHover={{ scale: 1.25 }}
               whileTap={{ scale: 0.9 }}
               tabIndex={active ? 0 : -1}
               onClick={() => onPick(char)}
-              title={char}
+              aria-label={label}
               className="flex items-center justify-center rounded p-1"
             >
               <AnimatedEmoji emoji={char} sizePx={24} playOnHover lazy />
             </motion.button>
+            </Tooltip>
           </Fragment>
         ))}
       </div>
