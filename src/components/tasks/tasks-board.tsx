@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dropdown } from "@/components/ui/dropdown";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { PageLoader } from "@/components/ui/loader";
+import { SkeletonBoard } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
 import { NewTaskDialog } from "@/components/tasks/new-task-dialog";
@@ -222,7 +222,7 @@ export function TasksBoard() {
         </div>
       </div>
 
-      {loading && <PageLoader />}
+      {loading && <SkeletonBoard columns={4} />}
 
       {!loading && view === "list" && (
         <TasksListView

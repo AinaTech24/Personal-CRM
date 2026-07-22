@@ -7,7 +7,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { PageLoader } from "@/components/ui/loader";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
 import { IconDots, IconPencil, IconTrash, IconPower } from "@/components/icons";
@@ -227,7 +227,7 @@ export function ProjectsList() {
         </div>
       </div>
 
-      {loading && <PageLoader />}
+      {loading && <SkeletonCards count={6} />}
 
       {!loading && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

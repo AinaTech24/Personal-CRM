@@ -48,7 +48,7 @@ export function TasksListView({
                 key={task.id}
                 onClick={() => onSelect(task)}
                 className={cn(
-                  "group cursor-pointer border-b border-border last:border-b-0 hover:bg-primary/10",
+                  "group cursor-pointer border-b border-border last:border-b-0 hover:bg-primary/5",
                   selected && "bg-accent/40"
                 )}
               >

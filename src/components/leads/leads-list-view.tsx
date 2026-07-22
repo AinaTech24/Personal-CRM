@@ -55,7 +55,7 @@ export function LeadsListView({
                 key={lead.id}
                 onClick={() => onSelect(lead)}
                 className={cn(
-                  "group cursor-pointer border-b border-border last:border-b-0 hover:bg-primary/10",
+                  "group cursor-pointer border-b border-border last:border-b-0 hover:bg-primary/5",
                   selected && "bg-accent/40"
                 )}
               >

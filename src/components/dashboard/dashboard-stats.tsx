@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
-import { PageLoader } from "@/components/ui/loader";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import {
   IconLeads,
   IconTasks,
@@ -237,7 +237,7 @@ export function DashboardStats() {
     return [{ title: "Users", icon: IconUsers, options: userOpts }, ...entityCards];
   }, [stats]);
 
-  if (loading || !stats) return <PageLoader />;
+  if (loading || !stats) return <SkeletonCards count={4} />;
 
   return (
     <div className="flex flex-1 flex-col gap-6">

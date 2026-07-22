@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { PageLoader } from "@/components/ui/loader";
+import { SkeletonForm } from "@/components/ui/skeleton";
 import {
   IconChevronLeft,
   IconDownload,
@@ -236,7 +236,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
     }
   }
 
-  if (loading || !project) return <PageLoader />;
+  if (loading || !project) return <SkeletonForm fields={6} />;
 
   const memberOptions = assignableUsers.filter((u) => !project.members.some((m) => m.user.id === u.id));
 

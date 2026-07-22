@@ -64,6 +64,40 @@ export function SkeletonForm({ fields = 5 }: { fields?: number }) {
   );
 }
 
+/** A grid of stat or record cards. */
+export function SkeletonCards({ count = 4 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-hidden>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="flex flex-col gap-2 rounded-xl border border-border p-4">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-7 w-16" />
+          <Skeleton className="h-3 w-32" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Kanban columns, each with a few cards. */
+export function SkeletonBoard({ columns = 4, cards = 3 }: { columns?: number; cards?: number }) {
+  return (
+    <div className="flex gap-3 overflow-x-auto" aria-hidden>
+      {Array.from({ length: columns }, (_, c) => (
+        <div key={c} className="flex w-64 shrink-0 flex-col gap-2 rounded-xl border border-border p-3">
+          <Skeleton className="h-3 w-20" />
+          {Array.from({ length: cards }, (_, i) => (
+            <div key={i} className="flex flex-col gap-2 rounded-lg border border-border/60 p-3">
+              <Skeleton className="h-3.5 w-4/5" />
+              <Skeleton className="h-3 w-2/5" />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Alternating message bubbles, for a chat thread. */
 export function SkeletonThread({ rows = 6 }: { rows?: number }) {
   return (

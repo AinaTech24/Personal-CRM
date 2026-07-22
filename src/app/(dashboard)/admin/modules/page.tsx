@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle } from "@/components/ui/dialog";
-import { SkeletonTable } from "@/components/ui/skeleton";
+import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { IconChevronDown, IconExternalLink, IconEye, IconPencil, IconTrash } from "@/components/icons";
@@ -176,6 +176,7 @@ export default function ModulesManagementPage() {
   const [activeKey, setActiveKey] = useState(ADMIN_MODULES[0].key);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [firstLoad, setFirstLoad] = useState(true);
   const [query, setQuery] = useState("");
   const [pendingDelete, setPendingDelete] = useState<Row | null>(null);
   const [renaming, setRenaming] = useState<Row | null>(null);
@@ -194,6 +195,7 @@ export default function ModulesManagementPage() {
       if (!res.ok) toast.error(`Couldn't load ${mod.label.toLowerCase()}`, data.error);
     } finally {
       setLoading(false);
+      setFirstLoad(false);
     }
     // toast is stable from its provider; re-running on it would refetch endlessly
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -306,6 +308,31 @@ export default function ModulesManagementPage() {
     await load();
   }
 
+  // The whole page stands in for itself on the very first load — heading, tabs,
+  // search and table. Rendering the real chrome around an empty card makes the
+  // page look broken rather than loading, and everything shifts when data lands.
+  if (firstLoad) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-7 w-52" />
+        <div className="flex gap-1">
+          {ADMIN_MODULES.map((m) => (
+            <Skeleton key={m.key} className="h-8 w-24 shrink-0" />
+          ))}
+        </div>
+        <Card>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-9 w-full sm:w-64" />
+          </CardHeader>
+          <CardContent>
+            <SkeletonTable rows={8} columns={6} />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -329,164 +356,170 @@ export default function ModulesManagementPage() {
         ))}
       </div>
 
-      {/* Deliberately not mode="wait". That holds the incoming tab back until
-          the outgoing one's exit finishes, so anywhere those animations stall —
-          a throttled tab, reduced motion — the content never changes at all.
-          Cross-fading can jog the card height; a tab that ignores you is worse. */}
-      {/* Keyed, not an AnimatePresence pair. An exiting copy is block-level,
-          so it stacked below the incoming table rather than cross-fading with
-          it — two tables on screen at once. Only the entrance is animated. */}
+      {/* One keyed child, no exit. An exiting copy is block-level, so it
+          stacked below the incoming table rather than cross-fading — two
+          tables at once. Remounting on the key replays the entrance, and the
+          rows stagger in behind it, which reads as the table settling rather
+          than a hard cut. */}
       <motion.div
         key={activeKey}
-        initial={{ opacity: 0, y: 8 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
       >
-      <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle>
-            {mod.label}
-            <span className="ml-2 text-sm font-normal text-muted-foreground">
-              {loading ? "" : `${filtered.length}${filtered.length !== rows.length ? ` of ${rows.length}` : ""}`}
-            </span>
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={`Search ${mod.label.toLowerCase()}…`}
-              className="flex-1 sm:w-64"
-            />
-            {activeFilterCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setFilters({})}
-                className="shrink-0 whitespace-nowrap rounded-md border border-input px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                Clear {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
-              </button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <SkeletonTable rows={6} columns={5} />
-          ) : filtered.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">
-              {rows.length === 0 ? `No ${mod.label.toLowerCase()} yet.` : "Nothing matches that search."}
-            </p>
-          ) : (
-            // Capped so a long list doesn't push the page down forever; the
-            // scrollbar itself is hidden app-wide.
-            <div className="max-h-[60vh] overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    {columns.map((c) => (
-                      <th
-                        key={c.key}
-                        className={cn(
-                          "sticky top-0 z-10 whitespace-nowrap bg-card px-2 py-2 font-medium",
-                          c.secondary && "hidden sm:table-cell"
-                        )}
-                      >
-                        {/* The filter lives in the column it filters. A separate
+        <Card>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>
+              {mod.label}
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                {loading ? "" : `${filtered.length}${filtered.length !== rows.length ? ` of ${rows.length}` : ""}`}
+              </span>
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={`Search ${mod.label.toLowerCase()}…`}
+                className="flex-1 sm:w-64"
+              />
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilters({})}
+                  className="shrink-0 whitespace-nowrap rounded-md border border-input px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  Clear {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
+                </button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <SkeletonTable rows={6} columns={5} />
+            ) : filtered.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                {rows.length === 0 ? `No ${mod.label.toLowerCase()} yet.` : "Nothing matches that search."}
+              </p>
+            ) : (
+              // Capped so a long list doesn't push the page down forever; the
+              // scrollbar itself is hidden app-wide.
+              <div className="max-h-[60vh] overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      {columns.map((c) => (
+                        <th
+                          key={c.key}
+                          className={cn(
+                            "sticky top-0 z-10 whitespace-nowrap bg-card px-2 py-2 font-medium",
+                            c.secondary && "hidden sm:table-cell"
+                          )}
+                        >
+                          {/* The filter lives in the column it filters. A separate
                             panel hid which columns were filterable at all, and
                             put the control far from the data it acts on. */}
-                        {c.filterable ? (
-                          <ColumnFilter
-                            label={c.label}
-                            value={filters[c.key] ?? ""}
-                            options={optionsFor(c.key)}
-                            onChange={(v) =>
-                              setFilters((prev) => {
-                                const next = { ...prev };
-                                if (v) next[c.key] = v;
-                                else delete next[c.key];
-                                return next;
-                              })
-                            }
-                          />
-                        ) : (
-                          c.label
-                        )}
-                      </th>
-                    ))}
-                    <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-2 py-2 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((row) => (
-                    <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-primary/10">
-                      {columns.map((c) => (
-                        <td
-                          key={c.key}
-                          className={cn("max-w-[220px] truncate px-2 py-2", c.secondary && "hidden sm:table-cell")}
-                        >
-                          {c.get(row)}
-                        </td>
-                      ))}
-                      <td className="px-2 py-2">
-                        <div className="flex items-center justify-end gap-1">
-                          <Tooltip label="View">
-                            <button
-                              type="button"
-                              aria-label={`View ${mod.nameOf(row)}`}
-                              onClick={() => setViewing(row)}
-                              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                            >
-                              <IconEye className="h-4 w-4" />
-                            </button>
-                          </Tooltip>
-                          {mod.hrefFor && (
-                            <Tooltip label="Open">
-                              <Link
-                                href={mod.hrefFor(row.id)}
-                                aria-label={`Open ${mod.nameOf(row)}`}
-                                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                              >
-                                <IconExternalLink className="h-4 w-4" />
-                              </Link>
-                            </Tooltip>
+                          {c.filterable ? (
+                            <ColumnFilter
+                              label={c.label}
+                              value={filters[c.key] ?? ""}
+                              options={optionsFor(c.key)}
+                              onChange={(v) =>
+                                setFilters((prev) => {
+                                  const next = { ...prev };
+                                  if (v) next[c.key] = v;
+                                  else delete next[c.key];
+                                  return next;
+                                })
+                              }
+                            />
+                          ) : (
+                            c.label
                           )}
-                          {/* Only departments are simple enough to edit inline;
-                              the rest open in their own module, where the full
-                              form and its validation already live. */}
-                          {mod.key === "departments" && (
-                            <Tooltip label="Rename">
+                        </th>
+                      ))}
+                      <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-2 py-2 text-right font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((row, rowIndex) => (
+                      <motion.tr
+                        key={row.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        // Capped so a long table finishes settling quickly rather
+                        // than trickling in for seconds.
+                        transition={{ duration: 0.2, delay: Math.min(rowIndex * 0.02, 0.3) }}
+                        className="border-b border-border/50 last:border-0 hover:bg-primary/5"
+                      >
+                        {columns.map((c) => (
+                          <td
+                            key={c.key}
+                            className={cn("max-w-[220px] truncate px-2 py-2", c.secondary && "hidden sm:table-cell")}
+                          >
+                            {c.get(row)}
+                          </td>
+                        ))}
+                        <td className="px-2 py-2">
+                          <div className="flex items-center justify-end gap-1">
+                            <Tooltip label="View">
                               <button
                                 type="button"
-                                aria-label={`Rename ${mod.nameOf(row)}`}
-                                onClick={() => {
-                                  setRenaming(row);
-                                  setRenameValue(mod.nameOf(row));
-                                }}
+                                aria-label={`View ${mod.nameOf(row)}`}
+                                onClick={() => setViewing(row)}
                                 className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                               >
-                                <IconPencil className="h-4 w-4" />
+                                <IconEye className="h-4 w-4" />
                               </button>
                             </Tooltip>
-                          )}
-                          <Tooltip label="Delete">
-                            <button
-                              type="button"
-                              aria-label={`Delete ${mod.nameOf(row)}`}
-                              onClick={() => setPendingDelete(row)}
-                              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                            >
-                              <IconTrash className="h-4 w-4" />
-                            </button>
-                          </Tooltip>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                            {mod.hrefFor && (
+                              <Tooltip label="Open">
+                                <Link
+                                  href={mod.hrefFor(row.id)}
+                                  aria-label={`Open ${mod.nameOf(row)}`}
+                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                >
+                                  <IconExternalLink className="h-4 w-4" />
+                                </Link>
+                              </Tooltip>
+                            )}
+                            {/* Only departments are simple enough to edit inline;
+                              the rest open in their own module, where the full
+                              form and its validation already live. */}
+                            {mod.key === "departments" && (
+                              <Tooltip label="Rename">
+                                <button
+                                  type="button"
+                                  aria-label={`Rename ${mod.nameOf(row)}`}
+                                  onClick={() => {
+                                    setRenaming(row);
+                                    setRenameValue(mod.nameOf(row));
+                                  }}
+                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                >
+                                  <IconPencil className="h-4 w-4" />
+                                </button>
+                              </Tooltip>
+                            )}
+                            <Tooltip label="Delete">
+                              <button
+                                type="button"
+                                aria-label={`Delete ${mod.nameOf(row)}`}
+                                onClick={() => setPendingDelete(row)}
+                                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                <IconTrash className="h-4 w-4" />
+                              </button>
+                            </Tooltip>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </motion.div>
 
       {/* Every field the console holds for a record, without leaving the page.

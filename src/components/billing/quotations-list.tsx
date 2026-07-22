@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { PageLoader } from "@/components/ui/loader";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
 import { IconPencil, IconShare, IconTrash } from "@/components/icons";
@@ -218,7 +218,7 @@ export function QuotationsList() {
         </div>
       </div>
 
-      {loading && <PageLoader />}
+      {loading && <SkeletonTable rows={8} columns={6} />}
 
       {!loading && (
         <div className="overflow-x-auto rounded-lg border border-border focus:outline-none">
@@ -242,7 +242,7 @@ export function QuotationsList() {
                     key={row.id}
                     onClick={() => onRowClick(row)}
                     className={cn(
-                      "group cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-primary/10",
+                      "group cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-primary/5",
                       selected && "bg-accent/40"
                     )}
                   >
