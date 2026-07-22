@@ -19,6 +19,7 @@ import {
   IconCalendar,
   IconMessage,
   IconChevronLeft,
+  IconGrid,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSocket } from "@/components/providers/socket-provider";
@@ -43,6 +44,7 @@ const mainNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
+  { href: "/admin/modules", label: "Modules", icon: IconGrid },
   { href: "/admin/departments", label: "Departments", icon: IconBuilding },
   { href: "/admin/users", label: "Users & Invites", icon: IconUsers },
   { href: "/admin/attendance", label: "Attendance", icon: IconClock },

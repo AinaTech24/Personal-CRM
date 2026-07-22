@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageDepartments } from "@/lib/permissions";
+import { slugify } from "@/lib/slug";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -20,13 +21,6 @@ const bodySchema = z.object({
   name: z.string().min(1),
 });
 
-function slugify(name: string) {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
