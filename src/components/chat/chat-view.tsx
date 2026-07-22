@@ -1320,6 +1320,11 @@ export function ChatView() {
                 </IconButton>
               )}
               {!recording && (
+                <IconButton label="Record voice note" onClick={startRecording}>
+                  <IconMic className="h-4.5 w-4.5" />
+                </IconButton>
+              )}
+              {!recording && (
                 <span data-emoji-toggle>
                   <IconButton
                     label="Emoji"
@@ -1331,11 +1336,6 @@ export function ChatView() {
                     <IconSmile className="h-4.5 w-4.5" />
                   </IconButton>
                 </span>
-              )}
-              {!recording && (
-                <IconButton label="Record voice note" onClick={startRecording}>
-                  <IconMic className="h-4.5 w-4.5" />
-                </IconButton>
               )}
               {!recording && (
                 <Input

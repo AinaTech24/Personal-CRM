@@ -57,14 +57,18 @@ export function NotFoundScene({ onReady }: { onReady?: (ok: boolean) => void }) 
     const brand = getComputedStyle(document.documentElement).getPropertyValue("--primary").trim() || "#dc2626";
     const brandColor = new THREE.Color(brand);
 
+    // Sized to sit between the two numerals the page draws over it rather than
+    // swallowing them. Their inner edges are ~308px apart, which at this camera
+    // distance works out to a radius of a little over 1 world unit; the pulse
+    // below adds 3%, so leave a few pixels of slack.
     const shell = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.9, 1),
+      new THREE.IcosahedronGeometry(1.05, 1),
       new THREE.MeshBasicMaterial({ color: brandColor, wireframe: true, transparent: true, opacity: 0.85 })
     );
     scene.add(shell);
 
     const core = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.15, 0),
+      new THREE.IcosahedronGeometry(0.64, 0),
       new THREE.MeshBasicMaterial({ color: brandColor, transparent: true, opacity: 0.12 })
     );
     scene.add(core);
