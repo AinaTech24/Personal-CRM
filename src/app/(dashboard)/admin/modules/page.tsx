@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import * as Popover from "@radix-ui/react-popover";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -333,14 +333,15 @@ export default function ModulesManagementPage() {
           the outgoing one's exit finishes, so anywhere those animations stall —
           a throttled tab, reduced motion — the content never changes at all.
           Cross-fading can jog the card height; a tab that ignores you is worse. */}
-      <AnimatePresence initial={false}>
-        <motion.div
-          key={activeKey}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        >
+      {/* Keyed, not an AnimatePresence pair. An exiting copy is block-level,
+          so it stacked below the incoming table rather than cross-fading with
+          it — two tables on screen at once. Only the entrance is animated. */}
+      <motion.div
+        key={activeKey}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+      >
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>
@@ -416,7 +417,7 @@ export default function ModulesManagementPage() {
                 </thead>
                 <tbody>
                   {filtered.map((row) => (
-                    <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/40">
+                    <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-primary/10">
                       {columns.map((c) => (
                         <td
                           key={c.key}
@@ -486,8 +487,7 @@ export default function ModulesManagementPage() {
           )}
         </CardContent>
       </Card>
-        </motion.div>
-      </AnimatePresence>
+      </motion.div>
 
       {/* Every field the console holds for a record, without leaving the page.
           Built from the payload rather than the columns, so it shows more than

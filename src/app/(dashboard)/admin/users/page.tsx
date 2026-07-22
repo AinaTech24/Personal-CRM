@@ -244,7 +244,7 @@ export default function UsersPage() {
                     <tr
                       key={u.id}
                       onClick={() => router.push(`/admin/users/${u.id}`)}
-                      className="cursor-pointer border-t border-border transition-colors hover:bg-accent/40"
+                      className="cursor-pointer border-t border-border transition-colors hover:bg-primary/10"
                     >
                       <td className="px-6 py-2.5 font-medium">{fullName(u)}</td>
                       <td className="px-6 py-2.5 text-muted-foreground">{u.email}</td>

@@ -242,7 +242,7 @@ export function QuotationsList() {
                     key={row.id}
                     onClick={() => onRowClick(row)}
                     className={cn(
-                      "group cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-accent/40",
+                      "group cursor-pointer border-b border-border last:border-0 transition-colors hover:bg-primary/10",
                       selected && "bg-accent/40"
                     )}
                   >
