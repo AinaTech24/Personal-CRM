@@ -364,7 +364,7 @@ function MeetingDialog({
                       key={u.id}
                       className={cn(
                         "flex items-center gap-3 border-b border-border/50 px-3 py-2 last:border-0",
-                        !readOnly && "cursor-pointer hover:bg-accent/50"
+                        !readOnly && "cursor-pointer hover:bg-primary/5"
                       )}
                     >
                       <Checkbox

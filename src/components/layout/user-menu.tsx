@@ -80,14 +80,14 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
             <DropdownMenu.Separator className="my-1 h-px bg-border" />
             <DropdownMenu.Item
               onSelect={() => setSettingsOpen(true)}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
+              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-primary/5"
             >
               <IconSettings className="h-3.5 w-3.5" />
               Settings
             </DropdownMenu.Item>
             <DropdownMenu.Item
               onSelect={() => setLogoutOpen(true)}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
+              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-primary/5"
             >
               <IconLogOut className="h-3.5 w-3.5" />
               Log out

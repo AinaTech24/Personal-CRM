@@ -122,7 +122,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   className={cn(
                     "pointer-events-auto absolute left-0 right-0 top-0 flex gap-3 rounded-lg border bg-popover px-3.5 py-3 text-popover-foreground shadow-lg",
                     t.description ? "items-start" : "items-center",
-                    t.onClick && "cursor-pointer transition-colors hover:bg-accent",
+                    t.onClick && "cursor-pointer transition-colors hover:bg-primary/5",
                     style.ring
                   )}
                 >

@@ -267,7 +267,7 @@ export default function UsersPage() {
                               type="button"
                               aria-label="Edit user"
                               onClick={() => openEdit(u)}
-                              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
                             >
                               <IconPencil className="h-4 w-4" />
                             </button>
@@ -278,7 +278,7 @@ export default function UsersPage() {
                               aria-label={u.isActive ? "Block user" : "Unblock user"}
                               onClick={() => toggleBlock(u)}
                               className={cn(
-                                "flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent",
+                                "flex h-8 w-8 items-center justify-center rounded-md hover:bg-primary/5",
                                 u.isActive ? "text-muted-foreground hover:text-amber-500" : "text-emerald-500"
                               )}
                             >
@@ -290,7 +290,7 @@ export default function UsersPage() {
                               type="button"
                               aria-label="Delete user"
                               onClick={() => setDeleteUser(u)}
-                              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-destructive"
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive"
                             >
                               <IconTrash className="h-4 w-4" />
                             </button>

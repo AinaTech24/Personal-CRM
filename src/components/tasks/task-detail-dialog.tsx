@@ -329,7 +329,7 @@ export function TaskDetailDialog({
                               target="_blank"
                               rel="noopener noreferrer nofollow"
                               aria-label={`Open ${a.fileName}`}
-                              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
                             >
                               <IconLink className="h-4 w-4" />
                             </a>
@@ -341,7 +341,7 @@ export function TaskDetailDialog({
                             type="button"
                             aria-label={`View ${a.fileName}`}
                             onClick={() => setViewingAttachment({ fileName: a.fileName, filePath: a.filePath })}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
                           >
                             <IconEye className="h-4 w-4" />
                           </button>
@@ -351,7 +351,7 @@ export function TaskDetailDialog({
                             href={`/api/uploads/${a.filePath}`}
                             download={a.fileName}
                             aria-label={`Download ${a.fileName}`}
-                            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
                           >
                             <IconDownload className="h-4 w-4" />
                           </a>

@@ -212,7 +212,7 @@ function NavButton({
       onClick={() => onSelect(item.id)}
       className={cn(
         "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors",
-        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-primary/5 hover:text-foreground"
       )}
     >
       <item.icon className="h-4 w-4 shrink-0" />
@@ -588,7 +588,7 @@ export function SettingsDialog({
                 onClick={() => setSection(item.id)}
                 className={cn(
                   "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                  section === item.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
+                  section === item.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-primary/5"
                 )}
               >
                 <item.icon className="h-3.5 w-3.5" />

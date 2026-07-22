@@ -92,7 +92,7 @@ function ColumnFilter({
               setOpen(false);
             }}
             className={cn(
-              "flex w-full items-center rounded px-2 py-1.5 text-left text-xs normal-case tracking-normal hover:bg-accent",
+              "flex w-full items-center rounded px-2 py-1.5 text-left text-xs normal-case tracking-normal hover:bg-primary/5",
               !value && "text-primary"
             )}
           >
@@ -107,7 +107,7 @@ function ColumnFilter({
                 setOpen(false);
               }}
               className={cn(
-                "flex w-full items-center rounded px-2 py-1.5 text-left text-xs normal-case tracking-normal hover:bg-accent",
+                "flex w-full items-center rounded px-2 py-1.5 text-left text-xs normal-case tracking-normal hover:bg-primary/5",
                 value === o && "text-primary"
               )}
             >
@@ -434,7 +434,7 @@ export default function ModulesManagementPage() {
             onClick={() => setActiveKey(m.key)}
             className={cn(
               "shrink-0 rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors",
-              m.key === activeKey ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
+              m.key === activeKey ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-primary/5"
             )}
           >
             {m.label}
@@ -472,7 +472,7 @@ export default function ModulesManagementPage() {
                 <button
                   type="button"
                   onClick={() => setFilters({})}
-                  className="shrink-0 whitespace-nowrap rounded-md border border-input px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="shrink-0 whitespace-nowrap rounded-md border border-input px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
                 >
                   Clear {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
                 </button>
@@ -552,7 +552,7 @@ export default function ModulesManagementPage() {
                                 type="button"
                                 aria-label={`View ${mod.nameOf(row)}`}
                                 onClick={() => setViewing(row)}
-                                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
                               >
                                 <IconEye className="h-4 w-4" />
                               </button>
@@ -562,7 +562,7 @@ export default function ModulesManagementPage() {
                                 <Link
                                   href={mod.hrefFor(row.id)}
                                   aria-label={`Open ${mod.nameOf(row)}`}
-                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
                                 >
                                   <IconExternalLink className="h-4 w-4" />
                                 </Link>
@@ -580,7 +580,7 @@ export default function ModulesManagementPage() {
                                     setRenaming(row);
                                     setRenameValue(mod.nameOf(row));
                                   }}
-                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
                                 >
                                   <IconPencil className="h-4 w-4" />
                                 </button>

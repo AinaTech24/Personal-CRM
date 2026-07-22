@@ -425,7 +425,7 @@ export function InvoiceDetailDialog({
                   type="button"
                   aria-label="Delete invoice"
                   onClick={() => setConfirmDeleteOpen(true)}
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-destructive"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive"
                 >
                   <IconTrash className="h-4 w-4" />
                 </button>

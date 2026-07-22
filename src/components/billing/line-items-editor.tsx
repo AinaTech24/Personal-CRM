@@ -109,7 +109,7 @@ export function LineItemsEditor({
             onClick={() => remove(index)}
             disabled={items.length === 1}
             aria-label="Remove line"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-destructive disabled:opacity-30"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive disabled:opacity-30"
           >
             <IconTrash className="h-4 w-4" />
           </button>

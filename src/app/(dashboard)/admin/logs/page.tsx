@@ -197,7 +197,7 @@ export default function AuditLogsPage() {
                 type="button"
                 aria-label="Filter by module"
                 className={cn(
-                  "relative flex h-9 w-9 items-center justify-center rounded-md border border-input transition-colors hover:bg-accent",
+                  "relative flex h-9 w-9 items-center justify-center rounded-md border border-input transition-colors hover:bg-primary/5",
                   model && "border-primary text-primary"
                 )}
               >
@@ -217,7 +217,7 @@ export default function AuditLogsPage() {
                     setFilterOpen(false);
                   }}
                   className={cn(
-                    "flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-accent",
+                    "flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-primary/5",
                     !model && "text-primary"
                   )}
                 >
@@ -233,7 +233,7 @@ export default function AuditLogsPage() {
                       setFilterOpen(false);
                     }}
                     className={cn(
-                      "flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-accent",
+                      "flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-primary/5",
                       model === m && "text-primary"
                     )}
                   >
@@ -253,7 +253,7 @@ export default function AuditLogsPage() {
               aria-label="Copy all logs"
               disabled={filtered.length === 0}
               onClick={copyAll}
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-input transition-colors hover:bg-accent disabled:opacity-40"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-input transition-colors hover:bg-primary/5 disabled:opacity-40"
             >
               <IconCopy className="h-4 w-4" />
             </button>
@@ -349,7 +349,7 @@ export default function AuditLogsPage() {
                                     e.stopPropagation();
                                     setViewing(log);
                                   }}
-                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
                                 >
                                   <IconEye className="h-4 w-4" />
                                 </button>
@@ -362,7 +362,7 @@ export default function AuditLogsPage() {
                                     e.stopPropagation();
                                     copyEntry(log);
                                   }}
-                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
                                 >
                                   <IconCopy className="h-4 w-4" />
                                 </button>

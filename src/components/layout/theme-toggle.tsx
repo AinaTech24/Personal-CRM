@@ -17,7 +17,7 @@ export function ThemeToggle() {
     <Tooltip label={theme === "dark" ? "Light mode" : "Dark mode"} side="bottom">
       <button
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent"
+        className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-primary/5"
         aria-label="Toggle theme"
       >
         {theme === "dark" ? <IconSun className="h-4 w-4" /> : <IconMoon className="h-4 w-4" />}

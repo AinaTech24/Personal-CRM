@@ -362,7 +362,7 @@ function RowIcon({
           onClick();
         }}
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+          "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground",
           danger && "hover:text-destructive"
         )}
       >

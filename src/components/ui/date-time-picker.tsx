@@ -144,7 +144,7 @@ function TimeStepper({
         tabIndex={-1}
         aria-label={`Increase ${label}`}
         onClick={() => onChange(value + 1 > max ? 0 : value + 1)}
-        className="flex h-5 w-9 items-center justify-center rounded text-xs text-muted-foreground hover:bg-accent"
+        className="flex h-5 w-9 items-center justify-center rounded text-xs text-muted-foreground hover:bg-primary/5"
       >
         +
       </button>
@@ -190,7 +190,7 @@ function TimeStepper({
         tabIndex={-1}
         aria-label={`Decrease ${label}`}
         onClick={() => onChange(value - 1 < 0 ? max : value - 1)}
-        className="flex h-5 w-9 items-center justify-center rounded text-xs text-muted-foreground hover:bg-accent"
+        className="flex h-5 w-9 items-center justify-center rounded text-xs text-muted-foreground hover:bg-primary/5"
       >
         −
       </button>

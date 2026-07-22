@@ -519,7 +519,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex h-9 items-center gap-2 rounded-md border border-input bg-transparent px-3 text-left text-sm text-muted-foreground hover:bg-accent"
+                      className="flex h-9 items-center gap-2 rounded-md border border-input bg-transparent px-3 text-left text-sm text-muted-foreground hover:bg-primary/5"
                     >
                       <IconPlus className="h-3.5 w-3.5 shrink-0" />
                       <span className="truncate">{pendingFile ? pendingFile.name : "Choose a file…"}</span>
@@ -562,7 +562,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
                   type="button"
                   aria-label={`View ${d.fileName}`}
                   onClick={() => setViewingAttachment({ fileName: d.fileName, filePath: d.filePath })}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
                 >
                   <IconEye className="h-4 w-4" />
                 </button>
@@ -570,7 +570,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
                   href={`/api/uploads/${d.filePath}`}
                   download={d.fileName}
                   aria-label={`Download ${d.fileName}`}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
                 >
                   <IconDownload className="h-4 w-4" />
                 </a>

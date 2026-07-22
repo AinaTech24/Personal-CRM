@@ -135,7 +135,7 @@ export function NotificationBell() {
       <Tooltip label="Notifications" side="bottom">
         <Popover.Trigger asChild>
           <button
-            className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent"
+            className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-primary/5"
             aria-label="Notifications"
           >
             <IconBell className="h-4 w-4" />
@@ -171,7 +171,7 @@ export function NotificationBell() {
                   onClick={markAllRead}
                   disabled={unreadCount === 0}
                   aria-label="Mark all as read"
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent"
                 >
                   <IconCheck className="h-4 w-4" />
                 </button>
@@ -181,7 +181,7 @@ export function NotificationBell() {
                   onClick={clearAll}
                   disabled={notifications.length === 0}
                   aria-label="Clear all"
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-destructive disabled:opacity-40 disabled:hover:bg-transparent"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-destructive disabled:opacity-40 disabled:hover:bg-transparent"
                 >
                   <IconTrash className="h-4 w-4" />
                 </button>
@@ -199,7 +199,7 @@ export function NotificationBell() {
                   key={n.id}
                   onClick={() => onNotificationClick(n)}
                   className={cn(
-                    "flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-accent",
+                    "flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-primary/5",
                     !n.readAt && "bg-accent/50"
                   )}
                 >

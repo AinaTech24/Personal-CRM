@@ -56,7 +56,7 @@ export function CalendarMonth({
         <button
           type="button"
           onClick={() => onViewMonthChange(subMonths(viewMonth, 1))}
-          className="flex h-6 w-6 items-center justify-center rounded hover:bg-accent"
+          className="flex h-6 w-6 items-center justify-center rounded hover:bg-primary/5"
         >
           <IconChevronLeft className="h-3.5 w-3.5" />
         </button>
@@ -64,7 +64,7 @@ export function CalendarMonth({
         <button
           type="button"
           onClick={() => onViewMonthChange(addMonths(viewMonth, 1))}
-          className="flex h-6 w-6 items-center justify-center rounded hover:bg-accent"
+          className="flex h-6 w-6 items-center justify-center rounded hover:bg-primary/5"
         >
           <IconChevronRight className="h-3.5 w-3.5" />
         </button>
@@ -92,7 +92,7 @@ export function CalendarMonth({
                 onClick={() => onPick(day)}
                 onMouseEnter={() => onHover?.(day)}
                 className={cn(
-                  "mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs transition-colors hover:bg-accent",
+                  "mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs transition-colors hover:bg-primary/5",
                   !inMonth && "text-muted-foreground/40",
                   st.selected && "bg-primary text-primary-foreground hover:bg-primary"
                 )}

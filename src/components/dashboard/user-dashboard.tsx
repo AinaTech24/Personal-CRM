@@ -175,7 +175,7 @@ export function UserDashboard({ firstName }: { firstName: string }) {
           {tasks.upcoming.map((t) => {
             const overdue = t.dueDate && parseISO(t.dueDate) < new Date();
             return (
-              <Link key={t.id} href="/tasks" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-accent/50">
+              <Link key={t.id} href="/tasks" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
                 <span className="min-w-0">
                   <span className="block truncate text-sm">{t.title}</span>
                   <span className="text-xs text-muted-foreground">{pretty(t.status)}</span>
@@ -193,7 +193,7 @@ export function UserDashboard({ firstName }: { firstName: string }) {
         {/* Meetings */}
         <Panel title="Upcoming meetings" href="/meetings" empty={meetings.length === 0} emptyLabel="Nothing scheduled.">
           {meetings.map((m) => (
-            <Link key={m.id} href="/meetings" className="flex flex-col gap-0.5 px-4 py-2.5 transition-colors hover:bg-accent/50">
+            <Link key={m.id} href="/meetings" className="flex flex-col gap-0.5 px-4 py-2.5 transition-colors hover:bg-primary/5">
               <span className="truncate text-sm">{m.title}</span>
               <span className="text-xs text-muted-foreground">
                 {whenLabel(m.startsAt)}
@@ -207,7 +207,7 @@ export function UserDashboard({ firstName }: { firstName: string }) {
         <div className="flex flex-col gap-4">
           <Panel title="Recent leads" href="/leads" empty={leads.recent.length === 0} emptyLabel="No active leads.">
             {leads.recent.map((l) => (
-              <Link key={l.id} href="/leads" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-accent/50">
+              <Link key={l.id} href="/leads" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
                 <span className="min-w-0">
                   <span className="block truncate text-sm">{l.name}</span>
                   {l.company && <span className="block truncate text-xs text-muted-foreground">{l.company}</span>}

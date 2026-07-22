@@ -164,7 +164,7 @@ export function CommandPalette() {
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Search"
-          className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
         >
           <IconSearch className="h-4 w-4" />
         </button>
@@ -196,7 +196,7 @@ export function CommandPalette() {
                     setQuery("");
                     inputRef.current?.focus();
                   }}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
                 >
                   <IconX className="h-3.5 w-3.5" />
                 </button>
@@ -227,7 +227,7 @@ export function CommandPalette() {
                           key={s}
                           type="button"
                           onClick={() => setQuery(s)}
-                          className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-accent"
+                          className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-primary/5"
                         >
                           <IconClock className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <span className="truncate">{s}</span>
@@ -283,7 +283,7 @@ function ResultRow({ result, onSelect, query = "" }: { result: SearchResult; onS
     <button
       type="button"
       onClick={() => onSelect(result)}
-      className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-accent"
+      className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-primary/5"
     >
       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1 truncate">

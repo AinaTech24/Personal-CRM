@@ -847,7 +847,7 @@ export function ChatView() {
                   if (!c.isSystem) setDeleteChat(c);
                 }}
                 className={cn(
-                  "group/chat relative border-b border-border/50 transition-colors hover:bg-accent/50",
+                  "group/chat relative border-b border-border/50 transition-colors hover:bg-primary/5",
                   activeId === c.id && "bg-accent/60"
                 )}
               >
@@ -968,7 +968,7 @@ export function ChatView() {
                     aria-label="Previous result"
                     disabled={searchMatches.length === 0}
                     onClick={() => stepSearch(-1)}
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground disabled:opacity-40"
                   >
                     <IconChevronUp className="h-4 w-4" />
                   </button>
@@ -977,7 +977,7 @@ export function ChatView() {
                     aria-label="Next result"
                     disabled={searchMatches.length === 0}
                     onClick={() => stepSearch(1)}
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground disabled:opacity-40"
                   >
                     <IconChevronDown className="h-4 w-4" />
                   </button>
@@ -988,7 +988,7 @@ export function ChatView() {
                       setSearchOpen(false);
                       setSearchQuery("");
                     }}
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
                   >
                     <IconX className="h-4 w-4" />
                   </button>
@@ -1046,7 +1046,7 @@ export function ChatView() {
                         <button
                           type="button"
                           onClick={() => scrollToMessage(item.firstMessageId)}
-                          className="rounded-full bg-muted/90 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-accent hover:text-foreground"
+                          className="rounded-full bg-muted/90 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-primary/5 hover:text-foreground"
                         >
                           {item.label}
                         </button>
@@ -1221,7 +1221,9 @@ export function ChatView() {
                     initial={{ opacity: 0, y: 8, scale: 0.97 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.97 }}
-                    className="absolute bottom-full left-3 mb-1 w-56 overflow-hidden rounded-xl border border-border bg-popover shadow-lg"
+                    // z-30: the day headings are sticky at z-10, and without this they
+                    // render over the list and eat the clicks on any name behind them.
+                    className="absolute bottom-full left-3 z-30 mb-1 w-56 overflow-hidden rounded-xl border border-border bg-popover shadow-lg"
                   >
                     {mentionMatches.map((u) => (
                       <button
@@ -1231,7 +1233,7 @@ export function ChatView() {
                           setDraft((prev) => prev.replace(/(^|\s)@([\w.]*)$/, `$1@${fullName(u)} `));
                           setMention(null);
                         }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-primary/5"
                       >
                         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
                           {initial(fullName(u))}
@@ -1549,7 +1551,7 @@ function MenuItem({ children, onClick, danger }: { children: ReactNode; onClick:
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-primary/5",
         danger && "text-destructive"
       )}
     >
@@ -1565,7 +1567,7 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
       aria-label={label}
       whileTap={{ scale: 0.9 }}
       onClick={onClick}
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
     >
       {children}
     </motion.button>
@@ -1689,7 +1691,7 @@ function MessageBubble({
       className={cn(
         "group flex items-end gap-2 rounded-lg px-0.5 py-0.5 transition-colors",
         mine ? "justify-end" : "justify-start",
-        selectMode && "cursor-pointer hover:bg-accent/40",
+        selectMode && "cursor-pointer hover:bg-primary/5",
         selected && "bg-primary/10"
       )}
     >
@@ -1984,7 +1986,7 @@ function LinkPreview({ url, mine }: { url: string; mine: boolean }) {
         "mt-1.5 block overflow-hidden rounded-lg border transition-colors",
         mine
           ? "border-primary-foreground/25 bg-primary-foreground/10 hover:bg-primary-foreground/15"
-          : "border-border bg-background/60 hover:bg-accent/50"
+          : "border-border bg-background/60 hover:bg-primary/5"
       )}
     >
       {data.image && (
@@ -2101,7 +2103,7 @@ function ForwardDialog({
               <p className="px-3 py-4 text-sm text-muted-foreground">No other chats.</p>
             ) : (
               conversations.map((c) => (
-                <label key={c.id} className="flex cursor-pointer items-center gap-3 border-b border-border/50 px-3 py-2 last:border-0 hover:bg-accent/50">
+                <label key={c.id} className="flex cursor-pointer items-center gap-3 border-b border-border/50 px-3 py-2 last:border-0 hover:bg-primary/5">
                   <Checkbox
                     checked={selected.has(c.id)}
                     onChange={() =>
@@ -2431,7 +2433,7 @@ function GroupInfoDialog({
                           type="button"
                           disabled={promoting === m.id}
                           onClick={() => setGroupAdmin(m.id, false)}
-                          className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                          className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground disabled:opacity-50"
                         >
                           {promoting === m.id ? "…" : "Remove admin"}
                         </button>
@@ -2441,7 +2443,7 @@ function GroupInfoDialog({
                             <button
                               type="button"
                               disabled={promoting === m.id}
-                              className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                              className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground disabled:opacity-50"
                             >
                               {promoting === m.id ? "…" : "Make admin"}
                             </button>
@@ -2462,7 +2464,7 @@ function GroupInfoDialog({
                                   key={opt.label}
                                   type="button"
                                   onClick={() => setGroupAdmin(m.id, true, opt.days)}
-                                  className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-accent"
+                                  className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-primary/5"
                                 >
                                   {opt.label}
                                 </button>
@@ -2584,7 +2586,7 @@ function NewConversationDialog({
             ) : (
               users.map((u) =>
                 mode === "group" && isAdmin ? (
-                  <label key={u.id} className="flex cursor-pointer items-center gap-3 border-b border-border/50 px-3 py-2 last:border-0 hover:bg-accent/50">
+                  <label key={u.id} className="flex cursor-pointer items-center gap-3 border-b border-border/50 px-3 py-2 last:border-0 hover:bg-primary/5">
                     <Checkbox
                       checked={selected.has(u.id)}
                       onChange={() =>
@@ -2605,7 +2607,7 @@ function NewConversationDialog({
                     type="button"
                     disabled={busy}
                     onClick={() => startDirect(u.id)}
-                    className="flex w-full items-center gap-3 border-b border-border/50 px-3 py-2 text-left last:border-0 hover:bg-accent/50 disabled:opacity-60"
+                    className="flex w-full items-center gap-3 border-b border-border/50 px-3 py-2 text-left last:border-0 hover:bg-primary/5 disabled:opacity-60"
                   >
                     <UserLabel user={u} />
                   </button>

@@ -1,44 +1,58 @@
-import { AsyncLocalStorage } from "node:async_hooks";
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
 
 /**
  * Who is making the current request.
  *
- * The audit extension runs deep inside Prisma, far from the request handler, so
- * the actor can't be passed down as an argument. AsyncLocalStorage carries it
- * across the awaits instead.
+ * Read from the session cookie at the moment of the write, rather than carried
+ * in AsyncLocalStorage. The obvious approach — setActor() inside
+ * getCurrentUser() — cannot work: enterWith() applies to that function's own
+ * async context, which is popped when its promise resolves, so the handler that
+ * awaited it never sees the value. Establishing the store around the whole
+ * request would need a wrapper Next doesn't offer for route handlers.
+ *
+ * Reading the cookie here costs a JWT verify per write, so the result is cached
+ * per token for the life of the process.
  */
 export interface Actor {
   id: string;
   name: string;
 }
 
-declare global {
-  var __auditStore: AsyncLocalStorage<Actor> | undefined;
-}
+const SESSION_COOKIE = "aina_session";
 
-// One store shared by every bundle. Next compiles route handlers and server
-// components separately, so a module-local instance gives the writer and the
-// reader two different stores and the actor never arrives.
-const store = globalThis.__auditStore ?? new AsyncLocalStorage<Actor>();
-globalThis.__auditStore = store;
+/** userId per token, so repeated writes in one request verify once. */
+const tokenToUserId = new Map<string, string>();
 
 /**
- * Marks the rest of this request as being made by `actor`.
+ * The signed-in user's id, or undefined outside a request.
  *
- * KNOWN GAP: this does not currently work. `enterWith` sets the store inside
- * getCurrentUser's own async context, which is popped when its promise
- * resolves, so the route handler that called it never sees the value and every
- * entry is logged with no actor. Fixing it needs the store established around
- * the whole request — a wrapper the handlers run inside — rather than set from
- * a function they await. Left in place because the rest of the log is useful
- * and this is additive when it lands.
+ * Verifies the JWT inline rather than importing from auth.ts: auth imports the
+ * database client, and the client imports this module, which would be a cycle.
  */
-export function setActor(actor: Actor) {
-  store.enterWith(actor);
-}
+export async function currentActorId(): Promise<string | undefined> {
+  try {
+    const store = await cookies();
+    const token = store.get(SESSION_COOKIE)?.value;
+    if (!token) return undefined;
 
-export function currentActor(): Actor | undefined {
-  return store.getStore();
+    const cached = tokenToUserId.get(token);
+    if (cached) return cached;
+
+    const secret = process.env.JWT_SECRET;
+    if (!secret) return undefined;
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
+    const userId = typeof payload.userId === "string" ? payload.userId : undefined;
+    if (userId) {
+      // Bounded so a long-lived process can't accumulate every token ever seen.
+      if (tokenToUserId.size > 500) tokenToUserId.clear();
+      tokenToUserId.set(token, userId);
+    }
+    return userId;
+  } catch {
+    // No request context (a script, a background job) or an invalid cookie.
+    return undefined;
+  }
 }
 
 /**

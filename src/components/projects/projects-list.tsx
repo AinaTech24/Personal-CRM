@@ -294,7 +294,7 @@ export function ProjectsList() {
                         <button
                           type="button"
                           aria-label="Project actions"
-                          className="flex h-7 w-7 items-center justify-center rounded-md bg-card/80 text-muted-foreground backdrop-blur hover:bg-accent hover:text-foreground"
+                          className="flex h-7 w-7 items-center justify-center rounded-md bg-card/80 text-muted-foreground backdrop-blur hover:bg-primary/5 hover:text-foreground"
                         >
                           <IconDots className="h-4 w-4" />
                         </button>
@@ -307,21 +307,21 @@ export function ProjectsList() {
                         >
                           <DropdownMenu.Item
                             onSelect={() => setEditProject(project)}
-                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-primary/5"
                           >
                             <IconPencil className="h-3.5 w-3.5" />
                             Edit
                           </DropdownMenu.Item>
                           <DropdownMenu.Item
                             onSelect={() => toggleDisabled(project)}
-                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-accent"
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-primary/5"
                           >
                             <IconPower className="h-3.5 w-3.5" />
                             {project.isActive ? "Disable" : "Enable"}
                           </DropdownMenu.Item>
                           <DropdownMenu.Item
                             onSelect={() => setDeleteTarget(project)}
-                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none hover:bg-accent"
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none hover:bg-primary/5"
                           >
                             <IconTrash className="h-3.5 w-3.5" />
                             Delete

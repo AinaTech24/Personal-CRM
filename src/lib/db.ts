@@ -3,11 +3,14 @@ import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { buildPoolConfig } from "@/lib/mysql-pool-config";
 import {
   AUDIT_IGNORED_MODELS,
-  currentActor,
+  currentActorId,
   describeRecord,
   humanModel,
   summariseChanges,
 } from "@/lib/audit";
+
+/** Display names by user id, so attribution costs one query per person. */
+const actorNames = new Map<string, string>();
 
 declare global {
   var __prisma: ReturnType<typeof createClient> | undefined;
@@ -49,9 +52,19 @@ function createClient() {
           const action = LOGGED_ACTIONS[operation];
           if (!action || !model || AUDIT_IGNORED_MODELS.has(model)) return result;
 
+          const actorId = await currentActorId();
+
           void (async () => {
             try {
-              const actor = currentActor();
+              let actorName = actorId ? actorNames.get(actorId) : undefined;
+              if (actorId && !actorName) {
+                const person = await base.user.findUnique({
+                  where: { id: actorId },
+                  select: { name: true, surname: true },
+                });
+                actorName = [person?.name, person?.surname].filter(Boolean).join(" ") || undefined;
+                if (actorName) actorNames.set(actorId, actorName);
+              }
               const input = (args as { data?: unknown; create?: unknown }).data ??
                 (args as { create?: unknown }).create;
 
@@ -75,8 +88,8 @@ function createClient() {
                     action === "delete"
                       ? undefined
                       : ((summariseChanges(input) ?? undefined) as Prisma.InputJsonValue | undefined),
-                  actorId: actor?.id ?? null,
-                  actorName: actor?.name ?? null,
+                  actorId: actorId ?? null,
+                  actorName: actorName ?? null,
                 },
               });
             } catch {

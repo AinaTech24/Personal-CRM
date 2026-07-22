@@ -96,7 +96,7 @@ export function Dropdown({
                   setOpen(false);
                 }}
                 className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent",
+                  "flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-primary/5",
                   opt.value === value && "bg-accent/60"
                 )}
               >

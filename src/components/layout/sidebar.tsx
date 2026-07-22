@@ -198,7 +198,7 @@ export function Sidebar({
           href={item.href}
           onClick={onNavigate}
           className={cn(
-            "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+            "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground",
             active && "bg-accent text-foreground"
           )}
         >
@@ -257,7 +257,7 @@ export function Sidebar({
             type="button"
             onClick={onToggle}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
           >
             <IconChevronLeft className={cn("h-4 w-4 transition-transform duration-300", collapsed && "rotate-180")} />
           </button>
