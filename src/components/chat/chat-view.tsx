@@ -40,6 +40,7 @@ import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { AnimatedEmoji, TextWithAnimatedEmoji, isEmojiOnly, countEmoji } from "@/components/ui/animated-emoji";
 import { NOTO_EMOJI, NOTO_CATEGORIES } from "@/lib/noto-emoji";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { displayUrl, extractUrls, tokenizeLinks } from "@/lib/links";
 import { tokenizeMentions } from "@/lib/mentions";
@@ -869,20 +870,27 @@ export function ChatView() {
                   {c.unread > 0 && <motion.span layout className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />}
                 </button>
 
-                {/* Appears on hover, bottom-right of the row. */}
+                {/* Appears on hover, bottom-right of the row. The reveal lives on
+                    the tooltip's wrapper because that is the positioned element
+                    now — the button inside it is static. */}
                 {!c.isSystem && (
-                  <button
-                    type="button"
-                    aria-label={`Delete chat with ${c.title}`}
-                    title="Delete chat permanently"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteChat(c);
-                    }}
-                    className="absolute bottom-1.5 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/chat:opacity-100"
+                  <Tooltip
+                    label="Delete chat permanently"
+                    side="left"
+                    wrapperClassName="absolute bottom-1.5 right-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover/chat:opacity-100"
                   >
-                    <IconTrash className="h-3.5 w-3.5" />
-                  </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete chat with ${c.title}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteChat(c);
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-muted-foreground shadow-sm transition-colors hover:text-destructive"
+                    >
+                      <IconTrash className="h-3.5 w-3.5" />
+                    </button>
+                  </Tooltip>
                 )}
               </div>
             );
@@ -1010,7 +1018,6 @@ export function ChatView() {
                     e.preventDefault();
                     setUnpinTarget(pinned[pinned.length - 1]);
                   }}
-                  title="Click to jump · right-click to unpin"
                   className="flex w-full items-center gap-2 overflow-hidden border-b border-border bg-amber-500/10 px-4 py-2 text-left text-xs"
                 >
                   <IconPin className="h-3.5 w-3.5 shrink-0 text-amber-500" />
