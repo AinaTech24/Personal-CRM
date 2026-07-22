@@ -19,7 +19,7 @@ import { Dropdown } from "@/components/ui/dropdown";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonForm } from "@/components/ui/skeleton";
 import { IconTrash, IconDownload } from "@/components/icons";
 import { formatMoney } from "@/lib/utils";
 import { LineItemsEditor, previewTotals } from "@/components/billing/line-items-editor";
@@ -217,8 +217,8 @@ export function InvoiceDetailDialog({
     <Dialog open={!!invoiceId} onOpenChange={(v) => !v && onClose()}>
       <DialogContent size="lg" className="max-h-[90vh]">
         {!invoice ? (
-          <div className="flex h-72 items-center justify-center">
-            <EightDotsRotate className="h-9 w-9" />
+          <div className="min-h-72 w-full">
+            <SkeletonForm fields={6} />
           </div>
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex min-h-0 flex-1 flex-col">

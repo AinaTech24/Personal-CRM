@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import { Dropdown } from "@/components/ui/dropdown";
 import { IconClock, IconCheck } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
@@ -130,7 +130,7 @@ export default function AttendancePage() {
 
       {loading && !data ? (
         <div className="flex justify-center min-h-[55vh] flex-1 items-center">
-          <EightDotsRotate className="h-9 w-9" />
+          <SkeletonTable rows={8} columns={5} />
         </div>
       ) : data ? (
         <>

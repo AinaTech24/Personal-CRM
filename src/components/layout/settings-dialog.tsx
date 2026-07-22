@@ -10,7 +10,7 @@ import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonForm } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { usePushNotifications } from "@/components/providers/use-push-notifications";
@@ -631,8 +631,8 @@ export function SettingsDialog({
 
             <div className="flex-1 overflow-y-auto p-4 pb-[calc(1rem+var(--safe-bottom,0px))] sm:p-6">
               {loading ? (
-                <div className="flex h-full items-center justify-center">
-                  <EightDotsRotate className="h-9 w-9" />
+                <div className="w-full p-4">
+                  <SkeletonForm fields={5} />
                 </div>
               ) : (
                 <motion.div
@@ -769,8 +769,8 @@ export function SettingsDialog({
                       <PushToggle />
 
                       {loadingNotif ? (
-                        <div className="flex justify-center min-h-[200px] flex-1 items-center">
-                          <EightDotsRotate className="h-7 w-7" />
+                        <div className="w-full">
+                          <SkeletonForm fields={5} />
                         </div>
                       ) : (
                         <div className="flex flex-col gap-2">
@@ -859,8 +859,8 @@ export function SettingsDialog({
                           )}
                         </div>
                         {loadingSessions ? (
-                          <div className="flex justify-center min-h-[200px] flex-1 items-center">
-                            <EightDotsRotate className="h-6 w-6" />
+                          <div className="w-full">
+                            <SkeletonForm fields={5} />
                           </div>
                         ) : (
                           <div className="flex flex-col gap-2">

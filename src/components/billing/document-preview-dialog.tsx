@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { Skeleton } from "@/components/ui/skeleton";
 import { IconDownload, IconShare } from "@/components/icons";
 
 /**
@@ -50,7 +50,7 @@ export function DocumentPreviewDialog({
             />
           ) : (
             <div className="flex h-full items-center justify-center bg-background">
-              <EightDotsRotate className="h-9 w-9" />
+              <Skeleton className="h-[60vh] w-full" />
             </div>
           )}
         </DialogBody>

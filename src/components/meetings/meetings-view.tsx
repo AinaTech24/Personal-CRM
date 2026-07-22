@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonList } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { IconPlus, IconClock, IconUsers } from "@/components/icons";
@@ -128,7 +128,7 @@ export function MeetingsView() {
 
       {loading ? (
         <div className="flex justify-center min-h-[55vh] flex-1 items-center">
-          <EightDotsRotate className="h-9 w-9" />
+          <SkeletonList rows={5} />
         </div>
       ) : meetings.length === 0 ? (
         <Card>

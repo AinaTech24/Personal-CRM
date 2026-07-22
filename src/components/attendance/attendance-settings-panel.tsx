@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonForm } from "@/components/ui/skeleton";
 import { IconTrash, IconPlus, IconMailCheck } from "@/components/icons";
 import { Dropdown } from "@/components/ui/dropdown";
 import { useToast } from "@/components/providers/toast-provider";
@@ -227,8 +227,8 @@ export function AttendanceSettingsPanel() {
 
   if (loading) {
     return (
-      <div className="flex justify-center min-h-[200px] flex-1 items-center">
-        <EightDotsRotate className="h-9 w-9" />
+      <div className="w-full">
+        <SkeletonForm fields={5} />
       </div>
     );
   }

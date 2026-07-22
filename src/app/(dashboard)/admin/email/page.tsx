@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonForm } from "@/components/ui/skeleton";
 import { IconEye, IconEyeOff } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { cn } from "@/lib/utils";
@@ -103,8 +103,8 @@ export default function EmailSettingsPage() {
       <Card className="w-full">
         <CardContent className="p-6">
           {loading ? (
-            <div className="flex h-48 items-center justify-center">
-              <EightDotsRotate className="h-9 w-9" />
+            <div className="min-h-48 w-full">
+              <SkeletonForm fields={5} />
             </div>
           ) : (
             <div className="flex flex-col gap-4">

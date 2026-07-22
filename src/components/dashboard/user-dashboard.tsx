@@ -5,7 +5,7 @@ import Link from "next/link";
 import { format, formatDistanceToNowStrict, isToday, isTomorrow, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import {
   IconClock,
   IconCheck,
@@ -85,7 +85,7 @@ export function UserDashboard({ firstName }: { firstName: string }) {
   if (loading) {
     return (
       <div className="flex min-h-[55vh] flex-1 items-center justify-center">
-        <EightDotsRotate className="h-9 w-9" />
+        <SkeletonTable rows={4} columns={4} />
       </div>
     );
   }

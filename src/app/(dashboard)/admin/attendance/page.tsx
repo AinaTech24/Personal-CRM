@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, useDialogState } from "@/components/ui/dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { IconFileSpreadsheet, IconSettings, IconCheck, IconX, IconPencil } from "@/components/icons";
@@ -261,7 +261,7 @@ export default function AdminAttendancePage() {
             />
           ) : (
             <div className="flex justify-center min-h-[55vh] flex-1 items-center">
-              <EightDotsRotate className="h-8 w-8" />
+              <SkeletonTable rows={8} columns={6} />
             </div>
           )}
         </CardContent>
@@ -310,7 +310,7 @@ export default function AdminAttendancePage() {
         <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center min-h-[55vh] flex-1 items-center">
-              <EightDotsRotate className="h-9 w-9" />
+              <SkeletonTable rows={8} columns={6} />
             </div>
           ) : records.length === 0 ? (
             <p className="px-4 py-12 text-center text-sm text-muted-foreground">No attendance records match these filters.</p>

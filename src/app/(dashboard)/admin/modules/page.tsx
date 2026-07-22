@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Dropdown } from "@/components/ui/dropdown";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle } from "@/components/ui/dialog";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonTable } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { IconExternalLink, IconEye, IconFilter, IconPencil, IconTrash } from "@/components/icons";
@@ -354,9 +354,7 @@ export default function ModulesManagementPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex min-h-[240px] items-center justify-center">
-              <EightDotsRotate className="h-7 w-7" />
-            </div>
+            <SkeletonTable rows={6} columns={5} />
           ) : filtered.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
               {rows.length === 0 ? `No ${mod.label.toLowerCase()} yet.` : "Nothing matches that search."}

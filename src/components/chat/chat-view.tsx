@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonList, SkeletonThread } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, useDialogState } from "@/components/ui/dialog";
 import {
   IconPlus,
@@ -813,8 +813,8 @@ export function ChatView() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <EightDotsRotate className="h-9 w-9" />
+      <div className="h-full">
+        <SkeletonList rows={6} />
       </div>
     );
   }
@@ -1028,9 +1028,7 @@ export function ChatView() {
                 thread rather than spilling over the sidebar or the page. */}
             <div ref={scrollRef} data-chat-thread className="flex-1 space-y-1 overflow-y-auto p-4">
               {loadingThread ? (
-                <div className="flex h-full flex-1 items-center justify-center">
-                  <EightDotsRotate className="h-7 w-7" />
-                </div>
+                <SkeletonThread rows={6} />
               ) : messages.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">No messages yet — say hello 👋</p>
               ) : (

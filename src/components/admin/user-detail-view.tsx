@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonForm } from "@/components/ui/skeleton";
 import { SummaryCards, type AttendanceSummaryData } from "@/components/attendance/summary-cards";
 import { IconChevronLeft } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -72,7 +72,7 @@ export function UserDetailView({ userId }: { userId: string }) {
   if (loading) {
     return (
       <div className="flex justify-center min-h-[55vh] flex-1 items-center">
-        <EightDotsRotate className="h-9 w-9" />
+        <SkeletonForm fields={6} />
       </div>
     );
   }

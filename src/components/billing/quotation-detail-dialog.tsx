@@ -19,7 +19,7 @@ import { Dropdown } from "@/components/ui/dropdown";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
-import { EightDotsRotate } from "@/components/ui/loader";
+import { SkeletonForm } from "@/components/ui/skeleton";
 import { IconTrash, IconDownload, IconCheck, IconX } from "@/components/icons";
 import { formatMoney } from "@/lib/utils";
 import { LineItemsEditor, previewTotals } from "@/components/billing/line-items-editor";
@@ -197,8 +197,8 @@ export function QuotationDetailDialog({
     <Dialog open={!!quotationId} onOpenChange={(v) => !v && onClose()}>
       <DialogContent size="lg" className="max-h-[90vh]">
         {!quotation ? (
-          <div className="flex h-72 items-center justify-center">
-            <EightDotsRotate className="h-9 w-9" />
+          <div className="min-h-72 w-full">
+            <SkeletonForm fields={6} />
           </div>
         ) : (
           <motion.div
