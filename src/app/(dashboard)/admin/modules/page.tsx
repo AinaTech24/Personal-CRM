@@ -10,6 +10,10 @@ import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import { Dropdown } from "@/components/ui/dropdown";
+import { Textarea } from "@/components/ui/textarea";
+import { coerceForSave, editableFields, toDateInput } from "@/lib/admin-fields";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { IconChevronDown, IconExternalLink, IconEye, IconPencil, IconTrash } from "@/components/icons";
@@ -183,6 +187,9 @@ export default function ModulesManagementPage() {
   const [renameValue, setRenameValue] = useState("");
   const [viewing, setViewing] = useState<Row | null>(null);
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<Record<string, unknown>>({});
 
   const mod: ModuleConfig = moduleByKey(activeKey);
 
@@ -291,6 +298,56 @@ export default function ModulesManagementPage() {
       await load();
     } finally {
       // ConfirmDialog owns the busy state while onConfirm runs.
+    }
+  }
+
+  function startEditing(row: Row) {
+    const seed: Record<string, unknown> = {};
+    for (const f of editableFields(row, rows)) seed[f.key] = f.value;
+    setDraft(seed);
+    setEditing(true);
+  }
+
+  /**
+   * Saves only what changed.
+   *
+   * Sending the whole record would overwrite fields this console never showed,
+   * and would fail validation on any the endpoint treats as read-only. A diff
+   * also means opening and closing the form writes nothing at all.
+   */
+  async function saveEdits() {
+    if (!viewing) return;
+    const fields = editableFields(viewing, rows);
+    const patch: Record<string, unknown> = {};
+    for (const f of fields) {
+      const next = coerceForSave(f.kind, draft[f.key] as string | boolean);
+      const before =
+        f.kind === "date" ? (f.value ? new Date(String(f.value)).toISOString() : null) : f.value;
+      if (JSON.stringify(next) !== JSON.stringify(before)) patch[f.key] = next;
+    }
+    if (Object.keys(patch).length === 0) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`${mod.basePath}/${viewing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // The endpoint knows which field it rejected; pass that through.
+        toast.error("Couldn't save", data.error);
+        return;
+      }
+      toast.success("Saved");
+      setEditing(false);
+      setViewing(null);
+      await load();
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -525,13 +582,13 @@ export default function ModulesManagementPage() {
       {/* Every field the console holds for a record, without leaving the page.
           Built from the payload rather than the columns, so it shows more than
           the table had room for. */}
-      <Dialog open={!!viewing} onOpenChange={(v) => !v && setViewing(null)}>
+      <Dialog open={!!viewing} onOpenChange={(v) => { if (!v) { setViewing(null); setEditing(false); } }}>
         <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle className="truncate pr-6">{viewing ? mod.nameOf(viewing) : ""}</DialogTitle>
           </DialogHeader>
           <DialogBody>
-            {viewing && (
+            {viewing && !editing && (
               <dl className="flex flex-col divide-y divide-border text-sm">
                 {readableFields(viewing).map(([key, value]) => (
                   <div key={key} className="flex gap-4 py-1.5">
@@ -541,17 +598,91 @@ export default function ModulesManagementPage() {
                 ))}
               </dl>
             )}
+
+            {viewing && editing && (
+              <div className="flex flex-col gap-3">
+                {editableFields(viewing, rows).map((f) => {
+                  const current = draft[f.key];
+                  return (
+                    <div key={f.key} className="flex flex-col gap-1.5">
+                      <Label htmlFor={`edit-${f.key}`}>{f.label}</Label>
+                      {f.kind === "boolean" ? (
+                        <Dropdown
+                          id={`edit-${f.key}`}
+                          value={String(current ?? false)}
+                          onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v === "true" }))}
+                          options={[
+                            { value: "true", label: "Yes" },
+                            { value: "false", label: "No" },
+                          ]}
+                        />
+                      ) : f.kind === "enum" ? (
+                        <Dropdown
+                          id={`edit-${f.key}`}
+                          value={String(current ?? "")}
+                          onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
+                          options={(f.options ?? []).map((o) => ({ value: o, label: o.replace(/_/g, " ").toLowerCase() }))}
+                        />
+                      ) : f.kind === "date" ? (
+                        <Input
+                          id={`edit-${f.key}`}
+                          type="date"
+                          value={toDateInput(current)}
+                          onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                        />
+                      ) : f.kind === "number" ? (
+                        <Input
+                          id={`edit-${f.key}`}
+                          type="number"
+                          value={current === null || current === undefined ? "" : String(current)}
+                          onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                        />
+                      ) : f.kind === "textarea" ? (
+                        <Textarea
+                          id={`edit-${f.key}`}
+                          value={String(current ?? "")}
+                          onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                        />
+                      ) : (
+                        <Input
+                          id={`edit-${f.key}`}
+                          value={String(current ?? "")}
+                          onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </DialogBody>
-          {viewing && mod.hrefFor && (
-            <DialogFooter>
+
+          <DialogFooter>
+            {viewing && !editing && mod.hrefFor && (
               <Link href={mod.hrefFor(viewing.id)}>
                 <Button type="button" variant="outline" className="gap-1.5">
                   <IconExternalLink className="h-4 w-4" />
                   Open in {mod.label}
                 </Button>
               </Link>
-            </DialogFooter>
-          )}
+            )}
+            {viewing && !editing && (
+              <Button type="button" onClick={() => startEditing(viewing)} className="gap-1.5">
+                <IconPencil className="h-4 w-4" />
+                Edit
+              </Button>
+            )}
+            {viewing && editing && (
+              <>
+                <Button type="button" variant="outline" onClick={() => setEditing(false)} disabled={saving}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={saveEdits} disabled={saving}>
+                  {saving ? "Saving…" : "Save changes"}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -22,6 +22,7 @@ import {
   IconGrid,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSocket } from "@/components/providers/socket-provider";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +75,10 @@ export function Sidebar({
   const [pendingCount, setPendingCount] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
+  // Admins see every module, so their nav is correct on first paint. Everyone
+  // else has to wait for the visibility list — without this the full nav
+  // renders and then items vanish as the answer arrives.
+  const [navReady, setNavReady] = useState(isAdmin);
   const { socket } = useSocket();
 
   // Which modules an admin has hidden from regular users. Admins see everything.
@@ -85,7 +90,11 @@ export function Sidebar({
       .then((d) => {
         if (active) setHiddenModules(Array.isArray(d.hiddenModules) ? d.hiddenModules : []);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        // Ready either way: a failed fetch shows the full nav rather than none.
+        if (active) setNavReady(true);
+      });
     return () => {
       active = false;
     };
@@ -254,11 +263,19 @@ export function Sidebar({
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 py-2">
-        {visibleMainNav.map((item) => {
+        {!navReady
+          ? // Placeholder rows while we learn which modules this user may see.
+            Array.from({ length: mainNav.length }, (_, i) => (
+              <div key={i} className="flex items-center gap-2.5 px-2.5 py-2">
+                <Skeleton className="h-4 w-4 shrink-0" />
+                {!collapsed && <Skeleton className="h-3.5 flex-1" />}
+              </div>
+            ))
+          : visibleMainNav.map((item) => {
           const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
           if (item.href === "/messages") return renderItem(item, active, unreadMessages, "count");
           return renderItem(item, active);
-        })}
+            })}
 
         {isAdmin && (
           <>
