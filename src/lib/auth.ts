@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import type { Role } from "@/generated/prisma/enums";
 import { db } from "@/lib/db";
+import { setActor } from "@/lib/audit";
 
 const SESSION_COOKIE = "aina_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
@@ -146,6 +147,8 @@ export async function getCurrentUser() {
   });
 
   if (!user || !user.isActive) return null;
+  // Tag the rest of this request so the audit extension knows who is acting.
+  setActor({ id: user.id, name: [user.name, user.surname].filter(Boolean).join(" ") });
   return user;
 }
 

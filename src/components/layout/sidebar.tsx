@@ -20,6 +20,7 @@ import {
   IconMessage,
   IconChevronLeft,
   IconGrid,
+  IconHistory,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -46,6 +47,7 @@ const mainNav: NavItem[] = [
 
 const adminNav: NavItem[] = [
   { href: "/admin/modules", label: "Modules", icon: IconGrid },
+  { href: "/admin/logs", label: "View logs", icon: IconHistory },
   { href: "/admin/departments", label: "Departments", icon: IconBuilding },
   { href: "/admin/users", label: "Users & Invites", icon: IconUsers },
   { href: "/admin/attendance", label: "Attendance", icon: IconClock },

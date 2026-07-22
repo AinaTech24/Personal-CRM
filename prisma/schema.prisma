@@ -98,6 +98,7 @@ model User {
   messagesSent            Message[]            @relation("MessageSender")
   messageReactions        MessageReaction[]    @relation("MessageReactionUser")
   pushSubscriptions       PushSubscription[]
+  auditLogs               AuditLog[]           @relation("AuditActor")
 }
 
 /// A browser/device push endpoint, so a user can be notified about a new
@@ -978,4 +979,31 @@ model MessageAttachment {
   createdAt DateTime @default(now())
 
   @@index([messageId])
+}
+
+/// Every write in the CRM, recorded automatically.
+///
+/// Written by a Prisma extension rather than by each route, so a new endpoint
+/// is covered the day it's added instead of the day someone remembers to log
+/// from it.
+model AuditLog {
+  id        String   @id @default(cuid())
+  /// Prisma model name — "Lead", "Task", "User"…
+  model     String
+  /// create | update | delete
+  action    String
+  /// Primary key of the affected row, when the operation exposes one.
+  recordId  String?
+  /// Human-readable summary, e.g. "Lead \"Acme Corp\" updated".
+  summary   String   @db.Text
+  /// The changed fields, as JSON. Null for deletes.
+  changes   Json?
+  actorId   String?
+  actor     User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorName String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([model, recordId])
+  @@index([actorId])
 }

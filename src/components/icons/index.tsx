@@ -504,6 +504,16 @@ export function IconFilter(props: IconProps) {
   );
 }
 
+export function IconHistory(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1" />
+      <path d="M3.5 4.5V9H8" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+
 export function IconGrid(props: IconProps) {
   return (
     <svg {...base(props)}>
