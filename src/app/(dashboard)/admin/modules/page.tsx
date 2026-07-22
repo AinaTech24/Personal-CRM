@@ -15,10 +15,32 @@ import { EightDotsRotate } from "@/components/ui/loader";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { IconExternalLink, IconEye, IconFilter, IconPencil, IconTrash } from "@/components/icons";
-import { ADMIN_MODULES, moduleByKey, type ModuleConfig } from "@/lib/admin-modules";
+import { ADMIN_MODULES, moduleByKey, type ModuleColumn, type ModuleConfig } from "@/lib/admin-modules";
 import { cn } from "@/lib/utils";
 
 type Row = Record<string, unknown> & { id: string };
+
+/** One cell's worth of text from an arbitrary payload value. */
+function cellText(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (typeof value === "string") {
+    if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+      const d = new Date(value);
+      if (!Number.isNaN(d.getTime())) return d.toLocaleDateString();
+    }
+    // Enum-looking values read better lowercased than shouted.
+    if (/^[A-Z][A-Z_]+$/.test(value)) return value.replace(/_/g, " ").toLowerCase();
+    return value;
+  }
+  if (typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    const name = o.name ?? o.title ?? o.email;
+    return name ? String(name) : "—";
+  }
+  return String(value);
+}
 
 /** `createdAt` → "Created at". */
 function humanize(key: string) {
@@ -111,13 +133,48 @@ export default function ModulesManagementPage() {
     load();
   }, [load]);
 
-  const filterableColumns = useMemo(() => mod.columns.filter((c) => c.filterable), [mod]);
+  /**
+   * Every field the payload carries, not just the curated few.
+   *
+   * Derived from the rows rather than listed per module: the configs would
+   * otherwise need updating each time a model gains a field, and would quietly
+   * omit it until someone noticed. Curated columns keep their order and stay
+   * visible on a phone; the rest follow, hidden below `sm` and reachable by
+   * scrolling the table sideways.
+   */
+  const columns = useMemo(() => {
+    const configured = mod.columns;
+    const taken = new Set(configured.map((c) => c.key));
+    const extras: ModuleColumn[] = [];
+
+    for (const row of rows) {
+      for (const key of Object.keys(row)) {
+        if (taken.has(key)) continue;
+        if (key === "id" || key.endsWith("Id") || key === "_count") continue;
+        const sample = row[key];
+        if (sample === null || sample === undefined) continue;
+        // Arrays and blobs don't belong in a cell; the view dialog summarises them.
+        if (Array.isArray(sample)) continue;
+        if (typeof sample === "string" && sample.startsWith("data:")) continue;
+        taken.add(key);
+        extras.push({
+          key,
+          label: humanize(key),
+          secondary: true,
+          get: (r) => cellText(r[key]),
+        });
+      }
+    }
+    return [...configured, ...extras];
+  }, [mod, rows]);
+
+  const filterableColumns = useMemo(() => columns.filter((c) => c.filterable), [columns]);
   const activeFilterCount = Object.keys(filters).length;
 
   /** Distinct values for a column, taken from the rows on screen. */
   const optionsFor = useCallback(
     (columnKey: string) => {
-      const col = mod.columns.find((c) => c.key === columnKey);
+      const col = columns.find((c) => c.key === columnKey);
       if (!col) return [];
       const seen = new Set<string>();
       for (const row of rows) {
@@ -135,9 +192,9 @@ export default function ModulesManagementPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((row) => {
-      if (q && !mod.columns.some((c) => c.get(row).toLowerCase().includes(q))) return false;
+      if (q && !columns.some((c) => c.get(row).toLowerCase().includes(q))) return false;
       return Object.entries(filters).every(([key, want]) => {
-        const col = mod.columns.find((c) => c.key === key);
+        const col = columns.find((c) => c.key === key);
         return !col || col.get(row) === want;
       });
     });
@@ -190,7 +247,7 @@ export default function ModulesManagementPage() {
             type="button"
             onClick={() => setActiveKey(m.key)}
             className={cn(
-              "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
+              "shrink-0 rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors",
               m.key === activeKey ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
             )}
           >
@@ -199,10 +256,11 @@ export default function ModulesManagementPage() {
         ))}
       </div>
 
-      {/* mode="wait" so the outgoing tab finishes before the next arrives —
-          overlapping them cross-fades two tables of different heights and the
-          card jumps. */}
-      <AnimatePresence mode="wait" initial={false}>
+      {/* Deliberately not mode="wait". That holds the incoming tab back until
+          the outgoing one's exit finishes, so anywhere those animations stall —
+          a throttled tab, reduced motion — the content never changes at all.
+          Cross-fading can jog the card height; a tab that ignores you is worse. */}
+      <AnimatePresence initial={false}>
         <motion.div
           key={activeKey}
           initial={{ opacity: 0, y: 8 }}
@@ -310,7 +368,7 @@ export default function ModulesManagementPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    {mod.columns.map((c) => (
+                    {columns.map((c) => (
                       <th key={c.key} className={cn("px-2 py-2 font-medium", c.secondary && "hidden sm:table-cell")}>
                         {c.label}
                       </th>
@@ -321,7 +379,7 @@ export default function ModulesManagementPage() {
                 <tbody>
                   {filtered.map((row) => (
                     <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/40">
-                      {mod.columns.map((c) => (
+                      {columns.map((c) => (
                         <td
                           key={c.key}
                           className={cn("max-w-[220px] truncate px-2 py-2", c.secondary && "hidden sm:table-cell")}
