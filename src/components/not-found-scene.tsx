@@ -40,8 +40,8 @@ export function NotFoundScene({ onReady }: { onReady?: (ok: boolean) => void }) 
       return;
     }
 
-    const width = mount.clientWidth || 360;
-    const height = mount.clientHeight || 260;
+    const width = mount.clientWidth || window.innerWidth;
+    const height = mount.clientHeight || window.innerHeight;
     // Capped: a phone at DPR 3 would render nine times the pixels for no
     // visible gain on a decorative scene.
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -50,7 +50,7 @@ export function NotFoundScene({ onReady }: { onReady?: (ok: boolean) => void }) 
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
-    camera.position.z = 6;
+    camera.position.z = 7.5;
 
     // Read the brand colour from the theme rather than hardcoding it, so the
     // scene follows if the palette changes.
@@ -58,37 +58,40 @@ export function NotFoundScene({ onReady }: { onReady?: (ok: boolean) => void }) 
     const brandColor = new THREE.Color(brand);
 
     const shell = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.9, 1),
+      new THREE.IcosahedronGeometry(2.6, 1),
       new THREE.MeshBasicMaterial({ color: brandColor, wireframe: true, transparent: true, opacity: 0.85 })
     );
     scene.add(shell);
 
     const core = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.15, 0),
+      new THREE.IcosahedronGeometry(1.6, 0),
       new THREE.MeshBasicMaterial({ color: brandColor, transparent: true, opacity: 0.12 })
     );
     scene.add(core);
 
     // Starfield.
-    const STAR_COUNT = 420;
+    // Scaled to the viewport: a fixed count that looks right on a phone leaves
+    // a desktop screen looking empty, and a fixed spread would clip on a wide one.
+    const STAR_COUNT = Math.round(Math.min(1600, Math.max(500, (width * height) / 1400)));
+    const spreadX = 40 * Math.max(1, width / height);
     const positions = new Float32Array(STAR_COUNT * 3);
     for (let i = 0; i < STAR_COUNT; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 18;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 12;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 12 - 3;
+      positions[i * 3] = (Math.random() - 0.5) * spreadX;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 30;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 24 - 4;
     }
     const starGeo = new THREE.BufferGeometry();
     starGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const starMat = new THREE.PointsMaterial({ color: 0x9a9aa6, size: 0.045, transparent: true, opacity: 0.7 });
+    const starMat = new THREE.PointsMaterial({ color: 0x9a9aa6, size: 0.06, transparent: true, opacity: 0.7 });
     const stars = new THREE.Points(starGeo, starMat);
     scene.add(stars);
 
     // Pointer lean, eased so the scene follows rather than snaps.
     const target = { x: 0, y: 0 };
     const onPointer = (e: PointerEvent) => {
-      const r = mount.getBoundingClientRect();
-      target.x = ((e.clientX - r.left) / r.width - 0.5) * 0.6;
-      target.y = ((e.clientY - r.top) / r.height - 0.5) * 0.6;
+      // Against the viewport, not the element: the canvas is the whole page now.
+      target.x = (e.clientX / window.innerWidth - 0.5) * 0.5;
+      target.y = (e.clientY / window.innerHeight - 0.5) * 0.5;
     };
     window.addEventListener("pointermove", onPointer);
 
@@ -141,5 +144,5 @@ export function NotFoundScene({ onReady }: { onReady?: (ok: boolean) => void }) 
   }, [onReady]);
 
   if (failed) return null;
-  return <div ref={mountRef} className="h-[260px] w-full max-w-[420px]" aria-hidden />;
+  return <div ref={mountRef} className="h-full w-full" aria-hidden />;
 }

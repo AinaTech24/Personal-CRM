@@ -26,7 +26,10 @@ export default function NotFound() {
 
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-6 bg-background px-6 text-center">
-      <div className="relative flex h-[260px] w-full max-w-[420px] items-center justify-center">
+      {/* Fills the viewport behind everything. Fixed rather than absolute so
+          it stays put if the content ever grows past one screen, and
+          pointer-events-none so the return link stays clickable through it. */}
+      <div className="pointer-events-none fixed inset-0 -z-10">
         {!webglReady && (
           <svg
             width="320"
@@ -35,7 +38,7 @@ export default function NotFound() {
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
             aria-hidden
-            className="absolute"
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
           >
             {/* soft orbit ring behind the 0 */}
             <g transform="translate(160 100)">
@@ -80,13 +83,13 @@ export default function NotFound() {
 
         {/* The numerals sit over the scene rather than inside it — text drawn
             in WebGL would need a font atlas and wouldn't be selectable. */}
-        {webglReady && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-between px-2">
-            <span className="text-7xl font-extrabold text-foreground/90 drop-shadow-sm">4</span>
-            <span className="text-7xl font-extrabold text-foreground/90 drop-shadow-sm">4</span>
-          </div>
-        )}
       </div>
+
+      {/* Sits above the scene, so the numerals read against it rather than
+          competing with the shell in the middle. */}
+      <p className="pointer-events-none select-none text-[clamp(5rem,22vw,14rem)] font-extrabold leading-none tracking-tight text-foreground/10">
+        404
+      </p>
 
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold">Lost in space</h1>
