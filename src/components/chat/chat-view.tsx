@@ -16,6 +16,9 @@ import {
   IconSend,
   IconUsers,
   IconChevronLeft,
+  IconChevronUp,
+  IconChevronDown,
+  IconSearch,
   IconSmile,
   IconPaperclip,
   IconX,
@@ -209,6 +212,9 @@ export function ChatView() {
   const [deleteChat, setDeleteChat] = useState<Conversation | null>(null);
   const [reactPickerFor, setReactPickerFor] = useState<Message | null>(null);
   const [infoUser, setInfoUser] = useState<ChatUser | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchIndex, setSearchIndex] = useState(0);
   // These dialogs only exist while there's something to show them for, so they
   // need their subject kept alive through the close animation.
   const infoUserDialog = useDialogState(infoUser);
@@ -472,12 +478,16 @@ export function ChatView() {
   // apart. Flattened rather than wrapped in fragments: AnimatePresence tracks
   // its direct children, and a fragment would hide the bubbles from it.
   const threadItems = useMemo(() => {
-    const items: ({ kind: "day"; key: string; label: string } | { kind: "message"; key: string; message: Message })[] = [];
+    const items: (
+      | { kind: "day"; key: string; label: string; firstMessageId: string }
+      | { kind: "message"; key: string; message: Message }
+    )[] = [];
     let lastDay: string | null = null;
     for (const m of messages) {
       const day = dayKey(m.createdAt);
       if (day !== lastDay) {
-        items.push({ kind: "day", key: `day-${day}`, label: dayLabel(m.createdAt) });
+        // Carries the day's first message so the heading can jump back to it.
+        items.push({ kind: "day", key: `day-${day}`, label: dayLabel(m.createdAt), firstMessageId: m.id });
         lastDay = day;
       }
       items.push({ kind: "message", key: m.id, message: m });
@@ -765,6 +775,42 @@ export function ChatView() {
     document.getElementById(`msg-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
+  /**
+   * Messages matching the search, oldest first.
+   *
+   * Matched on the body text only — attachments and reply quotes aren't the
+   * thing being searched, and a deleted message has no text to find.
+   */
+  const searchMatches = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return messages.filter((m) => !m.deletedForEveryone && m.body.toLowerCase().includes(q)).map((m) => m.id);
+  }, [messages, searchQuery]);
+
+  // Jump to whichever result is current. Clamped rather than wrapped by the
+  // caller so the index can never point past the list after a re-search.
+  useEffect(() => {
+    if (!searchOpen || searchMatches.length === 0) return;
+    const id = searchMatches[Math.min(searchIndex, searchMatches.length - 1)];
+    if (id) scrollToMessage(id);
+  }, [searchOpen, searchMatches, searchIndex]);
+
+  // A new query starts from the newest match, which is what you're looking at.
+  useEffect(() => {
+    setSearchIndex(Math.max(0, searchMatches.length - 1));
+  }, [searchMatches.length]);
+
+  function stepSearch(delta: number) {
+    if (searchMatches.length === 0) return;
+    setSearchIndex((prev) => {
+      const next = prev + delta;
+      // Wrap, so stepping past either end continues rather than dead-ending.
+      return (next + searchMatches.length) % searchMatches.length;
+    });
+  }
+
+  const activeMatchId = searchMatches[Math.min(searchIndex, Math.max(0, searchMatches.length - 1))] ?? null;
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -864,6 +910,16 @@ export function ChatView() {
                 </p>
               </div>
 
+              <IconButton
+                label="Search in chat"
+                onClick={() => {
+                  setSearchOpen((v) => !v);
+                  if (searchOpen) setSearchQuery("");
+                }}
+              >
+                <IconSearch className="h-4.5 w-4.5" />
+              </IconButton>
+
               {/* Quick info: contact card for a direct chat, group info for a group. */}
               <IconButton
                 label="Info"
@@ -876,6 +932,66 @@ export function ChatView() {
               </IconButton>
 
             </div>
+
+            {/* Search bar — appears under the header while searching. */}
+            {searchOpen && (
+              <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+                <IconSearch className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <input
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search in this chat…"
+                  onKeyDown={(e) => {
+                    // Enter walks results the way a browser's find does.
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      stepSearch(e.shiftKey ? -1 : 1);
+                    } else if (e.key === "Escape") {
+                      setSearchOpen(false);
+                      setSearchQuery("");
+                    }
+                  }}
+                  className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                />
+                {searchQuery.trim() && (
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                    {searchMatches.length === 0 ? "No results" : `${searchIndex + 1} of ${searchMatches.length}`}
+                  </span>
+                )}
+                <div className="flex shrink-0 items-center">
+                  <button
+                    type="button"
+                    aria-label="Previous result"
+                    disabled={searchMatches.length === 0}
+                    onClick={() => stepSearch(-1)}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                  >
+                    <IconChevronUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Next result"
+                    disabled={searchMatches.length === 0}
+                    onClick={() => stepSearch(1)}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+                  >
+                    <IconChevronDown className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Close search"
+                    onClick={() => {
+                      setSearchOpen(false);
+                      setSearchQuery("");
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <IconX className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Pinned bar */}
             <AnimatePresence initial={false}>
@@ -921,10 +1037,18 @@ export function ChatView() {
                 <AnimatePresence initial={false}>
                   {threadItems.map((item) =>
                     item.kind === "day" ? (
-                      <div key={item.key} className="flex items-center justify-center py-2">
-                        <span className="rounded-full bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
+                      // Pinned to the top of the thread while that day's
+                      // messages scroll past, so you always know what you're
+                      // looking at. Clicking it returns to the day's first
+                      // message.
+                      <div key={item.key} className="sticky top-0 z-10 flex items-center justify-center py-2">
+                        <button
+                          type="button"
+                          onClick={() => scrollToMessage(item.firstMessageId)}
+                          className="rounded-full bg-muted/90 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-accent hover:text-foreground"
+                        >
                           {item.label}
-                        </span>
+                        </button>
                       </div>
                     ) : (
                       ((m) => (
@@ -932,6 +1056,8 @@ export function ChatView() {
                       key={m.id}
                       message={m}
                       members={users}
+                      highlight={searchOpen ? searchQuery.trim() : ""}
+                      isActiveMatch={item.message.id === activeMatchId}
                       mine={m.senderId === me.id}
                       group={active.type === "GROUP"}
                       status={statusOf(m)}
@@ -1442,6 +1568,43 @@ function StatusTicks({ status }: { status: "sent" | "delivered" | "seen" }) {
   return <span className={cn("text-[10px]", status === "seen" ? "text-sky-300" : "opacity-70")}>✓✓</span>;
 }
 
+/**
+ * Wraps every occurrence of the search text.
+ *
+ * Case-insensitive but preserves what was actually typed in the message, so a
+ * search for "ok" doesn't rewrite "OK" in the thread. The current result is
+ * tinted differently from the rest, which is the only way to tell which one the
+ * up/down arrows are sitting on.
+ */
+function Highlighted({ text, query, active }: { text: string; query: string; active: boolean }) {
+  const q = query.trim();
+  if (!q) return <>{text}</>;
+
+  const parts: React.ReactNode[] = [];
+  const lower = text.toLowerCase();
+  const needle = q.toLowerCase();
+  let from = 0;
+  for (;;) {
+    const at = lower.indexOf(needle, from);
+    if (at === -1) break;
+    if (at > from) parts.push(text.slice(from, at));
+    parts.push(
+      <mark
+        key={at}
+        className={cn(
+          "rounded-sm px-0.5",
+          active ? "bg-amber-400 text-black" : "bg-amber-400/40 text-inherit"
+        )}
+      >
+        {text.slice(at, at + q.length)}
+      </mark>
+    );
+    from = at + q.length;
+  }
+  if (from < text.length) parts.push(text.slice(from));
+  return <>{parts}</>;
+}
+
 function MessageBubble({
   message: m,
   mine,
@@ -1459,6 +1622,8 @@ function MessageBubble({
   onSelectToggle,
   onSenderClick,
   members,
+  highlight,
+  isActiveMatch,
 }: {
   message: Message;
   mine: boolean;
@@ -1477,6 +1642,10 @@ function MessageBubble({
   onSenderClick: () => void;
   /** People who can be @mentioned here — used to match full names and fill the hover card. */
   members: ChatUser[];
+  /** Search text to mark up in the body, if a search is running. */
+  highlight?: string;
+  /** This bubble is the result the up/down arrows are currently on. */
+  isActiveMatch?: boolean;
 }) {
   const long = m.body.length > LONG_BODY;
   const shown = long && !expanded ? `${m.body.slice(0, LONG_BODY)}…` : m.body;
@@ -1670,7 +1839,9 @@ function MessageBubble({
                         ) : (
                           <span key={pi}>
                             {tokenizeMentions(part.value, members).map((tok, i) =>
-                              tok.type === "mention" ? (
+                              tok.type === "text" && highlight ? (
+                                <Highlighted key={i} text={tok.value} query={highlight} active={!!isActiveMatch} />
+                              ) : tok.type === "mention" ? (
                                 <MentionChip
                                   key={i}
                                   label={tok.value}

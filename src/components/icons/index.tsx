@@ -153,6 +153,14 @@ export function IconChevronDown(props: IconProps) {
   );
 }
 
+export function IconChevronUp(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6 15l6-6 6 6" />
+    </svg>
+  );
+}
+
 export function IconChevronLeft(props: IconProps) {
   return (
     <svg {...base(props)}>
