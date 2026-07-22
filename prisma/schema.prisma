@@ -905,6 +905,10 @@ model ConversationMember {
   /// demote other members. Separate from the CRM-wide Role — running a group
   /// says nothing about your authority anywhere else in the app.
   isGroupAdmin   Boolean      @default(false)
+  /// When a temporary admin stops being one. Null means indefinite. Checked at
+  /// read time rather than expired by a job — a job that fails would leave
+  /// someone holding rights they were meant to lose.
+  adminUntil     DateTime?
   joinedAt       DateTime     @default(now())
 
   @@unique([conversationId, userId])
@@ -927,6 +931,11 @@ model Message {
 
   /// Name of the original sender when this message was forwarded.
   forwardedFromName String?
+
+  /// A notice the app wrote, not a person — someone joined, the group was
+  /// renamed. Rendered as a centred capsule rather than a bubble, and never
+  /// pinned, replied to or reacted to.
+  isSystem Boolean @default(false)
 
   /// "Delete for everyone" — kept as a tombstone so the thread shows a placeholder.
   deletedForEveryone Boolean @default(false)

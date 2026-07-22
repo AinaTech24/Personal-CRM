@@ -24,11 +24,18 @@ export async function ensureAinaFamily() {
 /** Ensure a user belongs to the Aina Family group (idempotent). New accounts call this. */
 export async function addUserToAinaFamily(userId: string) {
   const fam = await ensureAinaFamily();
-  await db.conversationMember.upsert({
+  // This runs on every conversations fetch, so only announce a genuinely new
+  // membership — otherwise the group fills with "joined" notices on every load.
+  const existing = await db.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId: fam.id, userId } },
-    create: { conversationId: fam.id, userId },
-    update: {},
+    select: { id: true },
   });
+  if (!existing) {
+    await db.conversationMember.create({ data: { conversationId: fam.id, userId } });
+    const person = await db.user.findUnique({ where: { id: userId }, select: { name: true, surname: true } });
+    const who = [person?.name, person?.surname].filter(Boolean).join(" ") || "Someone";
+    await postSystemMessage(fam.id, `${who} joined`, userId);
+  }
   return fam;
 }
 
@@ -95,4 +102,36 @@ export async function loadActionableMessage(userId: string, messageId: string) {
   if (!message) return null;
   if (!(await isMember(userId, message.conversationId))) return "forbidden" as const;
   return message;
+}
+
+/**
+ * Posts a notice into a conversation — "X was added", "Y renamed the group".
+ *
+ * Written as a real message so it lands in the thread in chronological order
+ * and arrives over the same socket event as anything else; the isSystem flag is
+ * what changes how it renders.
+ *
+ * Never throws. A notice failing must not fail the change it describes.
+ */
+export async function postSystemMessage(conversationId: string, body: string, actorId: string) {
+  try {
+    const message = await db.message.create({
+      data: { conversationId, senderId: actorId, body, isSystem: true },
+      include: messageInclude,
+    });
+    await db.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
+    const conversation = await db.conversation.findUnique({
+      where: { id: conversationId },
+      select: { type: true, title: true },
+    });
+    emitToMembers(await memberIdsOf(conversationId), "message", { conversationId, message, conversation });
+  } catch (err) {
+    console.error("[chat] system message failed", err);
+  }
+}
+
+/** Someone's group-admin rights, honouring a temporary grant that has lapsed. */
+export function hasGroupAdmin(member: { isGroupAdmin: boolean; adminUntil: Date | null } | null | undefined) {
+  if (!member?.isGroupAdmin) return false;
+  return !member.adminUntil || member.adminUntil > new Date();
 }

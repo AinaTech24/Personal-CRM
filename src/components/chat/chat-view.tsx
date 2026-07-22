@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import * as Popover from "@radix-ui/react-popover";
 import { differenceInCalendarDays, format, isToday, isYesterday, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +82,8 @@ interface Message {
   reactions: { emoji: string; userId: string }[];
   replyTo: ReplyPreview | null;
   forwardedFromName: string | null;
+  /** App-written notice: rendered as a centred capsule, never a bubble. */
+  isSystem?: boolean;
   deletedForEveryone: boolean;
   pinnedAt: string | null;
 }
@@ -1047,6 +1050,14 @@ export function ChatView() {
                         >
                           {item.label}
                         </button>
+                      </div>
+                    ) : item.message.isSystem ? (
+                      // Same capsule as a day heading so the two read as one
+                      // kind of thing — thread furniture, not conversation.
+                      <div key={item.key} className="flex justify-center py-1.5">
+                        <span className="max-w-[80%] rounded-full bg-muted px-3 py-1 text-center text-[11px] text-muted-foreground">
+                          {item.message.body}
+                        </span>
                       </div>
                     ) : (
                       ((m) => (
@@ -2273,13 +2284,19 @@ function GroupInfoDialog({
   const pickRef = useRef<HTMLInputElement>(null);
   const adminIds = conversation.groupAdminIds ?? [];
 
-  async function setGroupAdmin(userId: string, isGroupAdmin: boolean) {
+  async function setGroupAdmin(userId: string, isGroupAdmin: boolean, days?: number) {
     setPromoting(userId);
     try {
+      // Days rather than a date picker: "for a week" is the actual intent, and
+      // it avoids someone picking a time that's already passed.
+      const until =
+        isGroupAdmin && days
+          ? new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+          : null;
       const res = await fetch(`/api/conversations/${conversation.id}/members/${userId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isGroupAdmin }),
+        body: JSON.stringify({ isGroupAdmin, until }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return toast.error("Couldn't change group admin", data.error);
@@ -2408,16 +2425,52 @@ function GroupInfoDialog({
                       </span>
                       {m.email && <span className="block truncate text-xs text-muted-foreground">{m.email}</span>}
                     </span>
-                    {canEdit && (
-                      <button
-                        type="button"
-                        disabled={promoting === m.id}
-                        onClick={() => setGroupAdmin(m.id, !adminIds.includes(m.id))}
-                        className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
-                      >
-                        {promoting === m.id ? "…" : adminIds.includes(m.id) ? "Remove admin" : "Make admin"}
-                      </button>
-                    )}
+                    {canEdit &&
+                      (adminIds.includes(m.id) ? (
+                        <button
+                          type="button"
+                          disabled={promoting === m.id}
+                          onClick={() => setGroupAdmin(m.id, false)}
+                          className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                        >
+                          {promoting === m.id ? "…" : "Remove admin"}
+                        </button>
+                      ) : (
+                        <Popover.Root>
+                          <Popover.Trigger asChild>
+                            <button
+                              type="button"
+                              disabled={promoting === m.id}
+                              className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                            >
+                              {promoting === m.id ? "…" : "Make admin"}
+                            </button>
+                          </Popover.Trigger>
+                          <Popover.Portal>
+                            <Popover.Content
+                              align="end"
+                              sideOffset={4}
+                              className="z-[60] w-44 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+                            >
+                              {[
+                                { label: "Indefinitely", days: undefined },
+                                { label: "For 1 day", days: 1 },
+                                { label: "For 7 days", days: 7 },
+                                { label: "For 30 days", days: 30 },
+                              ].map((opt) => (
+                                <button
+                                  key={opt.label}
+                                  type="button"
+                                  onClick={() => setGroupAdmin(m.id, true, opt.days)}
+                                  className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-accent"
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </Popover.Content>
+                          </Popover.Portal>
+                        </Popover.Root>
+                      ))}
                   </div>
                 ))}
               </div>

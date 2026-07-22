@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { emitToMembers, isMember, memberIdsOf } from "@/lib/chat";
+import { emitToMembers, isMember, memberIdsOf, postSystemMessage, hasGroupAdmin } from "@/lib/chat";
 
 /**
  * Permanently delete a conversation and everything in it.
@@ -60,10 +60,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // A group's own admins can edit it; CRM admins can edit any group.
   const membership = await db.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId: id, userId: user.id } },
-    select: { isGroupAdmin: true },
+    select: { isGroupAdmin: true, adminUntil: true },
   });
   if (!membership && !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  if (!membership?.isGroupAdmin && !isAdmin(user)) {
+  if (!hasGroupAdmin(membership) && !isAdmin(user)) {
     return NextResponse.json({ error: "Only group admins can edit group info" }, { status: 403 });
   }
 
@@ -74,6 +74,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.imageDataUrl && !/^data:image\//.test(d.imageDataUrl)) {
     return NextResponse.json({ error: "Group picture must be an image" }, { status: 400 });
   }
+
+  const before = await db.conversation.findUnique({
+    where: { id },
+    select: { title: true, description: true, imageDataUrl: true },
+  });
 
   const updated = await db.conversation.update({
     where: { id },
@@ -87,6 +92,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Everyone's conversation list needs the new name/picture.
   emitToMembers(await memberIdsOf(id), "conversation", { conversationId: id });
+
+  // One notice per thing that changed, so the thread reads as a history rather
+  // than a vague "group updated".
+  const who = [user.name, user.surname].filter(Boolean).join(" ") || "Someone";
+  if (before && updated.title !== before.title) {
+    await postSystemMessage(id, `${who} renamed the group to "${updated.title}"`, user.id);
+  }
+  if (before && updated.description !== before.description) {
+    await postSystemMessage(
+      id,
+      updated.description ? `${who} updated the group description` : `${who} removed the group description`,
+      user.id
+    );
+  }
+  if (before && updated.imageDataUrl !== before.imageDataUrl) {
+    await postSystemMessage(
+      id,
+      updated.imageDataUrl ? `${who} changed the group photo` : `${who} removed the group photo`,
+      user.id
+    );
+  }
 
   return NextResponse.json({ conversation: updated });
 }

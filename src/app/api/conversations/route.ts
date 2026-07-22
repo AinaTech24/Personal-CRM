@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { addUserToAinaFamily, emitToMembers } from "@/lib/chat";
+import { addUserToAinaFamily, emitToMembers, postSystemMessage } from "@/lib/chat";
 
 // Enough for the in-chat "Info" card — you already share a conversation with them.
 const memberSelect = {
@@ -129,6 +129,20 @@ export async function POST(req: NextRequest) {
       },
     });
     emitToMembers(memberIds, "conversation", { id: conv.id });
+
+    // Opening notices, so a member arriving later can see how the group began.
+    const creator = [user.name, user.surname].filter(Boolean).join(" ") || "Someone";
+    await postSystemMessage(conv.id, `${creator} created the group "${d.title.trim()}"`, user.id);
+
+    const others = await db.user.findMany({
+      where: { id: { in: memberIds.filter((m) => m !== user.id) } },
+      select: { name: true, surname: true },
+    });
+    if (others.length) {
+      const names = others.map((o) => [o.name, o.surname].filter(Boolean).join(" ")).filter(Boolean);
+      await postSystemMessage(conv.id, `${creator} added ${names.join(", ")}`, user.id);
+    }
+
     return NextResponse.json({ id: conv.id }, { status: 201 });
   }
 
