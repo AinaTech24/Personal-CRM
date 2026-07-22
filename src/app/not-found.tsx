@@ -26,10 +26,11 @@ export default function NotFound() {
 
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-6 bg-background px-6 text-center">
-      {/* Fills the viewport behind everything. Fixed rather than absolute so
-          it stays put if the content ever grows past one screen, and
-          pointer-events-none so the return link stays clickable through it. */}
-      <div className="pointer-events-none fixed inset-0 -z-10">
+      {/* Fills the viewport behind the text. z-0, not -z-10: a negative index
+          puts it behind this page's own opaque bg-background, which painted
+          over the scene entirely. pointer-events-none so the return link stays
+          clickable through it. */}
+      <div className="pointer-events-none fixed inset-0 z-0">
         {!webglReady && (
           <svg
             width="320"
@@ -88,13 +89,13 @@ export default function NotFound() {
       {/* The numerals keep the spacing they had when the scene was a card, so
           they still frame the shell now that it fills the page behind them. */}
       {webglReady && (
-        <div className="pointer-events-none relative flex h-[260px] w-full max-w-[420px] items-center justify-between px-2">
+        <div className="pointer-events-none relative z-10 flex h-[260px] w-full max-w-[420px] items-center justify-between px-2">
           <span className="text-7xl font-extrabold text-foreground/90 drop-shadow-sm">4</span>
           <span className="text-7xl font-extrabold text-foreground/90 drop-shadow-sm">4</span>
         </div>
       )}
 
-      <div className="flex flex-col gap-1">
+      <div className="relative z-10 flex flex-col gap-1">
         <h1 className="text-2xl font-semibold">Lost in space</h1>
         <p className="max-w-sm text-sm text-muted-foreground">
           The page you&apos;re looking for drifted off — it may have been moved, renamed, or never existed.
@@ -103,7 +104,7 @@ export default function NotFound() {
 
       <Link
         href="/"
-        className="inline-flex h-10 items-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+        className="relative z-10 inline-flex h-10 items-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
       >
         Back to Dashboard
       </Link>
