@@ -32,6 +32,7 @@ function serialize(
     members: {
       userId: string;
       lastReadAt: Date | null;
+      isGroupAdmin: boolean;
       user: {
         id: string;
         name: string;
@@ -66,6 +67,8 @@ function serialize(
     members: conv.members.map((m) => m.user),
     // When each member last opened the thread — drives the "Seen" tick.
     reads: conv.members.map((m) => ({ userId: m.userId, lastReadAt: m.lastReadAt })),
+    /** Who runs this group — drives the admin badge and the promote controls. */
+    groupAdminIds: conv.members.filter((m) => m.isGroupAdmin).map((m) => m.userId),
     lastMessage: last ? { body: last.body, senderName: last.sender.name, createdAt: last.createdAt } : null,
     updatedAt: conv.updatedAt,
     unread,
@@ -120,7 +123,9 @@ export async function POST(req: NextRequest) {
         type: "GROUP",
         title: d.title.trim(),
         createdById: user.id,
-        members: { create: memberIds.map((id) => ({ userId: id })) },
+        // Whoever creates the group runs it, so there's always someone who can
+        // rename it or promote others without a CRM admin stepping in.
+        members: { create: memberIds.map((id) => ({ userId: id, isGroupAdmin: id === user.id })) },
       },
     });
     emitToMembers(memberIds, "conversation", { id: conv.id });

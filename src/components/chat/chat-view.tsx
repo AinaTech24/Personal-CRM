@@ -90,6 +90,8 @@ interface Conversation {
   imageDataUrl: string | null;
   members: ChatUser[];
   reads: { userId: string; lastReadAt: string | null }[];
+  /** Members who run this group (groups only). */
+  groupAdminIds?: string[];
   lastMessage: { body: string; senderName: string; createdAt: string } | null;
   updatedAt: string;
   unread: number;
@@ -1310,7 +1312,8 @@ export function ChatView() {
         <GroupInfoDialog
           open={groupInfoOpen}
           conversation={active}
-          canEdit={me.isAdmin}
+          // A group's own admins manage it; CRM admins can manage any group.
+          canEdit={me.isAdmin || (active.groupAdminIds ?? []).includes(me.id)}
           onClose={() => setGroupInfoOpen(false)}
           onSaved={() => {
             setGroupInfoOpen(false);
@@ -2097,7 +2100,27 @@ function GroupInfoDialog({
   const [description, setDescription] = useState(conversation.description ?? "");
   const [image, setImage] = useState<string | null>(conversation.imageDataUrl);
   const [saving, setSaving] = useState(false);
+  const [promoting, setPromoting] = useState<string | null>(null);
   const pickRef = useRef<HTMLInputElement>(null);
+  const adminIds = conversation.groupAdminIds ?? [];
+
+  async function setGroupAdmin(userId: string, isGroupAdmin: boolean) {
+    setPromoting(userId);
+    try {
+      const res = await fetch(`/api/conversations/${conversation.id}/members/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isGroupAdmin }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't change group admin", data.error);
+      toast.success(isGroupAdmin ? "Now a group admin" : "No longer a group admin");
+      // Reload so the badge and the button reflect the server, not a guess.
+      onSaved();
+    } finally {
+      setPromoting(null);
+    }
+  }
 
   // The dialog outlives a single opening now, so refresh the fields each time
   // it opens (and whenever the conversation changes underneath it).
@@ -2205,10 +2228,27 @@ function GroupInfoDialog({
                         initial(fullName(m))
                       )}
                     </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm">{fullName(m)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-sm">{fullName(m)}</span>
+                        {adminIds.includes(m.id) && (
+                          <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                            Admin
+                          </span>
+                        )}
+                      </span>
                       {m.email && <span className="block truncate text-xs text-muted-foreground">{m.email}</span>}
                     </span>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        disabled={promoting === m.id}
+                        onClick={() => setGroupAdmin(m.id, !adminIds.includes(m.id))}
+                        className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                      >
+                        {promoting === m.id ? "…" : adminIds.includes(m.id) ? "Remove admin" : "Make admin"}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

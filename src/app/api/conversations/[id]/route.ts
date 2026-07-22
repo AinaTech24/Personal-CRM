@@ -57,8 +57,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (conversation.type !== "GROUP") {
     return NextResponse.json({ error: "Only groups have editable info" }, { status: 400 });
   }
-  if (!isAdmin(user)) return NextResponse.json({ error: "Only admins can edit group info" }, { status: 403 });
-  if (!(await isMember(user.id, id))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // A group's own admins can edit it; CRM admins can edit any group.
+  const membership = await db.conversationMember.findUnique({
+    where: { conversationId_userId: { conversationId: id, userId: user.id } },
+    select: { isGroupAdmin: true },
+  });
+  if (!membership && !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!membership?.isGroupAdmin && !isAdmin(user)) {
+    return NextResponse.json({ error: "Only group admins can edit group info" }, { status: 403 });
+  }
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

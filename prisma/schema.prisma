@@ -900,6 +900,10 @@ model ConversationMember {
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// When this member last opened the conversation — drives unread counts.
   lastReadAt     DateTime?
+  /// Group admin: can rename the group, change its picture, and promote or
+  /// demote other members. Separate from the CRM-wide Role — running a group
+  /// says nothing about your authority anywhere else in the app.
+  isGroupAdmin   Boolean      @default(false)
   joinedAt       DateTime     @default(now())
 
   @@unique([conversationId, userId])
