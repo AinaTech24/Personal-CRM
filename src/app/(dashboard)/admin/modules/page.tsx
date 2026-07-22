@@ -120,6 +120,34 @@ function ColumnFilter({
   );
 }
 
+/**
+ * Marks the searched text inside a cell.
+ *
+ * Case-insensitive, but keeps what the record actually says rather than
+ * rewriting it to match the query.
+ */
+function Highlighted({ text, query }: { text: string; query: string }) {
+  const q = query.trim();
+  if (!q || !text) return <>{text}</>;
+  const lower = text.toLowerCase();
+  const needle = q.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let from = 0;
+  for (;;) {
+    const at = lower.indexOf(needle, from);
+    if (at === -1) break;
+    if (at > from) parts.push(text.slice(from, at));
+    parts.push(
+      <mark key={at} className="rounded-sm bg-amber-400/40 px-0.5 text-inherit">
+        {text.slice(at, at + q.length)}
+      </mark>
+    );
+    from = at + q.length;
+  }
+  if (from < text.length) parts.push(text.slice(from));
+  return <>{parts}</>;
+}
+
 /** `createdAt` → "Created at". */
 function humanize(key: string) {
   const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ");
@@ -250,7 +278,8 @@ export default function ModulesManagementPage() {
     return [...configured, ...extras];
   }, [mod, rows]);
 
-  const filterableColumns = useMemo(() => columns.filter((c) => c.filterable), [columns]);
+  const noFilter = useMemo(() => new Set(mod.noFilter ?? []), [mod]);
+  const isFilterable = useCallback((key: string) => !noFilter.has(key), [noFilter]);
   const activeFilterCount = Object.keys(filters).length;
 
   /** Distinct values for a column, taken from the rows on screen. */
@@ -475,7 +504,7 @@ export default function ModulesManagementPage() {
                           {/* The filter lives in the column it filters. A separate
                             panel hid which columns were filterable at all, and
                             put the control far from the data it acts on. */}
-                          {c.filterable ? (
+                          {isFilterable(c.key) ? (
                             <ColumnFilter
                               label={c.label}
                               value={filters[c.key] ?? ""}
@@ -513,7 +542,7 @@ export default function ModulesManagementPage() {
                             key={c.key}
                             className={cn("max-w-[220px] truncate px-2 py-2", c.secondary && "hidden sm:table-cell")}
                           >
-                            {c.get(row)}
+                            <Highlighted text={c.get(row)} query={query} />
                           </td>
                         ))}
                         <td className="px-2 py-2">
