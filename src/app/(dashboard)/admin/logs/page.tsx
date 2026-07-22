@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
-import { IconCopy, IconEye } from "@/components/icons";
+import * as Popover from "@radix-ui/react-popover";
+import { IconCopy, IconEye, IconFilter } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 interface AuditLog {
@@ -83,6 +84,7 @@ export default function AuditLogsPage() {
   const [query, setQuery] = useState("");
   const [model, setModel] = useState("");
   const [viewing, setViewing] = useState<AuditLog | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -130,6 +132,40 @@ export default function AuditLogsPage() {
     );
   }
 
+  /**
+   * Copies the entries currently listed — filtered and searched, not the whole
+   * table. What you can see is what you meant to take.
+   */
+  function copyAll() {
+    if (filtered.length === 0) return;
+    const text = filtered
+      .map((l) =>
+        [
+          new Date(l.createdAt).toLocaleString(),
+          l.action.toUpperCase(),
+          l.summary,
+          `by ${l.actorName ?? "system"}`,
+          l.changes ? JSON.stringify(l.changes) : "",
+        ]
+          .filter(Boolean)
+          .join("  |  ")
+      )
+      .join("\n");
+
+    navigator.clipboard.writeText(text).then(
+      () => {
+        const scope = [model ? model : "all modules", query.trim() ? `matching "${query.trim()}"` : ""]
+          .filter(Boolean)
+          .join(", ");
+        toast.success(
+          `Copied ${filtered.length} ${filtered.length === 1 ? "entry" : "entries"}`,
+          `${scope} — starting "${filtered[0].summary}"`
+        );
+      },
+      () => toast.error("Couldn't copy")
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col gap-4">
@@ -149,34 +185,80 @@ export default function AuditLogsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">View logs</h1>
-      </div>
 
-      <div className="flex gap-1 overflow-x-auto pb-1">
-        <button
-          type="button"
-          onClick={() => setModel("")}
-          className={cn(
-            "shrink-0 rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors",
-            !model ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
-          )}
-        >
-          All
-        </button>
-        {models.map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => setModel(m)}
-            className={cn(
-              "shrink-0 rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors",
-              model === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
-            )}
-          >
-            {m}
-          </button>
-        ))}
+        <div className="flex shrink-0 items-center gap-1">
+          {/* A row of chips grew with every model that ever logged something;
+              a dropdown keeps the header the same size however many there are. */}
+          <Popover.Root open={filterOpen} onOpenChange={setFilterOpen}>
+            <Popover.Trigger asChild>
+              <button
+                type="button"
+                aria-label="Filter by module"
+                className={cn(
+                  "relative flex h-9 w-9 items-center justify-center rounded-md border border-input transition-colors hover:bg-accent",
+                  model && "border-primary text-primary"
+                )}
+              >
+                <IconFilter className="h-4 w-4" />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                align="end"
+                sideOffset={6}
+                className="z-50 max-h-72 w-52 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModel("");
+                    setFilterOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-accent",
+                    !model && "text-primary"
+                  )}
+                >
+                  All modules
+                  <span className="text-xs text-muted-foreground">{logs.length}</span>
+                </button>
+                {models.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      setModel(m);
+                      setFilterOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-accent",
+                      model === m && "text-primary"
+                    )}
+                  >
+                    {m}
+                    <span className="text-xs text-muted-foreground">
+                      {logs.filter((l) => l.model === m).length}
+                    </span>
+                  </button>
+                ))}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+
+          <Tooltip label="Copy All Logs">
+            <button
+              type="button"
+              aria-label="Copy all logs"
+              disabled={filtered.length === 0}
+              onClick={copyAll}
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-input transition-colors hover:bg-accent disabled:opacity-40"
+            >
+              <IconCopy className="h-4 w-4" />
+            </button>
+          </Tooltip>
+        </div>
       </div>
 
       <motion.div
