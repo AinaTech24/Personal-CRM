@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { format, isToday, parseISO } from "date-fns";
+import { differenceInCalendarDays, format, isToday, isYesterday, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -111,6 +111,17 @@ const LONG_BODY = 420;
 const fullName = (u: { name: string; surname: string | null }) => [u.name, u.surname].filter(Boolean).join(" ");
 const initial = (t: string) => (t.trim()[0] ?? "?").toUpperCase();
 const fmtTime = (s: string) => format(parseISO(s), "h:mm a");
+/** Calendar day a message belongs to, for grouping. */
+const dayKey = (s: string) => format(parseISO(s), "yyyy-MM-dd");
+/** Heading for a day's run of messages, the way a phone messenger reads. */
+const dayLabel = (s: string) => {
+  const d = parseISO(s);
+  if (isToday(d)) return "Today";
+  if (isYesterday(d)) return "Yesterday";
+  // Inside the last week the weekday is more use than the date.
+  if (differenceInCalendarDays(new Date(), d) < 7) return format(d, "EEEE");
+  return format(d, "d MMMM yyyy");
+};
 const fmtWhen = (s: string) => (isToday(parseISO(s)) ? fmtTime(s) : format(parseISO(s), "MMM d"));
 const isImage = (m: string) => m.startsWith("image/");
 const isAudio = (m: string) => m.startsWith("audio/");
@@ -156,7 +167,7 @@ function playSound(kind: "send" | "delete") {
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
     osc.start();
     osc.stop(ctx.currentTime + 0.24);
-    setTimeout(() => ctx.close().catch(() => {}), 500);
+    setTimeout(() => ctx.close().catch(() => { }), 500);
   } catch {
     /* audio is a nicety — never break sending over it */
   }
@@ -453,6 +464,24 @@ export function ChatView() {
   }, [ctx]);
 
   const active = useMemo(() => conversations.find((c) => c.id === activeId) ?? null, [conversations, activeId]);
+
+  // Messages interleaved with a heading whenever the calendar day changes, so
+  // yesterday's and today's don't run together with only a clock to tell them
+  // apart. Flattened rather than wrapped in fragments: AnimatePresence tracks
+  // its direct children, and a fragment would hide the bubbles from it.
+  const threadItems = useMemo(() => {
+    const items: ({ kind: "day"; key: string; label: string } | { kind: "message"; key: string; message: Message })[] = [];
+    let lastDay: string | null = null;
+    for (const m of messages) {
+      const day = dayKey(m.createdAt);
+      if (day !== lastDay) {
+        items.push({ kind: "day", key: `day-${day}`, label: dayLabel(m.createdAt) });
+        lastDay = day;
+      }
+      items.push({ kind: "message", key: m.id, message: m });
+    }
+    return items;
+  }, [messages]);
   const otherMember = active && active.type === "DIRECT" ? active.members.find((m) => m.id !== me.id) ?? null : null;
   const otherOnline = otherMember ? onlineIds.has(otherMember.id) : false;
   const pinned = useMemo(() => messages.filter((m) => m.pinnedAt && !m.deletedForEveryone), [messages]);
@@ -753,7 +782,6 @@ export function ChatView() {
           <h1 className="text-base font-semibold">Messages</h1>
           <Button type="button" size="sm" onClick={() => setNewOpen(true)}>
             <IconPlus className="h-4 w-4" />
-            New
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -889,7 +917,15 @@ export function ChatView() {
                 <p className="py-8 text-center text-sm text-muted-foreground">No messages yet — say hello 👋</p>
               ) : (
                 <AnimatePresence initial={false}>
-                  {messages.map((m) => (
+                  {threadItems.map((item) =>
+                    item.kind === "day" ? (
+                      <div key={item.key} className="flex items-center justify-center py-2">
+                        <span className="rounded-full bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
+                          {item.label}
+                        </span>
+                      </div>
+                    ) : (
+                      ((m) => (
                     <MessageBubble
                       key={m.id}
                       message={m}
@@ -916,7 +952,9 @@ export function ChatView() {
                       onSelectToggle={() => toggleSelected(m.id)}
                       onSenderClick={() => setInfoUser(active.members.find((u) => u.id === m.senderId) ?? m.sender)}
                     />
-                  ))}
+                      ))(item.message)
+                    )
+                  )}
                 </AnimatePresence>
               )}
               <AnimatePresence>
@@ -1154,30 +1192,30 @@ export function ChatView() {
                 </IconButton>
               )}
               {!recording && (
-              <Input
-                value={draft}
-                onChange={(e) => onDraftChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                placeholder={pending.length ? "Add a description…" : "Type a message… use @ to mention"}
-              />
+                <Input
+                  value={draft}
+                  onChange={(e) => onDraftChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      send();
+                    }
+                  }}
+                  placeholder={pending.length ? "Add a description…" : "Type a message… use @ to mention"}
+                />
               )}
               {!recording && (
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.88, rotate: -12 }}
-                transition={{ type: "spring", stiffness: 600, damping: 20 }}
-                onClick={send}
-                disabled={sending || (!draft.trim() && pending.length === 0)}
-                aria-label="Send"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
-              >
-                <IconSend className="h-4 w-4" />
-              </motion.button>
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.88, rotate: -12 }}
+                  transition={{ type: "spring", stiffness: 600, damping: 20 }}
+                  onClick={send}
+                  disabled={sending || (!draft.trim() && pending.length === 0)}
+                  aria-label="Send"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
+                >
+                  <IconSend className="h-4 w-4" />
+                </motion.button>
               )}
             </div>
           </>
