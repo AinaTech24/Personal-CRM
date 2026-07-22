@@ -7,14 +7,12 @@ import * as Popover from "@radix-ui/react-popover";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dropdown } from "@/components/ui/dropdown";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
-import { IconExternalLink, IconEye, IconFilter, IconPencil, IconTrash } from "@/components/icons";
+import { IconChevronDown, IconExternalLink, IconEye, IconPencil, IconTrash } from "@/components/icons";
 import { ADMIN_MODULES, moduleByKey, type ModuleColumn, type ModuleConfig } from "@/lib/admin-modules";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +20,7 @@ type Row = Record<string, unknown> & { id: string };
 
 /** One cell's worth of text from an arbitrary payload value. */
 function cellText(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
   if (typeof value === "string") {
@@ -37,9 +35,85 @@ function cellText(value: unknown): string {
   if (typeof value === "object") {
     const o = value as Record<string, unknown>;
     const name = o.name ?? o.title ?? o.email;
-    return name ? String(name) : "—";
+    return name ? String(name) : "";
   }
   return String(value);
+}
+
+/**
+ * A column heading that doubles as its own filter.
+ *
+ * Options come from the rows on screen, so a column can't offer a value no
+ * record uses. Filtering shows in the heading itself — the chosen value
+ * replaces the label — so it's obvious which column is narrowing the table.
+ */
+function ColumnFilter({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (options.length === 0) return <>{label}</>;
+
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex items-center gap-1 whitespace-nowrap uppercase tracking-wide transition-colors hover:text-foreground",
+            value && "text-primary"
+          )}
+        >
+          {value || label}
+          <IconChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          sideOffset={4}
+          className="z-50 max-h-64 w-48 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+              setOpen(false);
+            }}
+            className={cn(
+              "flex w-full items-center rounded px-2 py-1.5 text-left text-xs normal-case tracking-normal hover:bg-accent",
+              !value && "text-primary"
+            )}
+          >
+            All
+          </button>
+          {options.map((o) => (
+            <button
+              key={o}
+              type="button"
+              onClick={() => {
+                onChange(o);
+                setOpen(false);
+              }}
+              className={cn(
+                "flex w-full items-center rounded px-2 py-1.5 text-left text-xs normal-case tracking-normal hover:bg-accent",
+                value === o && "text-primary"
+              )}
+            >
+              {o}
+            </button>
+          ))}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
 }
 
 /** `createdAt` → "Created at". */
@@ -108,7 +182,6 @@ export default function ModulesManagementPage() {
   const [renameValue, setRenameValue] = useState("");
   const [viewing, setViewing] = useState<Row | null>(null);
   const [filters, setFilters] = useState<Record<string, string>>({});
-  const [filterOpen, setFilterOpen] = useState(false);
 
   const mod: ModuleConfig = moduleByKey(activeKey);
 
@@ -179,7 +252,7 @@ export default function ModulesManagementPage() {
       const seen = new Set<string>();
       for (const row of rows) {
         const v = col.get(row);
-        if (v && v !== "—") seen.add(v);
+        if (v) seen.add(v);
       }
       return [...seen].sort();
     },
@@ -283,72 +356,14 @@ export default function ModulesManagementPage() {
               placeholder={`Search ${mod.label.toLowerCase()}…`}
               className="flex-1 sm:w-64"
             />
-            {filterableColumns.length > 0 && (
-              <Popover.Root open={filterOpen} onOpenChange={setFilterOpen}>
-                <Popover.Trigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Filters"
-                    className={cn(
-                      "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-input transition-colors hover:bg-accent",
-                      activeFilterCount > 0 && "border-primary text-primary"
-                    )}
-                  >
-                    <IconFilter className="h-4 w-4" />
-                    {activeFilterCount > 0 && (
-                      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                        {activeFilterCount}
-                      </span>
-                    )}
-                  </button>
-                </Popover.Trigger>
-                <Popover.Portal>
-                  <Popover.Content
-                    align="end"
-                    sideOffset={6}
-                    className="z-50 w-64 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-lg"
-                  >
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="text-sm font-medium">Filters</p>
-                      {activeFilterCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setFilters({})}
-                          className="text-xs text-muted-foreground hover:text-foreground"
-                        >
-                          Clear all
-                        </button>
-                      )}
-                    </div>
-                    {/* Options come from the rows actually loaded, so they can't
-                        list a status no record uses or miss one added later. */}
-                    <div className="flex max-h-72 flex-col gap-3 overflow-y-auto">
-                      {filterableColumns.map((c) => (
-                        <div key={c.key} className="flex flex-col gap-1">
-                          <Label className="text-xs text-muted-foreground">{c.label}</Label>
-                          <Dropdown
-                            size="sm"
-                            value={filters[c.key] ?? ""}
-                            onChange={(v) =>
-                              setFilters((prev) => {
-                                const next = { ...prev };
-                                if (v) next[c.key] = v;
-                                else delete next[c.key];
-                                return next;
-                              })
-                            }
-                            placeholder="Any"
-                            options={[
-                              { value: "", label: "Any" },
-                              ...optionsFor(c.key).map((v) => ({ value: v, label: v })),
-                            ]}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </Popover.Content>
-                </Popover.Portal>
-              </Popover.Root>
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilters({})}
+                className="shrink-0 whitespace-nowrap rounded-md border border-input px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                Clear {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
+              </button>
             )}
           </div>
         </CardHeader>
@@ -367,11 +382,36 @@ export default function ModulesManagementPage() {
                 <thead>
                   <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                     {columns.map((c) => (
-                      <th key={c.key} className={cn("px-2 py-2 font-medium", c.secondary && "hidden sm:table-cell")}>
-                        {c.label}
+                      <th
+                        key={c.key}
+                        className={cn(
+                          "sticky top-0 z-10 whitespace-nowrap bg-card px-2 py-2 font-medium",
+                          c.secondary && "hidden sm:table-cell"
+                        )}
+                      >
+                        {/* The filter lives in the column it filters. A separate
+                            panel hid which columns were filterable at all, and
+                            put the control far from the data it acts on. */}
+                        {c.filterable ? (
+                          <ColumnFilter
+                            label={c.label}
+                            value={filters[c.key] ?? ""}
+                            options={optionsFor(c.key)}
+                            onChange={(v) =>
+                              setFilters((prev) => {
+                                const next = { ...prev };
+                                if (v) next[c.key] = v;
+                                else delete next[c.key];
+                                return next;
+                              })
+                            }
+                          />
+                        ) : (
+                          c.label
+                        )}
                       </th>
                     ))}
-                    <th className="px-2 py-2 text-right font-medium">Actions</th>
+                    <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-2 py-2 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>

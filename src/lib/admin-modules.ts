@@ -49,7 +49,7 @@ function pick(row: Record<string, unknown>, path: string): unknown {
   }, row);
 }
 
-const text = (path: string, fallback = "—") => (row: Record<string, unknown>) => {
+const text = (path: string, fallback = "") => (row: Record<string, unknown>) => {
   const v = pick(row, path);
   if (v === null || v === undefined || v === "") return fallback;
   return String(v);
@@ -57,22 +57,22 @@ const text = (path: string, fallback = "—") => (row: Record<string, unknown>) 
 
 const date = (path: string) => (row: Record<string, unknown>) => {
   const v = pick(row, path);
-  if (!v) return "—";
+  if (!v) return "";
   const d = new Date(String(v));
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString();
 };
 
 const money = (path: string) => (row: Record<string, unknown>) => {
   const v = pick(row, path);
-  if (v === null || v === undefined) return "—";
+  if (v === null || v === undefined) return "";
   const n = Number(v);
-  return Number.isNaN(n) ? "—" : n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return Number.isNaN(n) ? "" : n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 };
 
 /** Turns SCREAMING_SNAKE enums into something readable. */
 const label = (path: string) => (row: Record<string, unknown>) => {
   const v = pick(row, path);
-  if (!v) return "—";
+  if (!v) return "";
   return String(v).replace(/_/g, " ").toLowerCase();
 };
 
