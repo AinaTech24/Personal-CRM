@@ -586,16 +586,18 @@ export default function ModulesManagementPage() {
                                 </button>
                               </Tooltip>
                             )}
-                            <Tooltip label="Delete">
-                              <button
-                                type="button"
-                                aria-label={`Delete ${mod.nameOf(row)}`}
-                                onClick={() => setPendingDelete(row)}
-                                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                              >
-                                <IconTrash className="h-4 w-4" />
-                              </button>
-                            </Tooltip>
+                            {!mod.noDelete && (
+                              <Tooltip label="Delete">
+                                <button
+                                  type="button"
+                                  aria-label={`Delete ${mod.nameOf(row)}`}
+                                  onClick={() => setPendingDelete(row)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <IconTrash className="h-4 w-4" />
+                                </button>
+                              </Tooltip>
+                            )}
                           </div>
                         </td>
                       </motion.tr>

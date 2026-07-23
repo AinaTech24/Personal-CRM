@@ -28,6 +28,8 @@ export interface ModuleConfig {
   listKey: string;
   /** DELETE goes to `${basePath}/${id}`. */
   basePath: string;
+  /** Hide the delete action — for records with no delete endpoint (attendance). */
+  noDelete?: boolean;
   /** Where a row opens, if it has a page of its own. */
   hrefFor?: (id: string) => string;
   columns: ModuleColumn[];
@@ -64,6 +66,13 @@ const date = (path: string) => (row: Record<string, unknown>) => {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString();
 };
 
+const time = (path: string) => (row: Record<string, unknown>) => {
+  const v = pick(row, path);
+  if (!v) return "";
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 const money = (path: string) => (row: Record<string, unknown>) => {
   const v = pick(row, path);
   if (v === null || v === undefined) return "";
@@ -78,7 +87,48 @@ const label = (path: string) => (row: Record<string, unknown>) => {
   return String(v).replace(/_/g, " ").toLowerCase();
 };
 
+/** First non-empty of several paths — e.g. an override status, else the computed one. */
+const firstOf = (...paths: string[]) => (row: Record<string, unknown>) => {
+  for (const p of paths) {
+    const v = pick(row, p);
+    if (v !== null && v !== undefined && v !== "") return String(v).replace(/_/g, " ").toLowerCase();
+  }
+  return "";
+};
+
+/** Yes/no reading of a boolean field. */
+const bool = (path: string, yes: string, no: string) => (row: Record<string, unknown>) =>
+  pick(row, path) ? yes : no;
+
+/** Full name with surname when present. `prefix` is "" for a root name/surname,
+ *  or a relation like "user" for user.name / user.surname. */
+const personName = (prefix = "") => (row: Record<string, unknown>) => {
+  const base = prefix ? `${prefix}.` : "";
+  const name = pick(row, `${base}name`);
+  if (!name) return "";
+  const surname = pick(row, `${base}surname`);
+  return surname ? `${name} ${surname}` : String(name);
+};
+
 export const ADMIN_MODULES: ModuleConfig[] = [
+  {
+    key: "users",
+    label: "Users",
+    listPath: "/api/users",
+    listKey: "users",
+    basePath: "/api/users",
+    hrefFor: () => "/admin/users",
+    columns: [
+      { key: "name", label: "Name", get: personName() },
+      { key: "email", label: "Email", get: text("email"), secondary: true },
+      { key: "role", label: "Role", get: label("role") },
+      { key: "department", label: "Department", get: text("department.name"), secondary: true },
+      { key: "status", label: "Status", get: bool("isActive", "active", "inactive") },
+      { key: "created", label: "Joined", get: date("createdAt"), secondary: true },
+    ],
+    nameOf: personName(),
+    noFilter: ["name", "email"],
+  },
   {
     key: "leads",
     label: "Leads",
@@ -92,7 +142,8 @@ export const ADMIN_MODULES: ModuleConfig[] = [
       { key: "name", label: "Name", get: text("name") },
       { key: "company", label: "Company", get: text("company"), secondary: true },
       { key: "status", label: "Status", get: label("status") },
-      { key: "owner", label: "Owner", get: text("assignedTo.name"), secondary: true },
+      { key: "assignedTo", label: "Assigned to", get: text("assignedTo.name"), secondary: true },
+      { key: "assignedBy", label: "Assigned by", get: text("createdBy.name"), secondary: true },
       { key: "created", label: "Created", get: date("createdAt"), secondary: true },
     ],
   },
@@ -110,6 +161,7 @@ export const ADMIN_MODULES: ModuleConfig[] = [
       { key: "status", label: "Status", get: label("status") },
       { key: "priority", label: "Priority", get: label("priority"), secondary: true },
       { key: "assignee", label: "Assigned to", get: text("assignedTo.name"), secondary: true },
+      { key: "assignedBy", label: "Assigned by", get: text("createdBy.name"), secondary: true },
       { key: "due", label: "Due", get: date("dueDate"), secondary: true },
     ],
   },
@@ -126,6 +178,8 @@ export const ADMIN_MODULES: ModuleConfig[] = [
       { key: "name", label: "Name", get: text("name") },
       { key: "status", label: "Status", get: label("status") },
       { key: "department", label: "Department", get: text("department.name"), secondary: true },
+      { key: "assignedTo", label: "Assigned to", get: text("assignedTo.name"), secondary: true },
+      { key: "assignedBy", label: "Assigned by", get: text("createdBy.name"), secondary: true },
       { key: "created", label: "Created", get: date("createdAt"), secondary: true },
     ],
   },
@@ -175,6 +229,27 @@ export const ADMIN_MODULES: ModuleConfig[] = [
       { key: "status", label: "Status", get: label("status") },
       { key: "total", label: "Total", get: money("total"), secondary: true },
     ],
+  },
+  {
+    key: "attendance",
+    label: "Attendance",
+    listPath: "/api/attendance",
+    listKey: "records",
+    basePath: "/api/attendance",
+    // Attendance records aren't deleted from here — there's no delete endpoint,
+    // and a missing day is data, not clutter.
+    noDelete: true,
+    hrefFor: () => "/admin/attendance",
+    columns: [
+      { key: "user", label: "User", get: personName("user") },
+      { key: "date", label: "Date", get: date("date") },
+      { key: "status", label: "Status", get: firstOf("status", "calculatedStatus") },
+      { key: "checkIn", label: "Check in", get: time("checkIn"), secondary: true },
+      { key: "checkOut", label: "Check out", get: time("checkOut"), secondary: true },
+      { key: "approval", label: "Approval", get: label("approvalStatus"), secondary: true },
+    ],
+    nameOf: (row) => `${personName("user")(row)}'s attendance`,
+    noFilter: ["user", "date", "checkIn", "checkOut"],
   },
   {
     key: "departments",

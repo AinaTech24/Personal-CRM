@@ -12,7 +12,10 @@ export async function GET() {
   const users = await db.user.findMany({
     orderBy: { createdAt: "desc" },
     include: { department: true },
-    omit: { passwordHash: true },
+    // Never ship secrets to the client — not the password hash, and not the
+    // reset-code hash or its expiry, which the admin console would otherwise
+    // surface as columns.
+    omit: { passwordHash: true, resetCode: true, resetCodeExpiresAt: true },
   });
 
   return NextResponse.json({ users });
