@@ -425,7 +425,9 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* items-start so a short card (e.g. an empty Supporters) sizes to its own
+          content instead of being stretched to match the taller card beside it. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Team members</CardTitle>
