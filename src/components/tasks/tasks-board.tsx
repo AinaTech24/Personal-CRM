@@ -323,9 +323,18 @@ export function TasksBoard() {
       {!loading && view === "pipeline" && (
         <div
           ref={scrollContainerRef}
-          className="flex flex-1 gap-3 overflow-x-auto overflow-y-hidden pb-4 focus:outline-none"
+          className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden pb-4 focus:outline-none"
           onWheel={(e) => {
             if (e.deltaY === 0) return;
+            // Let the hovered column scroll vertically first; only turn the wheel
+            // into horizontal board movement once that column has nowhere left to
+            // go (or has no vertical overflow at all).
+            const col = (e.target as HTMLElement).closest?.("[data-col-scroll]") as HTMLElement | null;
+            if (col && col.scrollHeight > col.clientHeight) {
+              const atTop = col.scrollTop <= 0;
+              const atBottom = Math.ceil(col.scrollTop + col.clientHeight) >= col.scrollHeight;
+              if ((e.deltaY < 0 && !atTop) || (e.deltaY > 0 && !atBottom)) return;
+            }
             e.currentTarget.scrollLeft += e.deltaY;
           }}
           onDragOver={handleBoardDragOver}
@@ -338,7 +347,7 @@ export function TasksBoard() {
               <div
                 key={col.value}
                 className={cn(
-                  "flex w-72 shrink-0 flex-col gap-2 rounded-lg p-1.5 transition-colors",
+                  "flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg p-1.5 transition-colors",
                   isDragOver && "bg-accent/60"
                 )}
                 onDragOver={(e) => {
@@ -372,7 +381,9 @@ export function TasksBoard() {
                     <span className="text-xs text-muted-foreground">{columnTasks.length}</span>
                   </div>
                 </div>
-                <div className="flex min-h-8 flex-col gap-2">
+                {/* The column scrolls its own cards; the board's wheel handler
+                    only takes over sideways once this reaches an edge. */}
+                <div data-col-scroll className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-0.5">
                   {columnTasks.map((task) => (
                     <motion.div
                       key={task.id}
