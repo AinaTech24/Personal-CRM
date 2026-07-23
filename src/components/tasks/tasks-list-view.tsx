@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { HoverCheckbox } from "@/components/ui/checkbox";
+import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { TASK_STATUSES, type TaskSummary } from "@/components/tasks/types";
 import { cn } from "@/lib/utils";
 
@@ -21,11 +22,14 @@ export function TasksListView({
   onSelect,
   selectedIds,
   onToggleSelect,
+  rowActions,
 }: {
   tasks: TaskSummary[];
   onSelect: (task: TaskSummary) => void;
   selectedIds?: Set<string>;
   onToggleSelect: (id: string) => void;
+  /** Per-row actions menu; omit to hide the actions column. */
+  rowActions?: (task: TaskSummary) => RowAction[];
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border focus:outline-none">
@@ -38,6 +42,7 @@ export function TasksListView({
             <th className="px-4 py-2.5 font-medium">Priority</th>
             <th className="px-4 py-2.5 font-medium">Due date</th>
             <th className="px-4 py-2.5 font-medium">Assigned to</th>
+            {rowActions && <th className="w-10 px-4 py-2.5" />}
           </tr>
         </thead>
         <tbody>
@@ -71,12 +76,19 @@ export function TasksListView({
                 <td className="px-4 py-2.5 text-muted-foreground">
                   {task.assignedTo ? task.assignedTo.name : "Unassigned"}
                 </td>
+                {rowActions && (
+                  <td className="px-4 py-2.5">
+                    <span className="flex justify-end opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                      <RowActionsMenu actions={rowActions(task)} label={`Actions for ${task.title}`} />
+                    </span>
+                  </td>
+                )}
               </tr>
             );
           })}
           {tasks.length === 0 && (
             <tr>
-              <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
+              <td colSpan={rowActions ? 7 : 6} className="px-4 py-8 text-center text-sm text-muted-foreground">
                 No tasks found
               </td>
             </tr>

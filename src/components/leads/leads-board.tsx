@@ -12,6 +12,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SkeletonBoard } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
+import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
+import { IconPencil, IconTrash } from "@/components/icons";
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog";
 import { LeadDetailDialog } from "@/components/leads/lead-detail-dialog";
 import { LeadsListView } from "@/components/leads/leads-list-view";
@@ -36,6 +38,7 @@ interface Department {
 }
 
 interface CurrentUser {
+  id: string;
   role: "SUPER_ADMIN" | "ADMIN" | "DEPARTMENT_USER";
 }
 
@@ -61,6 +64,7 @@ export function LeadsBoard() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [selectedLead, setSelectedLead] = useState<LeadSummary | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LeadSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<LeadStatus | null>(null);
@@ -248,6 +252,34 @@ export function LeadsBoard() {
     }
   }
 
+  // Edit is open to the creator and the assignee; deletion to the creator or an
+  // admin — matching the API. This only decides what the menu offers.
+  const canManageLead = (l: LeadSummary) =>
+    isAdmin || l.createdBy.id === currentUser?.id || l.assignedTo?.id === currentUser?.id;
+  const canDeleteLead = (l: LeadSummary) => isAdmin || l.createdBy.id === currentUser?.id;
+
+  function leadActions(lead: LeadSummary): RowAction[] {
+    const actions: RowAction[] = [];
+    if (canManageLead(lead)) {
+      actions.push({ key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => setSelectedLead(lead) });
+    }
+    if (canDeleteLead(lead)) {
+      actions.push({
+        key: "delete",
+        label: "Delete",
+        icon: <IconTrash className="h-3.5 w-3.5" />,
+        destructive: true,
+        onSelect: () => setDeleteTarget(lead),
+      });
+    }
+    return actions;
+  }
+
+  async function deleteLead(id: string) {
+    const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
+    if (res.ok) await loadLeads();
+  }
+
   const allFilteredSelected = filteredLeads.length > 0 && filteredLeads.every((l) => selectedIds.has(l.id));
 
   return (
@@ -307,6 +339,7 @@ export function LeadsBoard() {
           onSelect={handleLeadClick}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelected}
+          rowActions={selectedIds.size === 0 ? leadActions : undefined}
         />
       )}
 
@@ -400,7 +433,14 @@ export function LeadsBoard() {
                             />
                             <p className="text-sm font-medium">{lead.name}</p>
                           </div>
-                          <Badge variant={PRIORITY_VARIANT[lead.priority]}>{lead.priority}</Badge>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Badge variant={PRIORITY_VARIANT[lead.priority]}>{lead.priority}</Badge>
+                            {selectedIds.size === 0 && (
+                              <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                                <RowActionsMenu actions={leadActions(lead)} label={`Actions for ${lead.name}`} />
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {lead.company && (
                           <p className="mt-0.5 text-xs text-muted-foreground">{lead.company}</p>
@@ -442,6 +482,16 @@ export function LeadsBoard() {
         title={`Delete ${selectedIds.size} lead${selectedIds.size === 1 ? "" : "s"}?`}
         description="This will permanently delete the selected lead(s) along with their notes, reminders, and activity history. This action cannot be undone."
         onConfirm={handleBulkDelete}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title={`Delete "${deleteTarget?.name}"?`}
+        description="This permanently deletes the lead along with its notes, reminders, and activity history. This cannot be undone."
+        onConfirm={async () => {
+          if (deleteTarget) await deleteLead(deleteTarget.id);
+        }}
       />
     </div>
   );

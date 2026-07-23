@@ -15,7 +15,8 @@ import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { IconPlus, IconClock, IconUsers } from "@/components/icons";
+import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
+import { IconPlus, IconClock, IconUsers, IconPencil, IconTrash } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { cn } from "@/lib/utils";
 
@@ -67,6 +68,7 @@ export function MeetingsView() {
   // rather than reopening onto the last visit's half-finished edits.
   const [openSeq, setOpenSeq] = useState(0);
   const [editing, setEditing] = useState<Meeting | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Meeting | null>(null);
   const [filters, setFilters] = useState<{ organizer: string | null; status: string | null; involvement: string | null }>({
     organizer: null,
     status: null,
@@ -160,6 +162,28 @@ export function MeetingsView() {
     setDialogOpen(true);
   }
 
+  // The organiser and admins can manage a meeting; the API enforces the same.
+  const canManageMeeting = (m: Meeting) => isAdmin || m.organizer.id === meId;
+
+  function meetingActions(m: Meeting): RowAction[] {
+    if (!canManageMeeting(m)) return [];
+    return [
+      { key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => openMeeting(m) },
+      {
+        key: "delete",
+        label: "Delete",
+        icon: <IconTrash className="h-3.5 w-3.5" />,
+        destructive: true,
+        onSelect: () => setDeleteTarget(m),
+      },
+    ];
+  }
+
+  async function deleteMeeting(id: string) {
+    const res = await fetch(`/api/meetings/${id}`, { method: "DELETE" });
+    if (res.ok) load();
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -192,8 +216,8 @@ export function MeetingsView() {
         </Card>
       ) : (
         <div className="flex flex-col gap-6">
-          <Section title="Upcoming" meetings={upcoming} meId={meId} onOpen={openMeeting} emptyLabel="No upcoming meetings." />
-          <Section title="Past & closed" meetings={past} meId={meId} onOpen={openMeeting} emptyLabel="Nothing here yet." />
+          <Section title="Upcoming" meetings={upcoming} meId={meId} onOpen={openMeeting} actionsFor={meetingActions} emptyLabel="No upcoming meetings." />
+          <Section title="Past & closed" meetings={past} meId={meId} onOpen={openMeeting} actionsFor={meetingActions} emptyLabel="Nothing here yet." />
         </div>
       )}
 
@@ -209,6 +233,17 @@ export function MeetingsView() {
           load();
         }}
       />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title={`Delete "${deleteTarget?.title}"?`}
+        description="This permanently removes the meeting for everyone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (deleteTarget) await deleteMeeting(deleteTarget.id);
+        }}
+      />
     </div>
   );
 }
@@ -218,12 +253,14 @@ function Section({
   meetings,
   meId,
   onOpen,
+  actionsFor,
   emptyLabel,
 }: {
   title: string;
   meetings: Meeting[];
   meId: string;
   onOpen: (m: Meeting) => void;
+  actionsFor: (m: Meeting) => RowAction[];
   emptyLabel: string;
 }) {
   return (
@@ -236,7 +273,7 @@ function Section({
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {meetings.map((m) => (
-            <MeetingCard key={m.id} meeting={m} meId={meId} onOpen={onOpen} />
+            <MeetingCard key={m.id} meeting={m} meId={meId} onOpen={onOpen} actions={actionsFor(m)} />
           ))}
         </div>
       )}
@@ -244,20 +281,46 @@ function Section({
   );
 }
 
-function MeetingCard({ meeting: m, meId, onOpen }: { meeting: Meeting; meId: string; onOpen: (m: Meeting) => void }) {
+function MeetingCard({
+  meeting: m,
+  meId,
+  onOpen,
+  actions,
+}: {
+  meeting: Meeting;
+  meId: string;
+  onOpen: (m: Meeting) => void;
+  actions: RowAction[];
+}) {
   const start = parseISO(m.startsAt);
   const end = m.endsAt ? parseISO(m.endsAt) : null;
   return (
-    <button
-      type="button"
+    // A div, not a button: the actions menu is itself a button and can't nest
+    // inside one. role/tabIndex keep it keyboard-openable.
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onOpen(m)}
-      className="flex flex-col gap-2 rounded-lg border border-border bg-card/40 p-4 text-left transition-colors hover:border-ring/50"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(m);
+        }
+      }}
+      className="group flex cursor-pointer flex-col gap-2 rounded-lg border border-border bg-card/40 p-4 text-left transition-colors hover:border-ring/50"
     >
       <div className="flex items-start justify-between gap-2">
         <p className="font-medium">{m.title}</p>
-        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", STATUS_STYLE[m.status])}>
-          {m.status.charAt(0) + m.status.slice(1).toLowerCase()}
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", STATUS_STYLE[m.status])}>
+            {m.status.charAt(0) + m.status.slice(1).toLowerCase()}
+          </span>
+          {actions.length > 0 && (
+            <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+              <RowActionsMenu actions={actions} label={`Actions for ${m.title}`} />
+            </span>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
         <IconClock className="h-3.5 w-3.5 shrink-0" />
@@ -278,7 +341,7 @@ function MeetingCard({ meeting: m, meId, onOpen }: { meeting: Meeting; meId: str
           {m.attendees.length === 1 ? "" : "s"}
         </span>
       </div>
-    </button>
+    </div>
   );
 }
 

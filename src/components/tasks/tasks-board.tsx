@@ -11,6 +11,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SkeletonBoard } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
+import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
+import { IconPencil, IconTrash } from "@/components/icons";
 import { NewTaskDialog } from "@/components/tasks/new-task-dialog";
 import { TaskDetailDialog } from "@/components/tasks/task-detail-dialog";
 import { TasksListView } from "@/components/tasks/tasks-list-view";
@@ -50,7 +52,10 @@ export function TasksBoard() {
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const [currentUserName, setCurrentUserName] = useState<string | undefined>(undefined);
   const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string | undefined>(undefined);
   const [selectedTask, setSelectedTask] = useState<TaskSummary | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TaskSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
@@ -89,6 +94,8 @@ export function TasksBoard() {
       if (meRes.ok) {
         setCurrentUserName(meData.user?.name);
         setCurrentUserAvatar(meData.user?.avatarDataUrl ?? null);
+        setCurrentUserId(meData.user?.id ?? null);
+        setCurrentUserRole(meData.user?.role);
       }
     } finally {
       setLoading(false);
@@ -221,6 +228,35 @@ export function TasksBoard() {
     }
   }
 
+  const isAdmin = currentUserRole === "SUPER_ADMIN" || currentUserRole === "ADMIN";
+  // Edit is open to the creator and the assignee; deletion is narrower — the
+  // creator or an admin. Mirrors the API's own checks; this only decides the UI.
+  const canManage = (t: TaskSummary) =>
+    isAdmin || t.createdBy.id === currentUserId || t.assignedTo?.id === currentUserId;
+  const canDelete = (t: TaskSummary) => isAdmin || t.createdBy.id === currentUserId;
+
+  function taskActions(task: TaskSummary): RowAction[] {
+    const actions: RowAction[] = [];
+    if (canManage(task)) {
+      actions.push({ key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => setSelectedTask(task) });
+    }
+    if (canDelete(task)) {
+      actions.push({
+        key: "delete",
+        label: "Delete",
+        icon: <IconTrash className="h-3.5 w-3.5" />,
+        destructive: true,
+        onSelect: () => setDeleteTarget(task),
+      });
+    }
+    return actions;
+  }
+
+  async function deleteTask(id: string) {
+    const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    if (res.ok) await loadTasks();
+  }
+
   const allFilteredSelected = filteredTasks.length > 0 && filteredTasks.every((t) => selectedIds.has(t.id));
 
   return (
@@ -280,6 +316,7 @@ export function TasksBoard() {
           onSelect={handleTaskClick}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelected}
+          rowActions={selectedIds.size === 0 ? taskActions : undefined}
         />
       )}
 
@@ -373,7 +410,14 @@ export function TasksBoard() {
                             />
                             <p className="text-sm font-medium">{task.title}</p>
                           </div>
-                          <Badge variant={PRIORITY_VARIANT[task.priority]}>{task.priority}</Badge>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Badge variant={PRIORITY_VARIANT[task.priority]}>{task.priority}</Badge>
+                            {selectedIds.size === 0 && (
+                              <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                                <RowActionsMenu actions={taskActions(task)} label={`Actions for ${task.title}`} />
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {task.dueDate && (
                           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -418,6 +462,16 @@ export function TasksBoard() {
         title={`Delete ${selectedIds.size} task${selectedIds.size === 1 ? "" : "s"}?`}
         description="This will permanently delete the selected task(s) along with their comments and attachments. This action cannot be undone."
         onConfirm={handleBulkDelete}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title={`Delete "${deleteTarget?.title}"?`}
+        description="This permanently deletes the task along with its comments and attachments. This cannot be undone."
+        onConfirm={async () => {
+          if (deleteTarget) await deleteTask(deleteTarget.id);
+        }}
       />
     </div>
   );

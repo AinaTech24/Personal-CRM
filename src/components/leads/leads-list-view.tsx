@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { HoverCheckbox } from "@/components/ui/checkbox";
+import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { LEAD_STATUSES, MEETING_STATUS_OPTIONS, type LeadSummary } from "@/components/leads/types";
 import { cn } from "@/lib/utils";
 
@@ -26,11 +27,14 @@ export function LeadsListView({
   onSelect,
   selectedIds,
   onToggleSelect,
+  rowActions,
 }: {
   leads: LeadSummary[];
   onSelect: (lead: LeadSummary) => void;
   selectedIds?: Set<string>;
   onToggleSelect: (id: string) => void;
+  /** Per-row actions menu; omit to hide the actions column. */
+  rowActions?: (lead: LeadSummary) => RowAction[];
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border focus:outline-none">
@@ -45,6 +49,7 @@ export function LeadsListView({
             <th className="px-4 py-2.5 font-medium">Priority</th>
             <th className="px-4 py-2.5 font-medium">Meeting</th>
             <th className="px-4 py-2.5 font-medium">Assigned to</th>
+            {rowActions && <th className="w-10 px-4 py-2.5" />}
           </tr>
         </thead>
         <tbody>
@@ -78,12 +83,19 @@ export function LeadsListView({
                 <td className="px-4 py-2.5 text-muted-foreground">
                   {lead.assignedTo ? lead.assignedTo.name : "Unassigned"}
                 </td>
+                {rowActions && (
+                  <td className="px-4 py-2.5">
+                    <span className="flex justify-end opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                      <RowActionsMenu actions={rowActions(lead)} label={`Actions for ${lead.name}`} />
+                    </span>
+                  </td>
+                )}
               </tr>
             );
           })}
           {leads.length === 0 && (
             <tr>
-              <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
+              <td colSpan={rowActions ? 9 : 8} className="px-4 py-8 text-center text-sm text-muted-foreground">
                 No leads found
               </td>
             </tr>

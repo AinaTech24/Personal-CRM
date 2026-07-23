@@ -35,6 +35,7 @@ interface Department {
 }
 
 interface CurrentUser {
+  id: string;
   name: string;
   role: "SUPER_ADMIN" | "ADMIN" | "DEPARTMENT_USER";
   avatarDataUrl?: string | null;
@@ -117,6 +118,11 @@ export function ProjectsList() {
   }, [socket]);
 
   const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
+
+  // Admins manage any project; everyone else manages the ones they created.
+  // Edit, enable/disable and delete are all allowed for a project's creator —
+  // the API already enforces the same rule, so this only decides what to show.
+  const canManageProject = (p: ProjectSummary) => isAdmin || p.createdBy.id === currentUser?.id;
 
   const filteredProjects = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -354,8 +360,9 @@ export function ProjectsList() {
                   )}
                 </Card>
 
-                {/* Admin quick actions — appear on hover */}
-                {isAdmin && selectedIds.size === 0 && (
+                {/* Quick actions — appear on hover for anyone who can manage
+                    this project (admins, or the person who created it). */}
+                {canManageProject(project) && selectedIds.size === 0 && (
                   <div
                     className="absolute right-2 top-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
                     onClick={(e) => e.stopPropagation()}
