@@ -48,23 +48,24 @@ export function broadcastLeadChange(
   emitToAdmins(event, { leadId: lead.id });
 }
 
+/**
+ * Everyone who can be assigned or added anywhere in the app.
+ *
+ * Every active user, regardless of department or role — assignment is no longer
+ * department-scoped, so any dropdown can offer anyone. `role` rides along so the
+ * UI can badge admins and super admins; the caller decides how to show it.
+ *
+ * The `opts` argument is kept for call-site compatibility but no longer changes
+ * the result — the list is always the full active roster.
+ */
 export async function assignableUsersFor(user: PermissionUser, opts?: { allActive?: boolean }) {
-  const admin = isAdmin(user);
-  // Super Admins are only offered as an assignee to admins; regular users never
-  // see them in assignment pickers.
-  const roleFilter = admin ? {} : { role: { not: "SUPER_ADMIN" as const } };
-  // Admins always see everyone; other modules (e.g. task assignment) can opt in
-  // to the full active-user list so any user can be assigned across departments.
-  if (opts?.allActive || admin) {
-    return db.user.findMany({
-      where: { isActive: true, ...roleFilter },
-      select: { id: true, name: true, surname: true, email: true, departmentId: true, avatarDataUrl: true },
-      orderBy: { name: "asc" },
-    });
-  }
+  // Kept in the signature so existing call sites (which pass a user and a scope)
+  // still type-check, but the result no longer depends on either.
+  void user;
+  void opts;
   return db.user.findMany({
-    where: { isActive: true, departmentId: user.departmentId, ...roleFilter },
-    select: { id: true, name: true, email: true, departmentId: true },
+    where: { isActive: true },
+    select: { id: true, name: true, surname: true, email: true, departmentId: true, avatarDataUrl: true, role: true },
     orderBy: { name: "asc" },
   });
 }

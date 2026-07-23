@@ -33,18 +33,30 @@ export function DateTimePicker({
   const [open, setOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState(value ?? new Date());
 
-  const hour = value ? value.getHours() : 9;
+  const hour24 = value ? value.getHours() : 9;
   const minute = value ? value.getMinutes() : 0;
+  const meridiem: "AM" | "PM" = hour24 >= 12 ? "PM" : "AM";
+  // 12-hour clock: midnight (0) and noon (12) both read as 12.
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
 
   function pickDay(day: Date) {
-    const withTime = setMinutes(setHours(day, showTime ? hour : 0), showTime ? minute : 0);
+    const withTime = setMinutes(setHours(day, showTime ? hour24 : 0), showTime ? minute : 0);
     onChange(withTime);
     setOpen(false);
   }
 
-  function setHour(h: number) {
-    const base = value ?? new Date();
-    onChange(setHours(base, ((h % 24) + 24) % 24));
+  /** Set the hour from a 1–12 value, keeping the current AM/PM. */
+  function setHour12(h: number) {
+    const h12 = ((h - 1 + 12) % 12) + 1; // wrap into 1..12
+    const h24 = (h12 % 12) + (meridiem === "PM" ? 12 : 0);
+    onChange(setHours(value ?? new Date(), h24));
+  }
+
+  /** Flip AM/PM without changing the displayed hour. */
+  function setMeridiem(m: "AM" | "PM") {
+    if (m === meridiem) return;
+    const h24 = (hour12 % 12) + (m === "PM" ? 12 : 0);
+    onChange(setHours(value ?? new Date(), h24));
   }
 
   function setMinute(m: number) {
@@ -97,9 +109,27 @@ export function DateTimePicker({
           />
           {showTime && (
             <div className="mt-3 flex items-center justify-center gap-1.5 border-t border-border pt-3">
-              <TimeStepper label="HH" value={hour} onChange={setHour} max={23} />
+              <TimeStepper label="HH" value={hour12} onChange={setHour12} min={1} max={12} />
               <span className="text-sm text-muted-foreground">:</span>
               <TimeStepper label="MM" value={minute} onChange={setMinute} max={59} />
+              {/* AM/PM stacked so the picker stays a 12-hour clock; the trigger
+                  already renders the time as "h:mm a". */}
+              <div className="ml-1.5 flex flex-col gap-0.5">
+                {(["AM", "PM"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={meridiem === m}
+                    onClick={() => setMeridiem(m)}
+                    className={cn(
+                      "rounded px-2 py-0.5 text-xs font-medium transition-colors",
+                      meridiem === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-primary/5"
+                    )}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </Popover.Content>
@@ -121,11 +151,13 @@ function TimeStepper({
   label,
   value,
   onChange,
+  min = 0,
   max,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
+  min?: number;
   max: number;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
@@ -134,7 +166,7 @@ function TimeStepper({
   function commit(text: string) {
     const n = Number.parseInt(text, 10);
     if (Number.isNaN(n)) return;
-    onChange(Math.min(Math.max(n, 0), max));
+    onChange(Math.min(Math.max(n, min), max));
   }
 
   return (
@@ -143,7 +175,7 @@ function TimeStepper({
         type="button"
         tabIndex={-1}
         aria-label={`Increase ${label}`}
-        onClick={() => onChange(value + 1 > max ? 0 : value + 1)}
+        onClick={() => onChange(value + 1 > max ? min : value + 1)}
         className="flex h-5 w-9 items-center justify-center rounded text-xs text-muted-foreground hover:bg-primary/5"
       >
         +
@@ -170,12 +202,12 @@ function TimeStepper({
         onKeyDown={(e) => {
           if (e.key === "ArrowUp") {
             e.preventDefault();
-            const next = value + 1 > max ? 0 : value + 1;
+            const next = value + 1 > max ? min : value + 1;
             onChange(next);
             setDraft(String(next).padStart(2, "0"));
           } else if (e.key === "ArrowDown") {
             e.preventDefault();
-            const next = value - 1 < 0 ? max : value - 1;
+            const next = value - 1 < min ? max : value - 1;
             onChange(next);
             setDraft(String(next).padStart(2, "0"));
           } else if (e.key === "Enter") {
@@ -189,7 +221,7 @@ function TimeStepper({
         type="button"
         tabIndex={-1}
         aria-label={`Decrease ${label}`}
-        onClick={() => onChange(value - 1 < 0 ? max : value - 1)}
+        onClick={() => onChange(value - 1 < min ? max : value - 1)}
         className="flex h-5 w-9 items-center justify-center rounded text-xs text-muted-foreground hover:bg-primary/5"
       >
         −

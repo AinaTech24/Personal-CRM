@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { userOptionLabel } from "@/lib/user-display";
 import { useRouter } from "next/navigation";
 import * as Popover from "@radix-ui/react-popover";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -315,7 +316,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
             onChange={(v) => patchProjectTask(t.id, { assignedToId: v || null })}
             placeholder="Unassigned"
             emptyMessage="No members"
-            options={assignableUsers.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
+            options={assignableUsers.map((u) => ({ value: u.id, label: userOptionLabel(u), avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
           />
           <DateTimePicker
             className="text-xs"
@@ -425,12 +426,12 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
         </div>
       </div>
 
-      {/* Two explicit columns rather than a 3-cell grid. In the grid, a short
-          Supporters card in the top-right left the cell beneath it (under
-          Milestones' row) empty — a large dead gap. Stacking Supporters and
-          Milestones together in the right column fills it and keeps the two
-          columns close in height. */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+      {/* Two columns of equal height (no items-start): Team members on the left,
+          Supporters over Milestones on the right. The columns stretch to match
+          the taller one, and the cards grow to fill their column — so the
+          shorter side shows a taller card rather than bare background beneath a
+          short one. */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
         <Card className="lg:flex-1">
           <CardHeader>
             <CardTitle className="text-base">Team members</CardTitle>
@@ -443,7 +444,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
                 onChange={setMemberToAdd}
                 placeholder="Select a member"
                 emptyMessage="Everyone's already added"
-                options={memberOptions.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
+                options={memberOptions.map((u) => ({ value: u.id, label: userOptionLabel(u), avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
               />
               <Button type="button" size="sm" variant="outline" onClick={addMember} className="shrink-0">
                 Add
@@ -477,7 +478,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
         <div className="flex flex-col gap-4 lg:flex-1">
           <ProjectSupportersCard project={project} assignableUsers={assignableUsers} onChanged={load} />
 
-          <Card>
+          <Card className="flex flex-1 flex-col">
           <CardHeader>
             <CardTitle className="text-base">Milestones</CardTitle>
           </CardHeader>
@@ -557,7 +558,10 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
         </CardContent>
       </Card>
 
-      <Card>
+      {/* Documents and Activity share a row rather than each spanning full
+          width. items-stretch keeps them the same height. */}
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+      <Card className="flex flex-col">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Documents</CardTitle>
           <Popover.Root open={addFileOpen} onOpenChange={(v) => { setAddFileOpen(v); if (!v) { setPendingFile(null); setDocName(""); } }}>
@@ -643,11 +647,11 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="flex flex-col">
         <CardHeader>
           <CardTitle className="text-base">Activity</CardTitle>
         </CardHeader>
-        <CardContent className="flex max-h-64 flex-col gap-1.5 overflow-y-auto">
+        <CardContent className="flex max-h-64 flex-1 flex-col gap-1.5 overflow-y-auto">
           {project.activities.map((a) => (
             <div key={a.id} className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
               <span>{activityLabel(a)}</span>
@@ -657,6 +661,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
           {project.activities.length === 0 && <p className="text-xs text-muted-foreground">No activity yet</p>}
         </CardContent>
       </Card>
+      </div>
 
       <div className="flex justify-end">
         <button

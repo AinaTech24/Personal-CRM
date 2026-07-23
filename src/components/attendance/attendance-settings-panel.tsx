@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { userOptionLabel } from "@/lib/user-display";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -375,7 +376,7 @@ export function AttendanceSettingsPanel() {
                 value={leaveUserId}
                 onChange={setLeaveUserId}
                 placeholder="Select user"
-                options={staff.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
+                options={staff.map((u) => ({ value: u.id, label: userOptionLabel(u), avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
               />
             </div>
             <div className="flex flex-col gap-1.5">

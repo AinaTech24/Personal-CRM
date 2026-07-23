@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { userOptionLabel } from "@/lib/user-display";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -143,7 +144,7 @@ export function ProjectsList() {
         { value: UNASSIGNED, label: "Unassigned" },
         ...assignableUsers.map((u) => ({
           value: u.id,
-          label: u.surname ? `${u.name} ${u.surname}` : u.name,
+          label: userOptionLabel(u),
           avatarDataUrl: u.avatarDataUrl,
           showAvatar: true,
         })),

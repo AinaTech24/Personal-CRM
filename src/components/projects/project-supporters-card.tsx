@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { userOptionLabel } from "@/lib/user-display";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,13 +41,11 @@ export function ProjectSupportersCard({
     minutesByUser.set(entry.user.id, (minutesByUser.get(entry.user.id) ?? 0) + entry.minutes);
   }
 
-  // Team members are excluded: someone already on the team isn't a supporter,
-  // and offering them here would create two competing records of the same person.
-  const options = assignableUsers.filter(
-    (u) =>
-      !project.supporters.some((s) => s.user.id === u.id) &&
-      !project.members.some((m) => m.user.id === u.id)
-  );
+  // Every user is offered, minus those already listed as supporters. Team
+  // members are no longer filtered out — with a small roster everyone tends to
+  // be on the team, which left this empty; anyone can be credited as a
+  // supporter regardless.
+  const options = assignableUsers.filter((u) => !project.supporters.some((s) => s.user.id === u.id));
 
   async function addSupporter() {
     if (!userId) return toast.error("Pick someone to add");
@@ -98,10 +97,10 @@ export function ProjectSupportersCard({
                 value={userId}
                 onChange={setUserId}
                 placeholder="Select a user"
-                emptyMessage="Everyone's already a member or supporter"
+                emptyMessage="Everyone's already a supporter"
                 options={options.map((u) => ({
                   value: u.id,
-                  label: u.surname ? `${u.name} ${u.surname}` : u.name,
+                  label: userOptionLabel(u),
                   avatarDataUrl: u.avatarDataUrl,
                   showAvatar: true,
                 }))}

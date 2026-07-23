@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { userOptionLabel } from "@/lib/user-display";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -177,7 +178,7 @@ export function ProjectTimePanel({
 
   const userOptions = assignableUsers.map((u) => ({
     value: u.id,
-    label: u.surname ? `${u.name} ${u.surname}` : u.name,
+    label: userOptionLabel(u),
     avatarDataUrl: u.avatarDataUrl,
     showAvatar: true,
   }));

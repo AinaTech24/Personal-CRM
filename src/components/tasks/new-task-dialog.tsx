@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { userOptionLabel } from "@/lib/user-display";
 import {
   Dialog,
   DialogContent,
@@ -155,7 +156,7 @@ export function NewTaskDialog({
                   value={assignedToId}
                   onChange={setAssignedToId}
                   placeholder="Unassigned"
-                  options={assignableUsers.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
+                  options={assignableUsers.map((u) => ({ value: u.id, label: userOptionLabel(u), avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
                 />
               </div>
               <div className="flex flex-col gap-1.5">

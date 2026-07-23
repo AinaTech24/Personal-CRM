@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { userOptionLabel } from "@/lib/user-display";
 import { motion } from "framer-motion";
 import {
   Dialog,
@@ -221,7 +222,7 @@ export function LeadDetailDialog({
                   disabled={savingField === "assignedToId"}
                   onChange={(v) => patchLead({ assignedToId: v || null })}
                   placeholder="Unassigned"
-                  options={assignableUsers.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
+                  options={assignableUsers.map((u) => ({ value: u.id, label: userOptionLabel(u), avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
                 />
               </div>
             </div>

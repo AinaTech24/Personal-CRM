@@ -115,6 +115,7 @@ export interface AssignableUser {
   email: string;
   departmentId: string | null;
   avatarDataUrl?: string | null;
+  role?: "SUPER_ADMIN" | "ADMIN" | "DEPARTMENT_USER" | null;
 }
 
 export const PROJECT_STATUSES: { value: ProjectStatus; label: string }[] = [

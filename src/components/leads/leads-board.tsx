@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { userOptionLabel } from "@/lib/user-display";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
 import { AnimatePresence, motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
@@ -155,7 +156,7 @@ export function LeadsBoard() {
         { value: UNASSIGNED, label: "Unassigned" },
         ...assignableUsers.map((u) => ({
           value: u.id,
-          label: u.surname ? `${u.name} ${u.surname}` : u.name,
+          label: userOptionLabel(u),
           avatarDataUrl: u.avatarDataUrl,
           showAvatar: true,
         })),

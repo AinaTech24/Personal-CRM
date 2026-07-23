@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { userOptionLabel } from "@/lib/user-display";
 import { format, isAfter, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +22,9 @@ import { cn } from "@/lib/utils";
 interface MeetingUser {
   id: string;
   name: string;
+  surname?: string | null;
   email: string;
+  role?: "SUPER_ADMIN" | "ADMIN" | "DEPARTMENT_USER" | null;
 }
 
 type MeetingStatus = "SCHEDULED" | "COMPLETED" | "CANCELLED";
@@ -126,7 +129,7 @@ export function MeetingsView() {
       allLabel: "Anyone",
       value: filters.organizer,
       onChange: (v) => setFilters((f) => ({ ...f, organizer: v })),
-      options: users.map((u) => ({ value: u.id, label: u.name, showAvatar: true })),
+      options: users.map((u) => ({ value: u.id, label: userOptionLabel(u), showAvatar: true })),
     },
     {
       key: "status",

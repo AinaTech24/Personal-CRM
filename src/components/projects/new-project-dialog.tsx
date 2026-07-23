@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { userOptionLabel } from "@/lib/user-display";
 import {
   Dialog,
   DialogContent,
@@ -165,7 +166,7 @@ export function NewProjectDialog({
                   value={assignedToId}
                   onChange={setAssignedToId}
                   placeholder="Unassigned"
-                  options={assignableUsers.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
+                  options={assignableUsers.map((u) => ({ value: u.id, label: userOptionLabel(u), avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
                 />
               </div>
             </div>
@@ -186,7 +187,7 @@ export function NewProjectDialog({
                   value={memberToAdd}
                   onChange={setMemberToAdd}
                   placeholder="Select a member"
-                  options={memberOptions.map((u) => ({ value: u.id, label: u.name, avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
+                  options={memberOptions.map((u) => ({ value: u.id, label: userOptionLabel(u), avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
                 />
                 <Button type="button" size="sm" variant="outline" onClick={addMember} className="shrink-0">
                   Add
