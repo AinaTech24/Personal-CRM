@@ -24,13 +24,7 @@ export default async function DashboardHomePage() {
   if (admin) {
     return (
       <div className="flex min-h-full flex-col gap-6">
-        <div>
-          <h1 className="text-xl font-semibold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">
-            Welcome back{user ? `, ${user.name.split(" ")[0]}` : ""} — live overview across all modules
-          </p>
-        </div>
-        <DashboardStats />
+        <DashboardStats greetingName={user?.name.split(" ")[0] ?? ""} />
       </div>
     );
   }

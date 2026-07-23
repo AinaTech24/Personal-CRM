@@ -16,6 +16,7 @@ import {
   IconMessage,
 } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { useDashboardActivity } from "@/components/dashboard/dashboard-activity";
 import { formatIstTime, formatDuration } from "@/lib/attendance-ui";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +53,7 @@ function whenLabel(iso: string) {
 
 export function UserDashboard({ firstName }: { firstName: string }) {
   const toast = useToast();
+  const { filterButton, panel } = useDashboardActivity();
   const [data, setData] = useState<MeDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
@@ -125,6 +127,7 @@ export function UserDashboard({ firstName }: { firstName: string }) {
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {filterButton}
             {!att.onLeave && !checkedIn && (
               <Button type="button" onClick={() => punch("check-in")} disabled={acting}>
                 <IconClock className="h-4 w-4" />
@@ -146,6 +149,9 @@ export function UserDashboard({ firstName }: { firstName: string }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Filtered view (period + module), shown when a module is picked. */}
+      {panel}
 
       {/* Headline numbers */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -15,6 +15,7 @@ import {
 } from "@/components/icons";
 import { useSocket } from "@/components/providers/socket-provider";
 import { Chart, CHART_TYPES, type Slice } from "@/components/dashboard/charts";
+import { useDashboardActivity } from "@/components/dashboard/dashboard-activity";
 
 interface EntityStat {
   total: number;
@@ -166,9 +167,10 @@ function ChartCard({
   );
 }
 
-export function DashboardStats() {
+export function DashboardStats({ greetingName = "" }: { greetingName?: string }) {
   const router = useRouter();
   const { socket } = useSocket();
+  const { filterButton, panel } = useDashboardActivity();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -237,10 +239,33 @@ export function DashboardStats() {
     return [{ title: "Users", icon: IconUsers, options: userOpts }, ...entityCards];
   }, [stats]);
 
-  if (loading || !stats) return <SkeletonCards count={4} />;
+  const header = (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Welcome back{greetingName ? `, ${greetingName}` : ""} — live overview across all modules
+          </p>
+        </div>
+        {filterButton}
+      </div>
+      {panel}
+    </div>
+  );
+
+  if (loading || !stats) {
+    return (
+      <div className="flex flex-1 flex-col gap-6">
+        {header}
+        <SkeletonCards count={4} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 flex-col gap-6">
+      {header}
       {/* Metric cards — one row on wide screens, each with its own dropdown */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {metricCards.map((c) => (
