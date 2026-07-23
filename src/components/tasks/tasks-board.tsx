@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dropdown } from "@/components/ui/dropdown";
+import { FilterMenu, type FilterFacet } from "@/components/ui/filter-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SkeletonBoard } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
@@ -16,12 +17,16 @@ import { useSearch } from "@/components/providers/search-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
 import {
+  PRIORITY_OPTIONS,
   TASK_STATUSES,
   type AssignableUser,
   type TaskStatus,
   type TaskSummary,
 } from "@/components/tasks/types";
 import { cn } from "@/lib/utils";
+
+/** Sentinel for the "no assignee" choice, kept distinct from a real user id. */
+const UNASSIGNED = "__unassigned__";
 
 type ViewMode = "pipeline" | "list";
 
@@ -49,6 +54,11 @@ export function TasksBoard() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
   const [view, setView] = useState<ViewMode>("pipeline");
+  const [filters, setFilters] = useState<{ assignee: string | null; status: string | null; priority: string | null }>({
+    assignee: null,
+    status: null,
+    priority: null,
+  });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const { containerRef: scrollContainerRef, onDragOver: handleBoardDragOver, stop: stopAutoScroll } =
@@ -103,11 +113,49 @@ export function TasksBoard() {
 
   const filteredTasks = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return tasks;
-    return tasks.filter((task) =>
-      [task.title, task.description].filter(Boolean).some((field) => field!.toLowerCase().includes(q))
-    );
-  }, [tasks, query]);
+    return tasks.filter((task) => {
+      if (filters.assignee === UNASSIGNED ? task.assignedTo !== null : filters.assignee && task.assignedTo?.id !== filters.assignee) {
+        return false;
+      }
+      if (filters.status && task.status !== filters.status) return false;
+      if (filters.priority && task.priority !== filters.priority) return false;
+      if (!q) return true;
+      return [task.title, task.description].filter(Boolean).some((field) => field!.toLowerCase().includes(q));
+    });
+  }, [tasks, query, filters]);
+
+  const filterFacets: FilterFacet[] = [
+    {
+      key: "assignee",
+      label: "Assigned to",
+      allLabel: "Anyone",
+      value: filters.assignee,
+      onChange: (v) => setFilters((f) => ({ ...f, assignee: v })),
+      options: [
+        { value: UNASSIGNED, label: "Unassigned" },
+        ...assignableUsers.map((u) => ({
+          value: u.id,
+          label: u.surname ? `${u.name} ${u.surname}` : u.name,
+          avatarDataUrl: u.avatarDataUrl,
+          showAvatar: true,
+        })),
+      ],
+    },
+    {
+      key: "status",
+      label: "Status",
+      value: filters.status,
+      onChange: (v) => setFilters((f) => ({ ...f, status: v })),
+      options: TASK_STATUSES,
+    },
+    {
+      key: "priority",
+      label: "Priority",
+      value: filters.priority,
+      onChange: (v) => setFilters((f) => ({ ...f, priority: v })),
+      options: PRIORITY_OPTIONS,
+    },
+  ];
 
   async function moveTask(taskId: string, status: TaskStatus) {
     const current = tasks.find((t) => t.id === taskId);
@@ -203,6 +251,7 @@ export function TasksBoard() {
                 transition={{ duration: 0.12 }}
                 className="flex items-center gap-2"
               >
+                <FilterMenu facets={filterFacets} />
                 <Dropdown
                   size="sm"
                   value={view}

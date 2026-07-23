@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dropdown } from "@/components/ui/dropdown";
+import { FilterMenu, type FilterFacet } from "@/components/ui/filter-menu";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
@@ -63,6 +64,11 @@ export function MeetingsView() {
   // rather than reopening onto the last visit's half-finished edits.
   const [openSeq, setOpenSeq] = useState(0);
   const [editing, setEditing] = useState<Meeting | null>(null);
+  const [filters, setFilters] = useState<{ organizer: string | null; status: string | null; involvement: string | null }>({
+    organizer: null,
+    status: null,
+    involvement: null,
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,18 +94,56 @@ export function MeetingsView() {
     load();
   }, [load]);
 
+  const filteredMeetings = useMemo(() => {
+    return meetings.filter((m) => {
+      if (filters.organizer && m.organizer.id !== filters.organizer) return false;
+      if (filters.status && m.status !== filters.status) return false;
+      // "Involving me" spans both roles: organiser or on the attendee list.
+      if (filters.involvement === "mine" && m.organizer.id !== meId && !m.attendees.some((a) => a.id === meId)) {
+        return false;
+      }
+      return true;
+    });
+  }, [meetings, filters, meId]);
+
   const { upcoming, past } = useMemo(() => {
     const now = new Date();
     const up: Meeting[] = [];
     const pa: Meeting[] = [];
-    for (const m of meetings) {
+    for (const m of filteredMeetings) {
       if (m.status === "SCHEDULED" && isAfter(parseISO(m.startsAt), now)) up.push(m);
       else pa.push(m);
     }
     up.sort((a, b) => a.startsAt.localeCompare(b.startsAt)); // soonest first
     pa.sort((a, b) => b.startsAt.localeCompare(a.startsAt)); // most recent first
     return { upcoming: up, past: pa };
-  }, [meetings]);
+  }, [filteredMeetings]);
+
+  const filterFacets: FilterFacet[] = [
+    {
+      key: "organizer",
+      label: "Organizer",
+      allLabel: "Anyone",
+      value: filters.organizer,
+      onChange: (v) => setFilters((f) => ({ ...f, organizer: v })),
+      options: users.map((u) => ({ value: u.id, label: u.name, showAvatar: true })),
+    },
+    {
+      key: "status",
+      label: "Status",
+      value: filters.status,
+      onChange: (v) => setFilters((f) => ({ ...f, status: v })),
+      options: STATUS_OPTIONS,
+    },
+    {
+      key: "involvement",
+      label: "Involvement",
+      allLabel: "Everyone's",
+      value: filters.involvement,
+      onChange: (v) => setFilters((f) => ({ ...f, involvement: v })),
+      options: [{ value: "mine", label: "Involving me" }],
+    },
+  ];
 
   function openCreate() {
     setEditing(null);
@@ -120,10 +164,13 @@ export function MeetingsView() {
           <h1 className="text-xl font-semibold">Meetings</h1>
           <p className="text-sm text-muted-foreground">Schedule and track team meetings.</p>
         </div>
-        <Button type="button" onClick={openCreate}>
-          <IconPlus className="h-4 w-4" />
-          New meeting
-        </Button>
+        <div className="flex items-center gap-2">
+          {meetings.length > 0 && <FilterMenu facets={filterFacets} />}
+          <Button type="button" onClick={openCreate}>
+            <IconPlus className="h-4 w-4" />
+            New meeting
+          </Button>
+        </div>
       </div>
 
       {loading ? (

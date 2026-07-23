@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dropdown } from "@/components/ui/dropdown";
+import { FilterMenu, type FilterFacet } from "@/components/ui/filter-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SkeletonBoard } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
@@ -17,11 +18,16 @@ import { useSearch } from "@/components/providers/search-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import {
   LEAD_STATUSES,
+  MEETING_STATUS_OPTIONS,
+  PRIORITY_OPTIONS,
   type AssignableUser,
   type LeadStatus,
   type LeadSummary,
 } from "@/components/leads/types";
 import { cn } from "@/lib/utils";
+
+/** Sentinel for the "no assignee" choice, kept distinct from a real user id. */
+const UNASSIGNED = "__unassigned__";
 
 interface Department {
   id: string;
@@ -58,6 +64,12 @@ export function LeadsBoard() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<LeadStatus | null>(null);
   const [view, setView] = useState<ViewMode>("pipeline");
+  const [filters, setFilters] = useState<{
+    assignee: string | null;
+    status: string | null;
+    priority: string | null;
+    meeting: string | null;
+  }>({ assignee: null, status: null, priority: null, meeting: null });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const { containerRef: scrollContainerRef, onDragOver: handleBoardDragOver, stop: stopAutoScroll } =
@@ -118,13 +130,59 @@ export function LeadsBoard() {
 
   const filteredLeads = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return leads;
-    return leads.filter((lead) =>
-      [lead.name, lead.company, lead.email, lead.product]
+    return leads.filter((lead) => {
+      if (filters.assignee === UNASSIGNED ? lead.assignedTo !== null : filters.assignee && lead.assignedTo?.id !== filters.assignee) {
+        return false;
+      }
+      if (filters.status && lead.status !== filters.status) return false;
+      if (filters.priority && lead.priority !== filters.priority) return false;
+      if (filters.meeting && lead.meetingStatus !== filters.meeting) return false;
+      if (!q) return true;
+      return [lead.name, lead.company, lead.email, lead.product]
         .filter(Boolean)
-        .some((field) => field!.toLowerCase().includes(q))
-    );
-  }, [leads, query]);
+        .some((field) => field!.toLowerCase().includes(q));
+    });
+  }, [leads, query, filters]);
+
+  const filterFacets: FilterFacet[] = [
+    {
+      key: "assignee",
+      label: "Assigned to",
+      allLabel: "Anyone",
+      value: filters.assignee,
+      onChange: (v) => setFilters((f) => ({ ...f, assignee: v })),
+      options: [
+        { value: UNASSIGNED, label: "Unassigned" },
+        ...assignableUsers.map((u) => ({
+          value: u.id,
+          label: u.surname ? `${u.name} ${u.surname}` : u.name,
+          avatarDataUrl: u.avatarDataUrl,
+          showAvatar: true,
+        })),
+      ],
+    },
+    {
+      key: "status",
+      label: "Status",
+      value: filters.status,
+      onChange: (v) => setFilters((f) => ({ ...f, status: v })),
+      options: LEAD_STATUSES,
+    },
+    {
+      key: "priority",
+      label: "Priority",
+      value: filters.priority,
+      onChange: (v) => setFilters((f) => ({ ...f, priority: v })),
+      options: PRIORITY_OPTIONS,
+    },
+    {
+      key: "meeting",
+      label: "Meeting",
+      value: filters.meeting,
+      onChange: (v) => setFilters((f) => ({ ...f, meeting: v })),
+      options: MEETING_STATUS_OPTIONS,
+    },
+  ];
 
   async function moveLead(leadId: string, status: LeadStatus) {
     const current = leads.find((l) => l.id === leadId);
@@ -220,6 +278,7 @@ export function LeadsBoard() {
                 transition={{ duration: 0.12 }}
                 className="flex items-center gap-2"
               >
+                <FilterMenu facets={filterFacets} />
                 <Dropdown
                   size="sm"
                   value={view}

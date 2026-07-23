@@ -7,6 +7,7 @@ import {
   endOfWeek,
   format,
   isSameMonth,
+  isToday,
   startOfMonth,
   startOfWeek,
   subMonths,
@@ -78,6 +79,7 @@ export function CalendarMonth({
         {days.map((day) => {
           const st = dayState(day);
           const inMonth = isSameMonth(day, viewMonth);
+          const today = isToday(day);
           return (
             <div
               key={day.toISOString()}
@@ -94,6 +96,10 @@ export function CalendarMonth({
                 className={cn(
                   "mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs transition-colors hover:bg-primary/5",
                   !inMonth && "text-muted-foreground/40",
+                  // Today is ringed rather than filled, so it stays visible under
+                  // a selection (solid primary) without competing with it. The
+                  // ring is dropped once the day is actually selected.
+                  today && !st.selected && "font-semibold text-primary ring-1 ring-inset ring-primary/50",
                   st.selected && "bg-primary text-primary-foreground hover:bg-primary"
                 )}
               >
