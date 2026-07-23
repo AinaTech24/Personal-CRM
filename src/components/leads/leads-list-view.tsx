@@ -59,9 +59,10 @@ export function LeadsListView({
                   selected && "bg-accent/40"
                 )}
               >
-                <td className="px-4 py-2.5">
+                <td className="w-10 px-4 py-2.5">
                   <HoverCheckbox
                     checked={selected}
+                    reveal="fade"
                     onChange={() => onToggleSelect(lead.id)}
                     aria-label={`Select ${lead.name}`}
                   />

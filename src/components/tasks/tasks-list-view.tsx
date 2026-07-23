@@ -52,9 +52,10 @@ export function TasksListView({
                   selected && "bg-accent/40"
                 )}
               >
-                <td className="px-4 py-2.5">
+                <td className="w-10 px-4 py-2.5">
                   <HoverCheckbox
                     checked={selected}
+                    reveal="fade"
                     onChange={() => onToggleSelect(task.id)}
                     aria-label={`Select ${task.title}`}
                   />

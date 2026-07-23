@@ -2,8 +2,12 @@
 
 import { useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
+import { AnimatePresence, motion } from "framer-motion";
 import { IconCheck, IconChevronDown, IconFilter } from "@/components/icons";
 import { cn } from "@/lib/utils";
+
+/** One shared easing so the popover and its sub-dropdowns feel like one motion. */
+const EASE = [0.16, 1, 0.3, 1] as const;
 
 export interface FilterOption {
   value: string;
@@ -87,12 +91,17 @@ export function FilterMenu({ facets, className }: { facets: FilterFacet[]; class
           )}
         </button>
       </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content
-          align="end"
-          sideOffset={6}
-          className="z-50 w-64 overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
-        >
+      <AnimatePresence>
+        {open && (
+          <Popover.Portal forceMount>
+            <Popover.Content asChild align="end" sideOffset={6}>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                transition={{ duration: 0.16, ease: EASE }}
+                className="z-50 w-64 origin-top-right overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+              >
           <div className="flex items-center justify-between px-2 py-1.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filters</span>
             {activeCount > 0 && (
@@ -129,50 +138,67 @@ export function FilterMenu({ facets, className }: { facets: FilterFacet[]; class
                     />
                   </button>
 
-                  {isOpen && (
-                    <div className="pb-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          facet.onChange(null);
-                          setExpanded(null);
-                        }}
-                        className={cn(
-                          "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-1.5 text-left text-sm hover:bg-primary/5",
-                          facet.value === null && "bg-accent/60"
-                        )}
+                  {/* Height-auto expand/collapse so a facet's options slide open
+                      rather than snapping the panel taller. overflow-hidden on
+                      the animating element clips the options mid-slide. */}
+                  <AnimatePresence initial={false}>
+                    {isOpen && (
+                      <motion.div
+                        key="options"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: EASE }}
+                        className="overflow-hidden"
                       >
-                        <span className="text-muted-foreground">{facet.allLabel ?? "All"}</span>
-                        {facet.value === null && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                      </button>
-                      {facet.options.map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => {
-                            facet.onChange(opt.value);
-                            setExpanded(null);
-                          }}
-                          className={cn(
-                            "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-1.5 text-left text-sm hover:bg-primary/5",
-                            opt.value === facet.value && "bg-accent/60"
-                          )}
-                        >
-                          <span className="flex min-w-0 items-center gap-2">
-                            {(opt.showAvatar || opt.avatarDataUrl) && <Avatar option={opt} />}
-                            <span className="truncate">{opt.label}</span>
-                          </span>
-                          {opt.value === facet.value && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                        <div className="pb-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              facet.onChange(null);
+                              setExpanded(null);
+                            }}
+                            className={cn(
+                              "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-1.5 text-left text-sm hover:bg-primary/5",
+                              facet.value === null && "bg-accent/60"
+                            )}
+                          >
+                            <span className="text-muted-foreground">{facet.allLabel ?? "All"}</span>
+                            {facet.value === null && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                          </button>
+                          {facet.options.map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                facet.onChange(opt.value);
+                                setExpanded(null);
+                              }}
+                              className={cn(
+                                "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-1.5 text-left text-sm hover:bg-primary/5",
+                                opt.value === facet.value && "bg-accent/60"
+                              )}
+                            >
+                              <span className="flex min-w-0 items-center gap-2">
+                                {(opt.showAvatar || opt.avatarDataUrl) && <Avatar option={opt} />}
+                                <span className="truncate">{opt.label}</span>
+                              </span>
+                              {opt.value === facet.value && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               );
             })}
           </div>
-        </Popover.Content>
-      </Popover.Portal>
+              </motion.div>
+            </Popover.Content>
+          </Popover.Portal>
+        )}
+      </AnimatePresence>
     </Popover.Root>
   );
 }

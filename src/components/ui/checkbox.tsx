@@ -69,31 +69,49 @@ export const Checkbox = React.forwardRef<
 Checkbox.displayName = "Checkbox";
 
 /**
- * Wraps a Checkbox so it takes up no space until the row/card is hovered (or
- * it's checked, in which case it stays put) — it slides in from zero width
- * rather than fading in place, so nothing reserves layout space up front.
- * Requires a `group` class on the hover-triggering ancestor.
+ * Wraps a Checkbox so it appears only when the row/card is hovered (or it's
+ * checked, in which case it stays put). Requires a `group` class on the
+ * hover-triggering ancestor.
+ *
+ * Two reveal modes:
+ * - `width` (default) slides in from zero width, reserving no space up front —
+ *   right for a flex card where the title should sit flush left until hover.
+ * - `fade` keeps a fixed-size box always laid out and only animates opacity —
+ *   right for a table cell, where a width change would resize the column and
+ *   shove every following column sideways on hover.
  */
 export function HoverCheckbox({
   checked,
   onChange,
   className,
   wrapperClassName,
+  reveal = "width",
   "aria-label": ariaLabel,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   className?: string;
   wrapperClassName?: string;
+  reveal?: "width" | "fade";
   "aria-label"?: string;
 }) {
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center overflow-hidden transition-[width,margin-right,opacity] duration-200 ease-out",
-        checked
-          ? "w-4.5 mr-2 opacity-100"
-          : "w-0 mr-0 opacity-0 group-hover:w-4.5 group-hover:mr-2 group-hover:opacity-100 group-focus-within:w-4.5 group-focus-within:mr-2 group-focus-within:opacity-100",
+        "flex shrink-0 items-center",
+        reveal === "fade"
+          ? cn(
+              "transition-opacity duration-200 ease-out",
+              checked
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+            )
+          : cn(
+              "overflow-hidden transition-[width,margin-right,opacity] duration-200 ease-out",
+              checked
+                ? "w-4.5 mr-2 opacity-100"
+                : "w-0 mr-0 opacity-0 group-hover:w-4.5 group-hover:mr-2 group-hover:opacity-100 group-focus-within:w-4.5 group-focus-within:mr-2 group-focus-within:opacity-100"
+            ),
         wrapperClassName
       )}
     >
