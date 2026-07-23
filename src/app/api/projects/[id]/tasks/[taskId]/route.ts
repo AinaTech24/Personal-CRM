@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getProjectForUser, logProjectActivity } from "@/lib/projects";
+import { broadcastTaskChange } from "@/lib/tasks";
 import { notifyUser } from "@/lib/notify";
 
 const patchSchema = z.object({
@@ -76,6 +77,23 @@ export async function PATCH(
     }
   }
 
+  // Keep the mirrored Tasks-module copy in step. Only the fields the module
+  // shows are synced; progress and milestone are project-only concepts.
+  const mirror = await db.task.findUnique({ where: { projectTaskParentId: taskId } });
+  if (mirror) {
+    const updated = await db.task.update({
+      where: { id: mirror.id },
+      data: {
+        ...(data.title !== undefined && { title: task.title }),
+        ...(data.description !== undefined && { description: task.description }),
+        ...(data.status !== undefined && { status: task.status }),
+        ...(data.assignedToId !== undefined && { assignedToId: task.assignedToId }),
+        ...(data.dueDate !== undefined && { dueDate: task.dueDate }),
+      },
+    });
+    broadcastTaskChange("task_updated", updated);
+  }
+
   return NextResponse.json({ task });
 }
 
@@ -90,6 +108,15 @@ export async function DELETE(
   const access = await getProjectForUser(user, id);
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Remove the mirrored module copy too, otherwise deleting the project task
+  // would leave an orphaned task behind in the Tasks module. Done before the
+  // project task is deleted, while the link still resolves.
+  const mirror = await db.task.findUnique({ where: { projectTaskParentId: taskId } });
+  if (mirror) {
+    await db.task.delete({ where: { id: mirror.id } });
+    broadcastTaskChange("task_deleted", mirror);
+  }
 
   await db.projectTask.delete({ where: { id: taskId, projectId: id } });
   await logProjectActivity(id, user.id, "task_removed");

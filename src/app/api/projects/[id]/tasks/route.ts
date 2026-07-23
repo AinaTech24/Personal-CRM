@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getProjectForUser, logProjectActivity } from "@/lib/projects";
+import { broadcastTaskChange } from "@/lib/tasks";
 import { notifyUser } from "@/lib/notify";
 
 const bodySchema = z.object({
@@ -51,6 +52,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     include: { assignedBy: { select: { id: true, name: true } } },
   });
 
+  // Mirror the project task into the global Tasks module so it shows up there
+  // too. The link (projectTaskParentId) lets the two stay in step on edit and
+  // delete. Project tasks carry no priority of their own, so the module copy
+  // starts at the default.
+  const mirrored = await db.task.create({
+    data: {
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      dueDate: task.dueDate,
+      assignedToId: task.assignedToId,
+      createdById: user.id,
+      projectTaskParentId: task.id,
+    },
+  });
+
   await logProjectActivity(id, user.id, "task_added", {
     title: task.title,
     // Recorded only when it differs, so the activity line stays quiet in the
@@ -58,8 +75,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ...(task.assignedById && task.assignedById !== user.id && { assignedByName: task.assignedBy?.name }),
   });
   if (data.assignedToId && data.assignedToId !== user.id) {
+    // Notify once, about the project task — the mirrored module task is the same
+    // work, so a second "task assigned" would just be noise.
     await notifyUser(data.assignedToId, "project_task_assigned", { projectId: id, taskTitle: task.title, actorName: user.name });
   }
+  broadcastTaskChange("task_created", mirrored);
 
   return NextResponse.json({ task }, { status: 201 });
 }

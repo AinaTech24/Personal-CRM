@@ -425,10 +425,13 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
         </div>
       </div>
 
-      {/* items-start so a short card (e.g. an empty Supporters) sizes to its own
-          content instead of being stretched to match the taller card beside it. */}
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-        <Card>
+      {/* Two explicit columns rather than a 3-cell grid. In the grid, a short
+          Supporters card in the top-right left the cell beneath it (under
+          Milestones' row) empty — a large dead gap. Stacking Supporters and
+          Milestones together in the right column fills it and keeps the two
+          columns close in height. */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <Card className="lg:flex-1">
           <CardHeader>
             <CardTitle className="text-base">Team members</CardTitle>
           </CardHeader>
@@ -471,9 +474,10 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
           </CardContent>
         </Card>
 
-        <ProjectSupportersCard project={project} assignableUsers={assignableUsers} onChanged={load} />
+        <div className="flex flex-col gap-4 lg:flex-1">
+          <ProjectSupportersCard project={project} assignableUsers={assignableUsers} onChanged={load} />
 
-        <Card>
+          <Card>
           <CardHeader>
             <CardTitle className="text-base">Milestones</CardTitle>
           </CardHeader>
@@ -515,7 +519,8 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
               )}
             </div>
           </CardContent>
-        </Card>
+          </Card>
+        </div>
       </div>
 
       <ProjectTimePanel
