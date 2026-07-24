@@ -13,6 +13,7 @@ import { SkeletonBoard } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
+import { HorizontalScrollbar } from "@/components/ui/horizontal-scrollbar";
 import { IconPencil, IconTrash } from "@/components/icons";
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog";
 import { LeadDetailDialog } from "@/components/leads/lead-detail-dialog";
@@ -344,22 +345,14 @@ export function LeadsBoard() {
       )}
 
       {!loading && view === "pipeline" && (
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5">
         <div
           ref={scrollContainerRef}
-          className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden pb-4 focus:outline-none"
-          onWheel={(e) => {
-            if (e.deltaY === 0) return;
-            // Let the hovered column scroll vertically first; only turn the wheel
-            // into horizontal board movement once that column has nowhere left to
-            // go (or has no vertical overflow at all).
-            const col = (e.target as HTMLElement).closest?.("[data-col-scroll]") as HTMLElement | null;
-            if (col && col.scrollHeight > col.clientHeight) {
-              const atTop = col.scrollTop <= 0;
-              const atBottom = Math.ceil(col.scrollTop + col.clientHeight) >= col.scrollHeight;
-              if ((e.deltaY < 0 && !atTop) || (e.deltaY > 0 && !atBottom)) return;
-            }
-            e.currentTarget.scrollLeft += e.deltaY;
-          }}
+          // Wheel scroll is left to the browser's default: vertical wheel
+          // scrolls whichever column it's over (each has its own overflow-y),
+          // and this row itself only carries horizontal overflow. Reaching
+          // sideways is the HorizontalScrollbar below, not the wheel.
+          className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden focus:outline-none"
           onDragOver={handleBoardDragOver}
         >
           {LEAD_STATUSES.map((col) => {
@@ -436,13 +429,18 @@ export function LeadsBoard() {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex min-w-0 items-start">
+                            {/* fade, not width: a width reveal shrinks the space
+                                left for the name on hover, which can push it
+                                onto a third line and grow the card under the
+                                cursor. Fade keeps the box's width constant. */}
                             <HoverCheckbox
                               checked={selectedIds.has(lead.id)}
+                              reveal="fade"
                               onChange={() => toggleSelected(lead.id)}
                               aria-label={`Select ${lead.name}`}
-                              wrapperClassName="mt-0.5"
+                              wrapperClassName="mt-0.5 w-4.5 mr-2"
                             />
-                            <p className="text-sm font-medium">{lead.name}</p>
+                            <p className="line-clamp-2 text-sm font-medium">{lead.name}</p>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
                             <Badge variant={PRIORITY_VARIANT[lead.priority]}>{lead.priority}</Badge>
@@ -472,6 +470,8 @@ export function LeadsBoard() {
               </div>
             );
           })}
+        </div>
+        <HorizontalScrollbar containerRef={scrollContainerRef} className="mx-1.5" />
         </div>
       )}
 
