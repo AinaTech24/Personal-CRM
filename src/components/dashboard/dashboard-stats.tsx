@@ -16,6 +16,7 @@ import {
 import { useSocket } from "@/components/providers/socket-provider";
 import { Chart, CHART_TYPES, type Slice } from "@/components/dashboard/charts";
 import { useDashboardActivity } from "@/components/dashboard/dashboard-activity";
+import { useDashboardUserView } from "@/components/dashboard/dashboard-user-view";
 
 interface EntityStat {
   total: number;
@@ -171,6 +172,7 @@ export function DashboardStats({ greetingName = "" }: { greetingName?: string })
   const router = useRouter();
   const { socket } = useSocket();
   const { filterButton, panel } = useDashboardActivity();
+  const { trigger: userViewTrigger, panel: userViewPanel, viewingUser } = useDashboardUserView();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -248,7 +250,10 @@ export function DashboardStats({ greetingName = "" }: { greetingName?: string })
             Welcome back{greetingName ? `, ${greetingName}` : ""} — live overview across all modules
           </p>
         </div>
-        {filterButton}
+        <div className="flex shrink-0 items-center gap-2">
+          {filterButton}
+          {userViewTrigger}
+        </div>
       </div>
       {panel}
     </div>
@@ -273,39 +278,45 @@ export function DashboardStats({ greetingName = "" }: { greetingName?: string })
         ))}
       </div>
 
-      {/* Visualizations — each with a chart-type + dataset selector; all update live */}
-      <div className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
-        <ChartCard
-          title="Chart"
-          typeValue={chartType}
-          typeOptions={CHART_TYPES.chart}
-          onType={setChartType}
-          dataset={chartDataset}
-          onDataset={setChartDataset}
-        >
-          <Chart type={chartType} data={slicesFor(stats, chartDataset as EntityKey | "users")} />
-        </ChartCard>
-        <ChartCard
-          title="Graph"
-          typeValue={graphType}
-          typeOptions={CHART_TYPES.graph}
-          onType={setGraphType}
-          dataset={graphDataset}
-          onDataset={setGraphDataset}
-        >
-          <Chart type={graphType} data={slicesFor(stats, graphDataset as EntityKey | "users")} />
-        </ChartCard>
-        <ChartCard
-          title="Nodes"
-          typeValue={nodeType}
-          typeOptions={CHART_TYPES.nodes}
-          onType={setNodeType}
-          dataset={nodeDataset}
-          onDataset={setNodeDataset}
-        >
-          <Chart type={nodeType} data={slicesFor(stats, nodeDataset as EntityKey | "users")} />
-        </ChartCard>
-      </div>
+      {/* Drilled into one person's activity: the aggregate charts below don't
+          apply to a single user, so their card grid takes this spot instead
+          until the Users filter is cleared. */}
+      {viewingUser ? (
+        userViewPanel
+      ) : (
+        <div className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
+          <ChartCard
+            title="Chart"
+            typeValue={chartType}
+            typeOptions={CHART_TYPES.chart}
+            onType={setChartType}
+            dataset={chartDataset}
+            onDataset={setChartDataset}
+          >
+            <Chart type={chartType} data={slicesFor(stats, chartDataset as EntityKey | "users")} />
+          </ChartCard>
+          <ChartCard
+            title="Graph"
+            typeValue={graphType}
+            typeOptions={CHART_TYPES.graph}
+            onType={setGraphType}
+            dataset={graphDataset}
+            onDataset={setGraphDataset}
+          >
+            <Chart type={graphType} data={slicesFor(stats, graphDataset as EntityKey | "users")} />
+          </ChartCard>
+          <ChartCard
+            title="Nodes"
+            typeValue={nodeType}
+            typeOptions={CHART_TYPES.nodes}
+            onType={setNodeType}
+            dataset={nodeDataset}
+            onDataset={setNodeDataset}
+          >
+            <Chart type={nodeType} data={slicesFor(stats, nodeDataset as EntityKey | "users")} />
+          </ChartCard>
+        </div>
+      )}
     </div>
   );
 }

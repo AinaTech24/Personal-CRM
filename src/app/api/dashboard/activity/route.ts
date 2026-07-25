@@ -44,6 +44,12 @@ export async function GET(req: NextRequest) {
   const to = toRaw ? new Date(toRaw) : null;
   const admin = isAdmin(user);
 
+  // Narrows to one person's records instead of everything the caller can see.
+  // Only admins can point this at someone else — a non-admin passing someone
+  // else's id here would otherwise be a way to peek past their own scope, so
+  // the param is simply ignored for them and they keep seeing their own data.
+  const targetUserId = admin ? req.nextUrl.searchParams.get("userId") : null;
+
   // The interval predicate for whichever date column the module filters on.
   const range: { gte?: Date; lte?: Date } = {};
   if (from && !Number.isNaN(from.getTime())) range.gte = from;
@@ -54,7 +60,11 @@ export async function GET(req: NextRequest) {
 
   if (mod === "leads") {
     const rows = await db.lead.findMany({
-      where: { ...leadListWhere(user), ...(hasRange && { createdAt: range }) },
+      where: {
+        ...leadListWhere(user),
+        ...(targetUserId && { assignedToId: targetUserId }),
+        ...(hasRange && { createdAt: range }),
+      },
       select: { id: true, name: true, company: true, status: true, createdAt: true },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -69,7 +79,11 @@ export async function GET(req: NextRequest) {
     }));
   } else if (mod === "tasks") {
     const rows = await db.task.findMany({
-      where: { ...taskListWhere(user), ...(hasRange && { dueDate: range }) },
+      where: {
+        ...taskListWhere(user),
+        ...(targetUserId && { assignedToId: targetUserId }),
+        ...(hasRange && { dueDate: range }),
+      },
       select: { id: true, title: true, status: true, priority: true, dueDate: true },
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       take: 100,
@@ -83,7 +97,13 @@ export async function GET(req: NextRequest) {
       href: "/tasks",
     }));
   } else if (mod === "meetings") {
-    const where = admin ? {} : { OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }] };
+    // A target user's meetings means ones they organised or were invited to —
+    // the same definition the personal dashboard uses for "your meetings".
+    const where = targetUserId
+      ? { OR: [{ organizerId: targetUserId }, { attendees: { some: { id: targetUserId } } }] }
+      : admin
+        ? {}
+        : { OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }] };
     const rows = await db.meeting.findMany({
       where: { ...where, ...(hasRange && { startsAt: range }) },
       select: { id: true, title: true, location: true, status: true, startsAt: true },
@@ -100,7 +120,17 @@ export async function GET(req: NextRequest) {
     }));
   } else if (mod === "projects") {
     const rows = await db.project.findMany({
-      where: { ...projectListWhere(user), ...(hasRange && { createdAt: range }) },
+      where: {
+        ...projectListWhere(user),
+        ...(targetUserId && {
+          OR: [
+            { assignedToId: targetUserId },
+            { createdById: targetUserId },
+            { members: { some: { userId: targetUserId } } },
+          ],
+        }),
+        ...(hasRange && { createdAt: range }),
+      },
       select: { id: true, name: true, status: true, createdAt: true, department: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -114,8 +144,9 @@ export async function GET(req: NextRequest) {
       href: `/projects/${p.id}`,
     }));
   } else if (mod === "attendance") {
-    // Users see only their own attendance; admins see everyone's.
-    const where = admin ? {} : { userId: user.id };
+    // Users see only their own attendance; admins see everyone's, unless
+    // narrowed to one person.
+    const where = targetUserId ? { userId: targetUserId } : admin ? {} : { userId: user.id };
     const rows = await db.attendance.findMany({
       where: { ...where, ...(hasRange && { date: range }) },
       select: {
@@ -129,9 +160,12 @@ export async function GET(req: NextRequest) {
       orderBy: { date: "desc" },
       take: 100,
     });
+    // Once scoped to one person, every row's owner is already known from
+    // context — the date is the more useful title, same as a non-admin's own view.
+    const showOwnerAsTitle = admin && !targetUserId;
     items = rows.map((a) => ({
       id: a.id,
-      title: admin ? a.user.name : new Date(a.date).toLocaleDateString(),
+      title: showOwnerAsTitle ? a.user.name : new Date(a.date).toLocaleDateString(),
       subtitle: a.checkIn ? new Date(a.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
       date: a.date.toISOString(),
       status: a.status ?? a.calculatedStatus ?? null,

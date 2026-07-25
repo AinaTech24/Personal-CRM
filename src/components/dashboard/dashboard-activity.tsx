@@ -8,29 +8,15 @@ import { endOfDay, format, parseISO, startOfDay, subDays } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SkeletonList } from "@/components/ui/skeleton";
-import {
-  IconFilter,
-  IconCheck,
-  IconLeads,
-  IconTasks,
-  IconProjects,
-  IconCalendar,
-  IconClock,
-  IconLayoutGrid,
-} from "@/components/icons";
+import { IconFilter, IconCheck, IconLayoutGrid } from "@/components/icons";
+import { DASHBOARD_MODULES, type DashboardModuleKey } from "@/lib/dashboard-modules";
 import { cn } from "@/lib/utils";
 
-type ModuleKey = "leads" | "tasks" | "meetings" | "projects" | "attendance";
+type ModuleKey = DashboardModuleKey;
 type ViewKey = ModuleKey | "all";
 type Period = "today" | "yesterday" | "upcoming" | "range";
 
-const MODULES: { key: ModuleKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { key: "leads", label: "Leads", icon: IconLeads },
-  { key: "tasks", label: "Tasks", icon: IconTasks },
-  { key: "meetings", label: "Meetings", icon: IconCalendar },
-  { key: "projects", label: "Projects", icon: IconProjects },
-  { key: "attendance", label: "Attendance", icon: IconClock },
-];
+const MODULES = DASHBOARD_MODULES;
 
 /** Shown first in the view list and selected on load — everything, unfiltered by module. */
 const ALL_VIEW = { key: "all" as const, label: "All", icon: IconLayoutGrid };
