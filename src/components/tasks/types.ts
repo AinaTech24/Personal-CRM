@@ -30,7 +30,7 @@ export interface TaskAttachmentItem {
   fileName: string;
   filePath: string;
   createdAt: string;
-  uploadedBy: { name: string };
+  uploadedBy: { id: string; name: string };
 }
 
 export interface TaskDetail extends TaskSummary {

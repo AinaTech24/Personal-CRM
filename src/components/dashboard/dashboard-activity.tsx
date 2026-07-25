@@ -267,14 +267,26 @@ export function useDashboardActivity(isAdmin = false) {
         // Capped a little shorter than a full list would want, so the metric
         // cards below are visibly there rather than pushed under the fold.
         <div className="max-h-72 overflow-y-auto">
-          <table className="w-full text-sm">
+          {/* table-fixed + an explicit colgroup, rather than leaving column
+              widths to content: without it, Title — the one column whose
+              content actually varies in length — got squeezed to whatever was
+              left over after the fixed-width columns, truncating almost
+              immediately. Title now gets the largest, deliberate share. */}
+          <table className="w-full table-fixed text-sm">
+            <colgroup>
+              <col style={{ width: view === "all" ? "38%" : "46%" }} />
+              <col style={{ width: view === "all" ? "19%" : "21%" }} />
+              {view === "all" && <col style={{ width: "13%" }} />}
+              <col style={{ width: view === "all" ? "12%" : "14%" }} />
+              <col style={{ width: view === "all" ? "18%" : "19%" }} />
+            </colgroup>
             <thead className="sticky top-0 bg-card">
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                <th className="px-4 py-2 font-medium">Title</th>
-                <th className="px-4 py-2 font-medium">User</th>
-                {view === "all" && <th className="px-4 py-2 font-medium">Type</th>}
-                <th className="px-4 py-2 font-medium">Date</th>
-                <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-3 py-1.5 font-medium">Title</th>
+                <th className="px-3 py-1.5 font-medium">User</th>
+                {view === "all" && <th className="px-3 py-1.5 font-medium">Type</th>}
+                <th className="px-3 py-1.5 font-medium">Date</th>
+                <th className="px-3 py-1.5 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -287,11 +299,11 @@ export function useDashboardActivity(isAdmin = false) {
                     onClick={() => router.push(it.href)}
                     className="cursor-pointer border-b border-border/50 last:border-0 hover:bg-primary/5"
                   >
-                    <td className="max-w-0 px-4 py-2.5">
+                    <td className="px-3 py-1.5">
                       <span className="block truncate">{it.title}</span>
                       {it.subtitle && <span className="block truncate text-xs text-muted-foreground">{it.subtitle}</span>}
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-3 py-1.5">
                       {it.user ? (
                         <span className="flex items-center gap-2">
                           <UserAvatar name={it.user.name} avatarDataUrl={it.user.avatarDataUrl} />
@@ -302,19 +314,19 @@ export function useDashboardActivity(isAdmin = false) {
                       )}
                     </td>
                     {view === "all" && (
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-1.5">
                         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <ItemIcon className="h-3.5 w-3.5 shrink-0" />
-                          {itemMeta.label}
+                          <span className="truncate">{itemMeta.label}</span>
                         </span>
                       </td>
                     )}
-                    <td className="whitespace-nowrap px-4 py-2.5 text-xs text-muted-foreground">
+                    <td className="truncate px-3 py-1.5 text-xs text-muted-foreground">
                       {it.date ? format(parseISO(it.date), it.moduleKey === "meetings" ? "MMM d · h:mm a" : "MMM d") : "—"}
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-3 py-1.5">
                       {it.status && (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px]">{pretty(it.status)}</span>
+                        <span className="truncate rounded-full bg-muted px-2 py-0.5 text-[11px]">{pretty(it.status)}</span>
                       )}
                     </td>
                   </tr>

@@ -43,7 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         url: parsed.toString(),
         uploadedById: user.id,
       },
-      include: { uploadedBy: { select: { name: true } } },
+      include: { uploadedBy: { select: { id: true, name: true } } },
       omit: { data: true },
     });
     return NextResponse.json({ attachment: linkAttachment }, { status: 201 });
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const attachment = await db.taskAttachment.create({
     data: { taskId: id, fileName, filePath, data, uploadedById: user.id },
-    include: { uploadedBy: { select: { name: true } } },
+    include: { uploadedBy: { select: { id: true, name: true } } },
     omit: { data: true },
   });
 

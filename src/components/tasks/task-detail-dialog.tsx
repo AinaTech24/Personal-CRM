@@ -25,6 +25,7 @@ import {
   TASK_STATUSES,
   PRIORITY_OPTIONS,
   type AssignableUser,
+  type TaskAttachmentItem,
   type TaskCommentItem,
   type TaskDetail,
   type TaskStatus,
@@ -53,7 +54,7 @@ export function TaskDetailDialog({
   taskId: string | null;
   initialSummary?: TaskSummary | null;
   assignableUsers: AssignableUser[];
-  /** Who's viewing — decides whether the delete option shows on a comment. */
+  /** Who's viewing — decides whether the delete option shows on a comment or attachment. */
   currentUserId?: string | null;
   isAdmin?: boolean;
   onClose: () => void;
@@ -70,6 +71,7 @@ export function TaskDetailDialog({
   const [linkLabel, setLinkLabel] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingComment, setDeletingComment] = useState<TaskCommentItem | null>(null);
+  const [deletingAttachment, setDeletingAttachment] = useState<TaskAttachmentItem | null>(null);
   const [viewingAttachment, setViewingAttachment] = useState<{ fileName: string; filePath: string } | null>(
     null
   );
@@ -128,6 +130,13 @@ export function TaskDetailDialog({
     const res = await fetch(`/api/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" });
     if (res.ok) await load();
     setDeletingComment(null);
+  }
+
+  async function deleteAttachment(attachmentId: string) {
+    if (!taskId) return;
+    const res = await fetch(`/api/tasks/${taskId}/attachments/${attachmentId}`, { method: "DELETE" });
+    if (res.ok) await load();
+    setDeletingAttachment(null);
   }
 
   async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -269,28 +278,34 @@ export function TaskDetailDialog({
               <div className="flex flex-col gap-2 border-t border-border pt-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-medium">Attachments</h4>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={uploading}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="gap-1.5"
-                  >
-                    <IconPlus className="h-3.5 w-3.5" />
-                    {uploading ? "Uploading..." : "Add file"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={uploading}
-                    onClick={() => setLinkOpen((v) => !v)}
-                    className="h-7 gap-1 text-xs"
-                  >
-                    <IconLink className="h-3.5 w-3.5" />
-                    Add link
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Tooltip label="Upload a file">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={uploading}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="gap-1.5"
+                      >
+                        <IconPlus className="h-3.5 w-3.5" />
+                        {uploading ? "Uploading..." : "Add file"}
+                      </Button>
+                    </Tooltip>
+                    <Tooltip label="Attach a link instead of a file">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={uploading}
+                        onClick={() => setLinkOpen((v) => !v)}
+                        className="h-7 gap-1 text-xs"
+                      >
+                        <IconLink className="h-3.5 w-3.5" />
+                        Add link
+                      </Button>
+                    </Tooltip>
+                  </div>
                   <input ref={fileInputRef} type="file" className="hidden" onChange={onFileSelected} />
                 </div>
 
@@ -320,10 +335,12 @@ export function TaskDetailDialog({
                   {task.attachments.length === 0 && (
                     <p className="text-xs text-muted-foreground">No attachments yet</p>
                   )}
-                  {task.attachments.map((a) => (
+                  {task.attachments.map((a) => {
+                    const canDeleteAttachment = isAdmin || a.uploadedBy.id === currentUserId;
+                    return (
                     <div
                       key={a.id}
-                      className="flex items-center justify-between gap-2 rounded-md bg-accent/50 p-2 text-sm"
+                      className="group flex items-center justify-between gap-2 rounded-md bg-accent/50 p-2 text-sm"
                     >
                       <div className="min-w-0 flex-1">
                         <p className="flex items-center gap-1.5 truncate">
@@ -373,9 +390,22 @@ export function TaskDetailDialog({
                         </Tooltip>
                         </>
                         )}
+                        {canDeleteAttachment && (
+                          <Tooltip label="Delete attachment">
+                            <button
+                              type="button"
+                              aria-label={`Delete ${a.fileName}`}
+                              onClick={() => setDeletingAttachment(a)}
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                            >
+                              <IconTrash className="h-4 w-4" />
+                            </button>
+                          </Tooltip>
+                        )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -454,6 +484,19 @@ export function TaskDetailDialog({
       description="This permanently removes the comment. This cannot be undone."
       onConfirm={async () => {
         if (deletingComment) await deleteComment(deletingComment.id);
+      }}
+    />
+    <ConfirmDialog
+      open={deletingAttachment !== null}
+      onOpenChange={(v) => !v && setDeletingAttachment(null)}
+      title={`Delete "${deletingAttachment?.fileName}"?`}
+      description={
+        deletingAttachment?.url
+          ? "This removes the link from the task. This cannot be undone."
+          : "This permanently removes the file from the task. This cannot be undone."
+      }
+      onConfirm={async () => {
+        if (deletingAttachment) await deleteAttachment(deletingAttachment.id);
       }}
     />
     <AttachmentViewerDialog
