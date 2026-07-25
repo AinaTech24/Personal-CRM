@@ -12,8 +12,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    name: Lint, Typecheck & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # Only needs the schema file to generate types — no live database
+      # required, unlike the VPS's own `npm run build` (which also runs
+      # `prisma db push` against the real MySQL instance).
+      - run: npx prisma generate
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm test
+
   deploy:
     name: Deploy Production
+    needs: verify
     runs-on: ubuntu-latest
     # A hung deploy would otherwise sit in the concurrency group and block every
     # later push behind it.

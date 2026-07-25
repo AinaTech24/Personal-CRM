@@ -44,11 +44,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
   if (!data) return NextResponse.json({ error: "File data missing" }, { status: 404 });
 
   const buffer = Buffer.from(data, "base64");
-  const disposition = inline ? "inline" : "attachment";
+  // SVG can carry a <script>, so an inline render of one is a stored-XSS
+  // vector even though the upload itself was otherwise legitimate — force it
+  // to download instead of forcing the browser to render it in-page.
+  const isScriptCapable = fileName.toLowerCase().endsWith(".svg");
+  const disposition = inline && !isScriptCapable ? "inline" : "attachment";
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": mimeTypeFor(fileName),
       "Content-Disposition": `${disposition}; filename="${encodeURIComponent(fileName)}"`,
+      // Belt-and-suspenders: even if Content-Type above is ever wrong for a
+      // given file, this stops the browser from sniffing the body and
+      // deciding to render/execute it as something else entirely.
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

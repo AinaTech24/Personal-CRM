@@ -2,13 +2,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { verifyPassword, createSessionCookie } from "@/lib/auth";
+import { requestDevice } from "@/lib/request-info";
+import { rateLimit } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   email: z.string().email(),
   code: z.string().min(4).max(10),
 });
 
+// 10 attempts / 10 minutes per IP — the code itself is a 6-digit number that
+// expires in 10 minutes (src/app/api/auth/forgot/route.ts), so the real
+// defense is the expiry; this just stops a fast automated guess-loop from
+// running through many attempts inside that window.
+const LIMIT = 10;
+const WINDOW_MS = 10 * 60 * 1000;
+
 export async function POST(req: NextRequest) {
+  const ip = requestDevice(req).ip ?? "unknown";
+  const { allowed, retryAfterSeconds } = rateLimit(`verify-code:${ip}`, LIMIT, WINDOW_MS);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many attempts. Try again in a few minutes." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
+    );
+  }
+
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid code" }, { status: 400 });
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getProjectForUser, logProjectActivity } from "@/lib/projects";
-import { saveProjectDocument } from "@/lib/uploads";
+import { saveProjectDocument, UploadValidationError } from "@/lib/uploads";
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -24,7 +24,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "File exceeds the 10MB limit" }, { status: 400 });
   }
 
-  const { filePath, fileName, data } = await saveProjectDocument(id, file);
+  let filePath: string, fileName: string, data: string;
+  try {
+    ({ filePath, fileName, data } = await saveProjectDocument(id, file));
+  } catch (err) {
+    if (err instanceof UploadValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
 
   // Optional custom display name; keeps the original extension if the user omits it.
   const customName = (formData?.get("fileName") as string | null)?.trim();
