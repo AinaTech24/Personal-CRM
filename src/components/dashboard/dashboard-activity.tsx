@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import * as Popover from "@radix-ui/react-popover";
 import { AnimatePresence, motion } from "framer-motion";
 import { endOfDay, format, parseISO, startOfDay, subDays } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SkeletonList } from "@/components/ui/skeleton";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { IconFilter, IconCheck, IconLayoutGrid } from "@/components/icons";
 import { DASHBOARD_MODULES, type DashboardModuleKey } from "@/lib/dashboard-modules";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ interface ActivityItem {
   date: string | null;
   status: string | null;
   href: string;
+  user: { name: string; avatarDataUrl: string | null } | null;
 }
 
 /** An item plus which module it came from — every item carries this, even
@@ -91,6 +93,7 @@ async function fetchModule(key: ModuleKey, win: { from?: string; to?: string }):
  * once someone picks a module.
  */
 export function useDashboardActivity() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewKey>("all");
   const [period, setPeriod] = useState<Period>("today");
@@ -244,35 +247,64 @@ export function useDashboardActivity() {
           {period === "range" && (!from || !to) ? "Pick a start and end date." : "Nothing in this period."}
         </p>
       ) : (
-        <div className="flex max-h-96 flex-col divide-y divide-border/50 overflow-y-auto">
-          {items.map((it) => {
-            const ItemIcon = MODULES.find((m) => m.key === it.moduleKey)!.icon;
-            return (
-              <Link
-                key={`${it.moduleKey}-${it.id}`}
-                href={it.href}
-                className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5"
-              >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  {view === "all" && <ItemIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm">{it.title}</span>
-                    {it.subtitle && <span className="block truncate text-xs text-muted-foreground">{it.subtitle}</span>}
-                  </span>
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  {it.status && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px]">{pretty(it.status)}</span>
-                  )}
-                  {it.date && (
-                    <span className="text-xs text-muted-foreground">
-                      {format(parseISO(it.date), it.moduleKey === "meetings" ? "MMM d · h:mm a" : "MMM d")}
-                    </span>
-                  )}
-                </span>
-              </Link>
-            );
-          })}
+        // Capped a little shorter than a full list would want, so the metric
+        // cards below are visibly there rather than pushed under the fold.
+        <div className="max-h-72 overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-card">
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                <th className="px-4 py-2 font-medium">Title</th>
+                <th className="px-4 py-2 font-medium">User</th>
+                {view === "all" && <th className="px-4 py-2 font-medium">Type</th>}
+                <th className="px-4 py-2 font-medium">Date</th>
+                <th className="px-4 py-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => {
+                const itemMeta = MODULES.find((m) => m.key === it.moduleKey)!;
+                const ItemIcon = itemMeta.icon;
+                return (
+                  <tr
+                    key={`${it.moduleKey}-${it.id}`}
+                    onClick={() => router.push(it.href)}
+                    className="cursor-pointer border-b border-border/50 last:border-0 hover:bg-primary/5"
+                  >
+                    <td className="max-w-0 px-4 py-2.5">
+                      <span className="block truncate">{it.title}</span>
+                      {it.subtitle && <span className="block truncate text-xs text-muted-foreground">{it.subtitle}</span>}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {it.user ? (
+                        <span className="flex items-center gap-2">
+                          <UserAvatar name={it.user.name} avatarDataUrl={it.user.avatarDataUrl} />
+                          <span className="truncate">{it.user.name}</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Unassigned</span>
+                      )}
+                    </td>
+                    {view === "all" && (
+                      <td className="px-4 py-2.5">
+                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <ItemIcon className="h-3.5 w-3.5 shrink-0" />
+                          {itemMeta.label}
+                        </span>
+                      </td>
+                    )}
+                    <td className="whitespace-nowrap px-4 py-2.5 text-xs text-muted-foreground">
+                      {it.date ? format(parseISO(it.date), it.moduleKey === "meetings" ? "MMM d · h:mm a" : "MMM d") : "—"}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {it.status && (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px]">{pretty(it.status)}</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </Card>

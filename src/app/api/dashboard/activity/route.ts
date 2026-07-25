@@ -9,6 +9,11 @@ import { projectListWhere } from "@/lib/projects";
 type Module = "leads" | "tasks" | "meetings" | "projects" | "attendance";
 const MODULES: Module[] = ["leads", "tasks", "meetings", "projects", "attendance"];
 
+interface ActivityUser {
+  name: string;
+  avatarDataUrl: string | null;
+}
+
 interface ActivityItem {
   id: string;
   title: string;
@@ -17,6 +22,10 @@ interface ActivityItem {
   date: string | null;
   status: string | null;
   href: string;
+  /** Who the record belongs to — assignee for leads/tasks/projects, organiser
+   *  for meetings, the record's own owner for attendance. Null when nobody's
+   *  assigned (an unassigned lead or task). */
+  user: ActivityUser | null;
 }
 
 /**
@@ -56,6 +65,8 @@ export async function GET(req: NextRequest) {
   if (to && !Number.isNaN(to.getTime())) range.lte = to;
   const hasRange = range.gte !== undefined || range.lte !== undefined;
 
+  const userSelect = { select: { name: true, avatarDataUrl: true } } as const;
+
   let items: ActivityItem[] = [];
 
   if (mod === "leads") {
@@ -65,7 +76,7 @@ export async function GET(req: NextRequest) {
         ...(targetUserId && { assignedToId: targetUserId }),
         ...(hasRange && { createdAt: range }),
       },
-      select: { id: true, name: true, company: true, status: true, createdAt: true },
+      select: { id: true, name: true, company: true, status: true, createdAt: true, assignedTo: userSelect },
       orderBy: { createdAt: "desc" },
       take: 100,
     });
@@ -76,6 +87,7 @@ export async function GET(req: NextRequest) {
       date: l.createdAt.toISOString(),
       status: l.status,
       href: "/leads",
+      user: l.assignedTo,
     }));
   } else if (mod === "tasks") {
     const rows = await db.task.findMany({
@@ -84,7 +96,7 @@ export async function GET(req: NextRequest) {
         ...(targetUserId && { assignedToId: targetUserId }),
         ...(hasRange && { dueDate: range }),
       },
-      select: { id: true, title: true, status: true, priority: true, dueDate: true },
+      select: { id: true, title: true, status: true, priority: true, dueDate: true, assignedTo: userSelect },
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       take: 100,
     });
@@ -95,6 +107,7 @@ export async function GET(req: NextRequest) {
       date: t.dueDate ? t.dueDate.toISOString() : null,
       status: t.status,
       href: "/tasks",
+      user: t.assignedTo,
     }));
   } else if (mod === "meetings") {
     // A target user's meetings means ones they organised or were invited to —
@@ -106,7 +119,7 @@ export async function GET(req: NextRequest) {
         : { OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }] };
     const rows = await db.meeting.findMany({
       where: { ...where, ...(hasRange && { startsAt: range }) },
-      select: { id: true, title: true, location: true, status: true, startsAt: true },
+      select: { id: true, title: true, location: true, status: true, startsAt: true, organizer: userSelect },
       orderBy: { startsAt: "asc" },
       take: 100,
     });
@@ -117,6 +130,7 @@ export async function GET(req: NextRequest) {
       date: m.startsAt.toISOString(),
       status: m.status,
       href: "/meetings",
+      user: m.organizer,
     }));
   } else if (mod === "projects") {
     const rows = await db.project.findMany({
@@ -131,7 +145,15 @@ export async function GET(req: NextRequest) {
         }),
         ...(hasRange && { createdAt: range }),
       },
-      select: { id: true, name: true, status: true, createdAt: true, department: { select: { name: true } } },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        createdAt: true,
+        department: { select: { name: true } },
+        assignedTo: userSelect,
+        createdBy: userSelect,
+      },
       orderBy: { createdAt: "desc" },
       take: 100,
     });
@@ -142,6 +164,9 @@ export async function GET(req: NextRequest) {
       date: p.createdAt.toISOString(),
       status: p.status,
       href: `/projects/${p.id}`,
+      // Every project has a creator but not necessarily an assignee — fall
+      // back rather than leaving the column blank for the common case.
+      user: p.assignedTo ?? p.createdBy,
     }));
   } else if (mod === "attendance") {
     // Users see only their own attendance; admins see everyone's, unless
@@ -155,21 +180,21 @@ export async function GET(req: NextRequest) {
         status: true,
         calculatedStatus: true,
         checkIn: true,
-        user: { select: { name: true } },
+        user: userSelect,
       },
       orderBy: { date: "desc" },
       take: 100,
     });
-    // Once scoped to one person, every row's owner is already known from
-    // context — the date is the more useful title, same as a non-admin's own view.
-    const showOwnerAsTitle = admin && !targetUserId;
+    // The user column now carries the owner, so the title is always the date —
+    // matching what tasks/leads show (a description of the thing, not the person).
     items = rows.map((a) => ({
       id: a.id,
-      title: showOwnerAsTitle ? a.user.name : new Date(a.date).toLocaleDateString(),
+      title: new Date(a.date).toLocaleDateString(),
       subtitle: a.checkIn ? new Date(a.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
       date: a.date.toISOString(),
       status: a.status ?? a.calculatedStatus ?? null,
       href: admin ? "/admin/attendance" : "/attendance",
+      user: a.user,
     }));
   }
 

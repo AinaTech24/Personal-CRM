@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { IconUsers, IconCheck, IconChevronDown } from "@/components/icons";
 import { DASHBOARD_MODULES, type DashboardModuleKey } from "@/lib/dashboard-modules";
 import { userDisplayName, userOptionLabel } from "@/lib/user-display";
@@ -63,16 +64,7 @@ function windowFor(period: Period, customDate: string, from: string, to: string)
 }
 
 function Avatar({ user }: { user: DashboardUser }) {
-  return (
-    <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-[9px] font-semibold text-primary">
-      {user.avatarDataUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={user.avatarDataUrl} alt="" className="h-full w-full object-cover" />
-      ) : (
-        user.name.trim()[0]?.toUpperCase() ?? "?"
-      )}
-    </span>
-  );
+  return <UserAvatar name={user.name} avatarDataUrl={user.avatarDataUrl} />;
 }
 
 /**
