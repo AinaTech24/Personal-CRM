@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { IconFilter, IconCheck, IconLayoutGrid, IconQuotations, IconInvoices } from "@/components/icons";
+import { IconFilter, IconCheck, IconChevronDown, IconLayoutGrid, IconQuotations, IconInvoices } from "@/components/icons";
 import { DASHBOARD_MODULES, type DashboardModuleKey } from "@/lib/dashboard-modules";
 import { cn } from "@/lib/utils";
 
@@ -105,6 +105,7 @@ async function fetchModule(key: ModuleKey, win: { from?: string; to?: string }):
 export function useDashboardActivity(isAdmin = false) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [view, setView] = useState<ViewKey>("all");
   const [period, setPeriod] = useState<Period>("today");
   const [from, setFrom] = useState("");
@@ -242,18 +243,75 @@ export function useDashboardActivity(isAdmin = false) {
           {selectedMeta.label} · {periodLabel}
           {items && <span className="text-xs text-muted-foreground">({items.length})</span>}
         </p>
-        {!isDefault && (
-          <button
-            type="button"
-            onClick={() => {
-              setView("all");
-              setPeriod("today");
-            }}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            Reset
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {!isDefault && (
+            <button
+              type="button"
+              onClick={() => {
+                setView("all");
+                setPeriod("today");
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Reset
+            </button>
+          )}
+          {/* Quick module switch right on the table itself — the funnel button
+              elsewhere on the page also reaches this same `view` state (plus
+              period), but that requires leaving the card; this covers the
+              common case of just picking a different module to look at. */}
+          <Popover.Root open={viewMenuOpen} onOpenChange={setViewMenuOpen}>
+            <Popover.Trigger asChild>
+              <button
+                type="button"
+                aria-label={`View: ${selectedMeta.label}`}
+                className="flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs hover:bg-primary/5"
+              >
+                {selectedMeta.label}
+                <IconChevronDown className="h-3 w-3 text-muted-foreground" />
+              </button>
+            </Popover.Trigger>
+            <AnimatePresence>
+              {viewMenuOpen && (
+                <Popover.Portal forceMount>
+                  <Popover.Content asChild align="end" sideOffset={6}>
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                      transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                      className="z-50 w-48 origin-top-right rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+                    >
+                      {views.map((v) => {
+                        const Icon = v.icon;
+                        return (
+                          <button
+                            key={v.key}
+                            type="button"
+                            onClick={() => {
+                              setView(v.key);
+                              setViewMenuOpen(false);
+                            }}
+                            className={cn(
+                              "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary/5",
+                              view === v.key && "bg-accent/60"
+                            )}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Icon className="h-4 w-4 text-muted-foreground" />
+                              {v.label}
+                            </span>
+                            {view === v.key && <IconCheck className="h-3.5 w-3.5 text-primary" />}
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  </Popover.Content>
+                </Popover.Portal>
+              )}
+            </AnimatePresence>
+          </Popover.Root>
+        </div>
       </div>
       {loading ? (
         <div className="p-4">

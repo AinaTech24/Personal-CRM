@@ -102,13 +102,19 @@ export function HorizontalScrollbar({
     el.scrollTo({ left: Math.min(Math.max(targetScrollLeft, 0), scrollWidth - clientWidth), behavior: "smooth" });
   }
 
-  if (!metrics.canScroll) return null;
-
   return (
     <div
       ref={trackRef}
-      onPointerDown={onTrackPointerDown}
-      className={cn("relative h-2 w-full shrink-0 cursor-pointer rounded-full bg-accent/50", className)}
+      onPointerDown={metrics.canScroll ? onTrackPointerDown : undefined}
+      // Stays mounted even with nothing to scroll, rather than unmounting:
+      // the ref this measures through only exists while the div is in the
+      // DOM, so returning null before the first successful measurement would
+      // mean canScroll could never flip from its false initial state to true.
+      className={cn(
+        "relative h-2 w-full shrink-0 rounded-full bg-accent/50",
+        metrics.canScroll ? "cursor-pointer" : "pointer-events-none opacity-0",
+        className
+      )}
     >
       <div
         // Decorative drag handle, not the only way to reach horizontal
