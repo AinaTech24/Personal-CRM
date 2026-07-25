@@ -313,6 +313,11 @@ export function useDashboardActivity(isAdmin = false) {
           </Popover.Root>
         </div>
       </div>
+      {/* `layout` measures this wrapper's own box before/after each render and
+          animates the difference — switching module or period changes the row
+          count (and sometimes the loading/empty/table branch itself), which
+          otherwise snaps the panel to its new height instantly. */}
+      <motion.div layout transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }} className="overflow-hidden">
       {loading ? (
         <div className="p-4">
           <SkeletonList rows={4} />
@@ -331,18 +336,25 @@ export function useDashboardActivity(isAdmin = false) {
               left over after the fixed-width columns, truncating almost
               immediately. Title now gets the largest, deliberate share. */}
           <table className="w-full table-fixed text-sm">
+            {/* The Type column stays mounted at 0% rather than being added or
+                removed with `view` — animating a col's width only reads as
+                smooth if the col was already there before the change; an
+                unmount/remount snaps instantly no matter what transition is
+                on the surviving columns. */}
             <colgroup>
-              <col style={{ width: view === "all" ? "38%" : "46%" }} />
-              <col style={{ width: view === "all" ? "19%" : "21%" }} />
-              {view === "all" && <col style={{ width: "13%" }} />}
-              <col style={{ width: view === "all" ? "12%" : "14%" }} />
-              <col style={{ width: view === "all" ? "18%" : "19%" }} />
+              <col className="transition-[width] duration-200" style={{ width: view === "all" ? "38%" : "46%" }} />
+              <col className="transition-[width] duration-200" style={{ width: view === "all" ? "19%" : "21%" }} />
+              <col className="transition-[width] duration-200" style={{ width: view === "all" ? "13%" : "0%" }} />
+              <col className="transition-[width] duration-200" style={{ width: view === "all" ? "12%" : "14%" }} />
+              <col className="transition-[width] duration-200" style={{ width: view === "all" ? "18%" : "19%" }} />
             </colgroup>
             <thead className="sticky top-0 bg-card">
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
                 <th className="px-3 py-1.5 font-medium">Title</th>
                 <th className="px-3 py-1.5 font-medium">User</th>
-                {view === "all" && <th className="px-3 py-1.5 font-medium">Type</th>}
+                <th className={cn("overflow-hidden whitespace-nowrap py-1.5 font-medium", view === "all" ? "px-3" : "px-0")}>
+                  Type
+                </th>
                 <th className="px-3 py-1.5 font-medium">Date</th>
                 <th className="px-3 py-1.5 font-medium">Status</th>
               </tr>
@@ -371,14 +383,12 @@ export function useDashboardActivity(isAdmin = false) {
                         <span className="text-xs text-muted-foreground">Unassigned</span>
                       )}
                     </td>
-                    {view === "all" && (
-                      <td className="px-3 py-1.5">
-                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <ItemIcon className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{itemMeta.label}</span>
-                        </span>
-                      </td>
-                    )}
+                    <td className={cn("overflow-hidden whitespace-nowrap py-1.5", view === "all" ? "px-3" : "px-0")}>
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <ItemIcon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{itemMeta.label}</span>
+                      </span>
+                    </td>
                     <td className="truncate px-3 py-1.5 text-xs text-muted-foreground">
                       {it.date ? format(parseISO(it.date), it.moduleKey === "meetings" ? "MMM d · h:mm a" : "MMM d") : "—"}
                     </td>
@@ -394,6 +404,7 @@ export function useDashboardActivity(isAdmin = false) {
           </table>
         </div>
       )}
+      </motion.div>
     </Card>
   );
 

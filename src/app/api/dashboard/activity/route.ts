@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/permissions";
 import { leadListWhere } from "@/lib/leads";
 import { taskListWhere } from "@/lib/tasks";
 import { projectListWhere } from "@/lib/projects";
+import { dateFromKey, istDateKey } from "@/lib/attendance";
 
 type Module = "leads" | "tasks" | "meetings" | "projects" | "attendance" | "quotations" | "invoices";
 const MODULES: Module[] = ["leads", "tasks", "meetings", "projects", "attendance", "quotations", "invoices"];
@@ -186,8 +187,18 @@ export async function GET(req: NextRequest) {
     // Users see only their own attendance; admins see everyone's, unless
     // narrowed to one person.
     const where = targetUserId ? { userId: targetUserId } : admin ? {} : { userId: user.id };
+    // `date` is a @db.Date column — MySQL silently truncates a DATETIME filter
+    // against it down to a bare date, dropping the time-of-day. The client's
+    // "today" window is a UTC instant pair straddling IST midnight (e.g.
+    // 18:30 UTC yesterday to 18:29:59 UTC today), so truncating those two
+    // instants to dates widens the match to *both* calendar days instead of
+    // just today. Re-deriving the bounds as IST calendar-day keys first keeps
+    // them aligned with how a row's own `date` was stored in the first place.
+    const attendanceRange: { gte?: Date; lte?: Date } = {};
+    if (range.gte) attendanceRange.gte = dateFromKey(istDateKey(range.gte));
+    if (range.lte) attendanceRange.lte = dateFromKey(istDateKey(range.lte));
     const rows = await db.attendance.findMany({
-      where: { ...where, ...(hasRange && { date: range }) },
+      where: { ...where, ...(hasRange && { date: attendanceRange }) },
       select: {
         id: true,
         date: true,
