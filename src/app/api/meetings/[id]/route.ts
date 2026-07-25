@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { notifyUser } from "@/lib/notify";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -53,6 +54,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const d = parsed.data;
 
+  // Read the attendee list before the update so newly-added attendees can be
+  // told apart from ones already on the meeting — an edit that doesn't touch
+  // the guest list shouldn't re-notify everyone already invited.
+  let previousAttendeeIds: string[] | null = null;
+  if (d.attendeeIds !== undefined) {
+    const existing = await db.meeting.findUnique({ where: { id }, select: { attendees: { select: { id: true } } } });
+    previousAttendeeIds = existing?.attendees.map((a) => a.id) ?? [];
+  }
+
   const data: Record<string, unknown> = {};
   if (d.title !== undefined) data.title = d.title;
   if (d.description !== undefined) data.description = d.description || null;
@@ -71,6 +81,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const meeting = await db.meeting.update({ where: { id }, data, include: meetingInclude });
+
+  if (previousAttendeeIds && d.attendeeIds) {
+    const newAttendeeIds = d.attendeeIds.filter((aid) => aid !== user.id && !previousAttendeeIds!.includes(aid));
+    for (const aid of newAttendeeIds) {
+      await notifyUser(aid, "meeting_invited", { meetingId: id, meetingTitle: meeting.title, actorName: user.name });
+    }
+  }
+
   return NextResponse.json({ meeting });
 }
 

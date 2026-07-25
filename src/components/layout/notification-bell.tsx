@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
-import { IconBell, IconCheck, IconTrash, IconLeads, IconProjects, IconQuotations, IconTasks } from "@/components/icons";
+import { IconBell, IconCheck, IconTrash } from "@/components/icons";
 import { AnimatePresence, motion } from "framer-motion";
 import * as Popover from "@radix-ui/react-popover";
 import { useSocket } from "@/components/providers/socket-provider";
+import { useToast } from "@/components/providers/toast-provider";
 import { Tooltip } from "@/components/ui/tooltip";
+import { NOTIFICATION_ICON, notificationMessage, notificationHref } from "@/lib/notification-format";
 import { cn } from "@/lib/utils";
 
 interface Notification {
@@ -18,66 +20,10 @@ interface Notification {
   createdAt: string;
 }
 
-const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
-  lead_assigned: IconLeads,
-  task_assigned: IconTasks,
-  task_comment: IconTasks,
-  project_member_added: IconProjects,
-  project_supporter_added: IconProjects,
-  project_task_assigned: IconProjects,
-  quotation_decided: IconQuotations,
-};
-
-function notificationMessage(n: Notification): string {
-  const actor = typeof n.payload.actorName === "string" && n.payload.actorName ? n.payload.actorName : "Someone";
-  switch (n.type) {
-    case "lead_assigned": {
-      const leadName = typeof n.payload.leadName === "string" ? n.payload.leadName : "a lead";
-      return `${actor} assigned you to the lead "${leadName}"`;
-    }
-    case "task_assigned": {
-      const taskTitle = typeof n.payload.taskTitle === "string" ? n.payload.taskTitle : "a task";
-      return `${actor} assigned you to the task "${taskTitle}"`;
-    }
-    case "task_comment": {
-      const taskTitle = typeof n.payload.taskTitle === "string" ? n.payload.taskTitle : "a task";
-      return `${actor} commented on the task "${taskTitle}"`;
-    }
-    case "project_member_added": {
-      const projectName = typeof n.payload.projectName === "string" ? n.payload.projectName : "a project";
-      return `${actor} added you to the project "${projectName}"`;
-    }
-    case "project_supporter_added": {
-      const projectName = typeof n.payload.projectName === "string" ? n.payload.projectName : "a project";
-      return `${actor} added you as a supporter on "${projectName}"`;
-    }
-    case "project_task_assigned": {
-      const taskTitle = typeof n.payload.taskTitle === "string" ? n.payload.taskTitle : "a task";
-      return `${actor} assigned you to the project task "${taskTitle}"`;
-    }
-    case "quotation_decided": {
-      const number = typeof n.payload.quotationNumber === "string" ? n.payload.quotationNumber : "a quotation";
-      const decision = n.payload.decision === "APPROVED" ? "approved" : "rejected";
-      return `${actor} ${decision} quotation ${number}`;
-    }
-    default:
-      return "You have a new update";
-  }
-}
-
-function notificationHref(n: Notification): string | null {
-  if (n.type === "lead_assigned") return "/leads";
-  if (n.type === "task_assigned" || n.type === "task_comment") return "/tasks";
-  if (n.type === "project_member_added" || n.type === "project_supporter_added" || n.type === "project_task_assigned") {
-    return typeof n.payload.projectId === "string" ? `/projects/${n.payload.projectId}` : "/projects";
-  }
-  if (n.type === "quotation_decided") return "/quotations";
-  return null;
-}
-
 export function NotificationBell() {
   const router = useRouter();
   const { socket } = useSocket();
+  const toast = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -94,11 +40,21 @@ export function NotificationBell() {
     if (!socket) return;
     const onNotification = (n: Notification) => {
       setNotifications((prev) => [n, ...prev]);
+      // Surfaces the same event as a toast the instant it arrives, on top of
+      // the bell — someone assigned a task/lead/meeting/project shouldn't have
+      // to notice the bell's badge to find out.
+      const href = notificationHref(n);
+      toast.toast({
+        title: notificationMessage(n),
+        variant: "info",
+        onClick: href ? () => router.push(href) : undefined,
+      });
     };
     socket.on("notification", onNotification);
     return () => {
       socket.off("notification", onNotification);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   async function markAllRead() {

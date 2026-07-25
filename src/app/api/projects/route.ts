@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { broadcastProjectChange, canDeleteProject, logProjectActivity, projectListWhere } from "@/lib/projects";
+import { notifyUser } from "@/lib/notify";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -71,6 +72,10 @@ export async function POST(req: NextRequest) {
 
   await logProjectActivity(project.id, user.id, "created");
   broadcastProjectChange("project_created", project, memberIds);
+
+  if (data.assignedToId && data.assignedToId !== user.id) {
+    await notifyUser(data.assignedToId, "project_assigned", { projectId: project.id, projectName: project.name, actorName: user.name });
+  }
 
   return NextResponse.json({ project }, { status: 201 });
 }

@@ -8,6 +8,7 @@ import {
   getProjectForUser,
   logProjectActivity,
 } from "@/lib/projects";
+import { notifyUser } from "@/lib/notify";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -100,6 +101,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (data.status && data.status !== before.status) {
     await logProjectActivity(id, user.id, "status_changed", { from: before.status, to: data.status });
+  }
+
+  if (data.assignedToId !== undefined && data.assignedToId !== before.assignedToId) {
+    if (data.assignedToId && data.assignedToId !== user.id) {
+      await notifyUser(data.assignedToId, "project_assigned", { projectId: id, projectName: project.name, actorName: user.name });
+    }
   }
 
   broadcastProjectChange(

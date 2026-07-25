@@ -2,23 +2,26 @@ import type { InputJsonObject } from "@/generated/prisma/internal/prismaNamespac
 import { db } from "@/lib/db";
 import { emitToUser } from "@/lib/socket-emit";
 
-export type NotificationCategory = "leads" | "tasks" | "projects" | "quotations";
+export type NotificationCategory = "leads" | "tasks" | "projects" | "quotations" | "meetings";
 
 /** Maps every concrete notification `type` to the user-facing category it's toggled under. */
 const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   lead_assigned: "leads",
   task_assigned: "tasks",
   task_comment: "tasks",
+  project_assigned: "projects",
   project_member_added: "projects",
   project_supporter_added: "projects",
   project_task_assigned: "projects",
   quotation_decided: "quotations",
+  meeting_invited: "meetings",
 };
 
 export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: string; description: string }[] = [
   { value: "leads", label: "Leads", description: "When a lead is assigned to you" },
   { value: "tasks", label: "Tasks", description: "When a task is assigned to you or gets a new comment" },
-  { value: "projects", label: "Projects", description: "When you're added to a project as a member or supporter, or assigned a project task" },
+  { value: "projects", label: "Projects", description: "When you're assigned a project, added as a member or supporter, or assigned a project task" },
+  { value: "meetings", label: "Meetings", description: "When you're invited to a meeting" },
   { value: "quotations", label: "Quotations", description: "When a quotation you created is approved or rejected" },
 ];
 
