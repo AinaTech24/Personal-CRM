@@ -20,7 +20,7 @@ export interface TaskCommentItem {
   id: string;
   body: string;
   createdAt: string;
-  author: { name: string };
+  author: { id: string; name: string };
 }
 
 export interface TaskAttachmentItem {

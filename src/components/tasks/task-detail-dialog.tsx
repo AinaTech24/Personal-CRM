@@ -25,6 +25,7 @@ import {
   TASK_STATUSES,
   PRIORITY_OPTIONS,
   type AssignableUser,
+  type TaskCommentItem,
   type TaskDetail,
   type TaskStatus,
   type TaskSummary,
@@ -43,6 +44,8 @@ export function TaskDetailDialog({
   taskId,
   initialSummary,
   assignableUsers,
+  currentUserId,
+  isAdmin = false,
   onClose,
   onChanged,
   onDeleted,
@@ -50,6 +53,9 @@ export function TaskDetailDialog({
   taskId: string | null;
   initialSummary?: TaskSummary | null;
   assignableUsers: AssignableUser[];
+  /** Who's viewing — decides whether the delete option shows on a comment. */
+  currentUserId?: string | null;
+  isAdmin?: boolean;
   onClose: () => void;
   onChanged: () => void;
   onDeleted?: () => void;
@@ -63,6 +69,7 @@ export function TaskDetailDialog({
   const [linkUrl, setLinkUrl] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingComment, setDeletingComment] = useState<TaskCommentItem | null>(null);
   const [viewingAttachment, setViewingAttachment] = useState<{ fileName: string; filePath: string } | null>(
     null
   );
@@ -114,6 +121,13 @@ export function TaskDetailDialog({
       setCommentBody("");
       await load();
     }
+  }
+
+  async function deleteComment(commentId: string) {
+    if (!taskId) return;
+    const res = await fetch(`/api/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" });
+    if (res.ok) await load();
+    setDeletingComment(null);
   }
 
   async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -382,14 +396,31 @@ export function TaskDetailDialog({
                   {task.comments.length === 0 && (
                     <p className="text-xs text-muted-foreground">No comments yet</p>
                   )}
-                  {task.comments.map((c) => (
-                    <div key={c.id} className="rounded-md bg-accent/50 p-2 text-sm">
-                      <p>{c.body}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {c.author.name} · {formatDate(c.createdAt)}
-                      </p>
-                    </div>
-                  ))}
+                  {task.comments.map((c) => {
+                    const canDeleteComment = isAdmin || c.author.id === currentUserId;
+                    return (
+                      <div key={c.id} className="group flex items-start justify-between gap-2 rounded-md bg-accent/50 p-2 text-sm">
+                        <div className="min-w-0">
+                          <p>{c.body}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {c.author.name} · {formatDate(c.createdAt)}
+                          </p>
+                        </div>
+                        {canDeleteComment && (
+                          <Tooltip label="Delete comment">
+                            <button
+                              type="button"
+                              aria-label="Delete comment"
+                              onClick={() => setDeletingComment(c)}
+                              className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                            >
+                              <IconTrash className="h-3.5 w-3.5" />
+                            </button>
+                          </Tooltip>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </motion.div>
@@ -415,6 +446,15 @@ export function TaskDetailDialog({
       title={`Delete "${headerTitle ?? "this task"}"?`}
       description="This will permanently delete this task along with its comments and attachments. This action cannot be undone."
       onConfirm={deleteTask}
+    />
+    <ConfirmDialog
+      open={deletingComment !== null}
+      onOpenChange={(v) => !v && setDeletingComment(null)}
+      title="Delete this comment?"
+      description="This permanently removes the comment. This cannot be undone."
+      onConfirm={async () => {
+        if (deletingComment) await deleteComment(deletingComment.id);
+      }}
     />
     <AttachmentViewerDialog
       fileName={viewingAttachment?.fileName ?? null}

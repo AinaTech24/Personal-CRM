@@ -459,6 +459,8 @@ export function TasksBoard() {
         taskId={selectedTask?.id ?? null}
         initialSummary={selectedTask}
         assignableUsers={assignableUsers}
+        currentUserId={currentUserId}
+        isAdmin={isAdmin}
         onClose={() => setSelectedTask(null)}
         onChanged={loadTasks}
         onDeleted={() => {

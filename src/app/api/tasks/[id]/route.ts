@@ -19,7 +19,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     include: {
       assignedTo: { select: { id: true, name: true, email: true } },
       createdBy: { select: { id: true, name: true } },
-      comments: { include: { author: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
+      comments: { include: { author: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
       attachments: {
         include: { uploadedBy: { select: { name: true } } },
         omit: { data: true }, // never ship the base64 blob in the list payload
