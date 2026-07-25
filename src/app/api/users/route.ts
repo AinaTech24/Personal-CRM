@@ -14,8 +14,15 @@ export async function GET() {
     include: { department: true },
     // Never ship secrets to the client — not the password hash, and not the
     // reset-code hash or its expiry, which the admin console would otherwise
-    // surface as columns.
-    omit: { passwordHash: true, resetCode: true, resetCodeExpiresAt: true },
+    // surface as columns. Same for the PIN hash and its own reset code.
+    omit: {
+      passwordHash: true,
+      resetCode: true,
+      resetCodeExpiresAt: true,
+      pinHash: true,
+      pinResetCode: true,
+      pinResetCodeExpiresAt: true,
+    },
   });
 
   return NextResponse.json({ users });

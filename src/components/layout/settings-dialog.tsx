@@ -332,6 +332,10 @@ export function SettingsDialog({
   // Security
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [hasPin, setHasPin] = useState(false);
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [savingPin, setSavingPin] = useState(false);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -357,6 +361,8 @@ export function SettingsDialog({
     setSection("profile");
     setCurrentPassword("");
     setNewPassword("");
+    setCurrentPin("");
+    setNewPin("");
     setLoading(true);
     fetch("/api/auth/me")
       .then((r) => r.json())
@@ -370,6 +376,7 @@ export function SettingsDialog({
           setAvatarDataUrl(u.avatarDataUrl ?? null);
           setDefaultLandingPage(u.defaultLandingPage ?? "");
           setDensity(u.density === "compact" ? "compact" : "comfortable");
+          setHasPin(!!u.hasPin);
         }
       })
       .catch(() => {})
@@ -505,6 +512,37 @@ export function SettingsDialog({
       setNewPassword("");
     } finally {
       setSavingSecurity(false);
+    }
+  }
+
+  async function savePin() {
+    if (!/^\d{6}$/.test(newPin)) {
+      toast.error("PIN must be exactly 6 digits");
+      return;
+    }
+    if (hasPin && !currentPin) {
+      toast.error("Enter your current PIN to set a new one");
+      return;
+    }
+    if (!mobile) {
+      toast.error("Add a mobile number first", "A PIN signs in with your mobile number.");
+      return;
+    }
+    setSavingPin(true);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPin: hasPin ? currentPin : undefined, newPin }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't set PIN", data.error);
+      toast.success(hasPin ? "PIN changed" : "PIN set");
+      setHasPin(true);
+      setCurrentPin("");
+      setNewPin("");
+    } finally {
+      setSavingPin(false);
     }
   }
 
@@ -831,6 +869,47 @@ export function SettingsDialog({
                         </div>
                         <Button type="button" size="sm" onClick={saveSecurity} disabled={savingSecurity} className="self-start">
                           {savingSecurity ? "Saving..." : "Change password"}
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+                        <div>
+                          <p className="text-sm font-medium">{hasPin ? "Change PIN" : "Set a sign-in PIN"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            An alternate way in with your mobile number instead of email and password.
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {hasPin && (
+                            <div className="flex flex-col gap-1.5">
+                              <Label htmlFor="set-cur-pin">Current PIN</Label>
+                              <Input
+                                id="set-cur-pin"
+                                type="password"
+                                inputMode="numeric"
+                                maxLength={6}
+                                value={currentPin}
+                                onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
+                                autoComplete="current-password"
+                              />
+                            </div>
+                          )}
+                          <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="set-new-pin">New PIN</Label>
+                            <Input
+                              id="set-new-pin"
+                              type="password"
+                              inputMode="numeric"
+                              maxLength={6}
+                              value={newPin}
+                              onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
+                              autoComplete="new-password"
+                              placeholder="6 digits"
+                            />
+                          </div>
+                        </div>
+                        <Button type="button" size="sm" onClick={savePin} disabled={savingPin} className="self-start">
+                          {savingPin ? "Saving..." : hasPin ? "Change PIN" : "Set PIN"}
                         </Button>
                       </div>
 

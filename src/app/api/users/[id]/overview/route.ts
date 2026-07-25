@@ -13,7 +13,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const user = await db.user.findUnique({
     where: { id },
     include: { department: true },
-    omit: { passwordHash: true, resetCode: true, resetCodeExpiresAt: true },
+    omit: {
+      passwordHash: true,
+      resetCode: true,
+      resetCodeExpiresAt: true,
+      pinHash: true,
+      pinResetCode: true,
+      pinResetCodeExpiresAt: true,
+    },
   });
   if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

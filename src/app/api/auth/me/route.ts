@@ -20,6 +20,7 @@ export async function GET() {
       locale: user.locale,
       defaultLandingPage: user.defaultLandingPage,
       density: user.density,
+      hasPin: !!user.pinHash,
     },
   });
 }

@@ -17,7 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
-import { IconSend, IconPencil, IconTrash, IconX, IconCheck } from "@/components/icons";
+import { IconSend, IconPencil, IconTrash, IconX, IconCheck, IconKey } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import { cn } from "@/lib/utils";
@@ -44,6 +44,7 @@ interface UserRow {
   name: string;
   surname: string | null;
   email: string;
+  mobile: string | null;
   role: string;
   isActive: boolean;
   department: { id: string; name: string } | null;
@@ -82,6 +83,12 @@ export default function UsersPage() {
 
   // Delete confirm state
   const [deleteUser, setDeleteUser] = useState<UserRow | null>(null);
+
+  // Reset PIN dialog state
+  const [pinUser, setPinUser] = useState<UserRow | null>(null);
+  const [pinValue, setPinValue] = useState("");
+  const [generatedPin, setGeneratedPin] = useState<string | null>(null);
+  const [pinSaving, setPinSaving] = useState(false);
 
   async function load() {
     const [usersRes, deptRes] = await Promise.all([fetch("/api/users"), fetch("/api/departments")]);
@@ -196,6 +203,43 @@ export default function UsersPage() {
     load();
   }
 
+  function openResetPin(u: UserRow) {
+    setPinUser(u);
+    setPinValue("");
+    setGeneratedPin(null);
+  }
+
+  async function submitPinChange(body: { pin?: string; clear?: boolean }) {
+    if (!pinUser) return;
+    setPinSaving(true);
+    try {
+      const res = await fetch(`/api/users/${pinUser.id}/pin`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error("Couldn't update PIN", data.error);
+        return;
+      }
+      if (body.clear) {
+        toast.success(`${pinUser.name}'s PIN cleared`);
+        setPinUser(null);
+      } else if (data.pin) {
+        // A generated PIN — show it here so the admin can hand it over; it's
+        // never emailed to them and this is the only place it's displayed.
+        setGeneratedPin(data.pin);
+        toast.success("PIN generated");
+      } else {
+        toast.success(`${pinUser.name}'s PIN updated`);
+        setPinUser(null);
+      }
+    } finally {
+      setPinSaving(false);
+    }
+  }
+
   const deptOptions = departments.map((d) => ({ value: d.id, label: d.name }));
 
   return (
@@ -283,6 +327,16 @@ export default function UsersPage() {
                               )}
                             >
                               {u.isActive ? <IconX className="h-4 w-4" /> : <IconCheck className="h-4 w-4" />}
+                            </button>
+                          </Tooltip>
+                          <Tooltip label="Reset PIN">
+                            <button
+                              type="button"
+                              aria-label="Reset PIN"
+                              onClick={() => openResetPin(u)}
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
+                            >
+                              <IconKey className="h-4 w-4" />
                             </button>
                           </Tooltip>
                           <Tooltip label="Delete">
@@ -397,6 +451,83 @@ export default function UsersPage() {
         description="This permanently removes the user account. Users who own records cannot be deleted — block them instead."
         onConfirm={confirmDelete}
       />
+
+      {/* Reset PIN popup */}
+      <Dialog open={!!pinUser} onOpenChange={(v) => !v && setPinUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset PIN for {pinUser?.name}</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            {!pinUser?.mobile ? (
+              <p className="text-sm text-muted-foreground">
+                {pinUser?.name} has no mobile number on file yet — add one before setting a PIN
+                (a PIN signs in with a mobile number instead of email and password).
+              </p>
+            ) : generatedPin ? (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-muted-foreground">
+                  New PIN for {pinUser.name} — share it with them, it won&apos;t be shown again:
+                </p>
+                <p className="rounded-md bg-muted py-3 text-center text-2xl font-semibold tracking-[0.4em]">
+                  {generatedPin}
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="admin-set-pin">Set a specific PIN (optional)</Label>
+                  <Input
+                    id="admin-set-pin"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="Leave blank to generate one"
+                    value={pinValue}
+                    onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ""))}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {pinUser?.name} gets an email saying their PIN changed — the PIN itself is never
+                  emailed, so share it with them directly.
+                </p>
+              </div>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            {pinUser?.mobile && !generatedPin && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => submitPinChange({ clear: true })}
+                  disabled={pinSaving}
+                  className="mr-auto text-destructive hover:text-destructive"
+                >
+                  Clear PIN
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    if (pinValue && !/^\d{6}$/.test(pinValue)) {
+                      toast.error("PIN must be exactly 6 digits");
+                      return;
+                    }
+                    submitPinChange(pinValue ? { pin: pinValue } : {});
+                  }}
+                  disabled={pinSaving}
+                >
+                  {pinSaving ? "Saving..." : pinValue ? "Set PIN" : "Generate PIN"}
+                </Button>
+              </>
+            )}
+            {generatedPin && (
+              <Button type="button" onClick={() => setPinUser(null)}>
+                Done
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

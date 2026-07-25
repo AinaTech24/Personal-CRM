@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser, hashPassword, verifyPassword } from "@/lib/auth";
+import { isValidMobile, isValidPin, normalizeMobile } from "@/lib/credentials";
 
 const MAX_AVATAR = 1_500_000;
 
@@ -22,6 +23,8 @@ const bodySchema = z.object({
     .optional(),
   currentPassword: z.string().optional(),
   newPassword: z.string().min(8).optional(),
+  currentPin: z.string().optional(),
+  newPin: z.string().optional(),
   locale: z.string().max(10).optional(),
   defaultLandingPage: z.enum(LANDING_PAGES).nullable().optional(),
   density: z.enum(["comfortable", "compact"]).optional(),
@@ -46,31 +49,79 @@ export async function PUT(req: NextRequest) {
     passwordHash = await hashPassword(data.newPassword);
   }
 
-  const updated = await db.user.update({
-    where: { id: user.id },
-    data: {
-      ...(data.name !== undefined && { name: data.name }),
-      ...(data.surname !== undefined && { surname: data.surname || null }),
-      ...(data.mobile !== undefined && { mobile: data.mobile || null }),
-      ...(data.avatarDataUrl !== undefined && { avatarDataUrl: data.avatarDataUrl }),
-      ...(data.locale !== undefined && { locale: data.locale }),
-      ...(data.defaultLandingPage !== undefined && { defaultLandingPage: data.defaultLandingPage }),
-      ...(data.density !== undefined && { density: data.density }),
-      ...(passwordHash && { passwordHash }),
-    },
-    select: {
-      id: true,
-      name: true,
-      surname: true,
-      mobile: true,
-      avatarDataUrl: true,
-      email: true,
-      timezone: true,
-      locale: true,
-      defaultLandingPage: true,
-      density: true,
-    },
-  });
+  // Mobile is normalized before storage (not just at login lookup) so the
+  // unique constraint actually catches two people typing the same real
+  // number in different formats, rather than only detecting it once someone
+  // happens to type it identically to an existing row.
+  let normalizedMobile: string | null | undefined;
+  if (data.mobile !== undefined) {
+    if (!data.mobile) {
+      normalizedMobile = null;
+    } else if (!isValidMobile(data.mobile)) {
+      return NextResponse.json({ error: "Enter a valid 10-digit mobile number" }, { status: 400 });
+    } else {
+      normalizedMobile = normalizeMobile(data.mobile);
+    }
+  }
 
-  return NextResponse.json({ user: updated });
+  // PIN change requires the current PIN — unless none is set yet, since a
+  // first-time PIN has nothing to confirm against.
+  let pinHash: string | undefined;
+  if (data.newPin) {
+    if (!isValidPin(data.newPin)) {
+      return NextResponse.json({ error: "PIN must be exactly 6 digits" }, { status: 400 });
+    }
+    if (user.pinHash) {
+      if (!data.currentPin) {
+        return NextResponse.json({ error: "Enter your current PIN to set a new one" }, { status: 400 });
+      }
+      const ok = await verifyPassword(data.currentPin, user.pinHash);
+      if (!ok) return NextResponse.json({ error: "Current PIN is incorrect" }, { status: 400 });
+    }
+    const willHaveMobile = normalizedMobile !== undefined ? !!normalizedMobile : !!user.mobile;
+    if (!willHaveMobile) {
+      return NextResponse.json({ error: "Add a mobile number before setting a PIN" }, { status: 400 });
+    }
+    pinHash = await hashPassword(data.newPin);
+  }
+
+  let updated;
+  try {
+    updated = await db.user.update({
+      where: { id: user.id },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.surname !== undefined && { surname: data.surname || null }),
+        ...(normalizedMobile !== undefined && { mobile: normalizedMobile }),
+        ...(data.avatarDataUrl !== undefined && { avatarDataUrl: data.avatarDataUrl }),
+        ...(data.locale !== undefined && { locale: data.locale }),
+        ...(data.defaultLandingPage !== undefined && { defaultLandingPage: data.defaultLandingPage }),
+        ...(data.density !== undefined && { density: data.density }),
+        ...(passwordHash && { passwordHash }),
+        ...(pinHash && { pinHash }),
+      },
+      select: {
+        id: true,
+        name: true,
+        surname: true,
+        mobile: true,
+        avatarDataUrl: true,
+        email: true,
+        timezone: true,
+        locale: true,
+        defaultLandingPage: true,
+        density: true,
+      },
+    });
+  } catch (err) {
+    if (err && typeof err === "object" && "code" in err && err.code === "P2002") {
+      return NextResponse.json({ error: "That mobile number is already in use" }, { status: 409 });
+    }
+    throw err;
+  }
+
+  // Whether a PIN exists after this request — either it was just set, or one
+  // already existed before this call and wasn't touched.
+  const hasPin = pinHash !== undefined || !!user.pinHash;
+  return NextResponse.json({ user: { ...updated, hasPin } });
 }

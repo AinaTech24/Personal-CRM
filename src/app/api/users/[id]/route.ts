@@ -54,7 +54,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.isActive !== undefined && { isActive: data.isActive }),
     },
     include: { department: true },
-    omit: { passwordHash: true },
+    omit: { passwordHash: true, resetCode: true, resetCodeExpiresAt: true, pinHash: true, pinResetCode: true, pinResetCodeExpiresAt: true },
   });
 
   emitToAdmins("user_updated", { id: updated.id });

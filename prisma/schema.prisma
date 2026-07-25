@@ -35,7 +35,9 @@ model User {
   passwordHash       String
   name               String
   surname            String?
-  mobile             String?
+  // @unique with a nullable String is fine in MySQL — any number of NULL rows
+  // are allowed, only two rows sharing the same non-null value would collide.
+  mobile             String?     @unique
   avatarDataUrl      String?     @db.LongText
   role               Role        @default(DEPARTMENT_USER)
   departmentId       String?
@@ -43,6 +45,11 @@ model User {
   isActive           Boolean     @default(true)
   resetCode          String? // bcrypt hash of the email login/reset code
   resetCodeExpiresAt DateTime?
+  // Alternate sign-in: mobile number + 6-digit PIN, alongside email+password.
+  // Never required — null until the user (or an admin) sets one.
+  pinHash               String? // bcrypt hash of the 6-digit PIN
+  pinResetCode          String? // bcrypt hash of the mobile-based PIN-reset OTP
+  pinResetCodeExpiresAt DateTime?
 
   // Preferences
   // Fixed app-wide (Asia/Kolkata), not user-editable. Left nullable on purpose:
