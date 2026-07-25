@@ -11,16 +11,17 @@ import { SkeletonList } from "@/components/ui/skeleton";
 import {
   IconFilter,
   IconCheck,
-  IconX,
   IconLeads,
   IconTasks,
   IconProjects,
   IconCalendar,
   IconClock,
+  IconLayoutGrid,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 type ModuleKey = "leads" | "tasks" | "meetings" | "projects" | "attendance";
+type ViewKey = ModuleKey | "all";
 type Period = "today" | "yesterday" | "upcoming" | "range";
 
 const MODULES: { key: ModuleKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -30,6 +31,14 @@ const MODULES: { key: ModuleKey; label: string; icon: React.ComponentType<{ clas
   { key: "projects", label: "Projects", icon: IconProjects },
   { key: "attendance", label: "Attendance", icon: IconClock },
 ];
+
+/** Shown first in the view list and selected on load — everything, unfiltered by module. */
+const ALL_VIEW = { key: "all" as const, label: "All", icon: IconLayoutGrid };
+const VIEWS = [ALL_VIEW, ...MODULES];
+
+/** Cap on the merged "All" feed — each module already caps at 100 server-side,
+ *  so five of them could otherwise dump 500 rows into one scrolling list. */
+const ALL_VIEW_LIMIT = 60;
 
 const PERIODS: { key: Period; label: string }[] = [
   { key: "today", label: "Today" },
@@ -45,6 +54,13 @@ interface ActivityItem {
   date: string | null;
   status: string | null;
   href: string;
+}
+
+/** An item plus which module it came from — every item carries this, even
+ *  outside the "All" view, so a row never has to guess its own date format
+ *  from the view-level state. */
+interface FeedItem extends ActivityItem {
+  moduleKey: ModuleKey;
 }
 
 const pretty = (s: string) => s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -66,64 +82,83 @@ function windowFor(period: Period, from: string, to: string): { from?: string; t
   return { from: startOfDay(parseISO(from)).toISOString(), to: endOfDay(parseISO(to)).toISOString() };
 }
 
+/** Fetches one module's items for a window and tags each with its module. */
+async function fetchModule(key: ModuleKey, win: { from?: string; to?: string }): Promise<FeedItem[]> {
+  const params = new URLSearchParams({ module: key });
+  if (win.from) params.set("from", win.from);
+  if (win.to) params.set("to", win.to);
+  const res = await fetch(`/api/dashboard/activity?${params.toString()}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.items as ActivityItem[]).map((it) => ({ ...it, moduleKey: key }));
+}
+
 /**
  * The dashboard's period + module filter.
  *
- * Returns the trigger button and the results panel as two nodes so a dashboard
- * can drop the button in its header and the panel wherever it wants, while the
- * state and fetching stay here. No module selected → no panel.
+ * Returns the trigger button and the results panel as two nodes so a
+ * dashboard can drop the button in its header and the panel wherever it
+ * wants, while the state and fetching stay here.
+ *
+ * "All" is the resting state — selected on load, showing every module merged
+ * into one feed — so the panel is always present rather than appearing only
+ * once someone picks a module.
  */
 export function useDashboardActivity() {
   const [open, setOpen] = useState(false);
-  const [module, setModule] = useState<ModuleKey | null>(null);
+  const [view, setView] = useState<ViewKey>("all");
   const [period, setPeriod] = useState<Period>("today");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [items, setItems] = useState<ActivityItem[] | null>(null);
+  const [items, setItems] = useState<FeedItem[] | null>(null);
   const [loading, setLoading] = useState(false);
 
   const win = useMemo(() => windowFor(period, from, to), [period, from, to]);
 
   const fetchItems = useCallback(async () => {
-    if (!module || !win) {
+    if (!win) {
       setItems(null);
       return;
     }
     setLoading(true);
     try {
-      const params = new URLSearchParams({ module });
-      if (win.from) params.set("from", win.from);
-      if (win.to) params.set("to", win.to);
-      const res = await fetch(`/api/dashboard/activity?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setItems(data.items);
+      if (view === "all") {
+        const perModule = await Promise.all(MODULES.map((m) => fetchModule(m.key, win)));
+        const merged = perModule.flat().sort((a, b) => {
+          if (!a.date && !b.date) return 0;
+          if (!a.date) return 1;
+          if (!b.date) return -1;
+          return b.date.localeCompare(a.date); // newest first
+        });
+        setItems(merged.slice(0, ALL_VIEW_LIMIT));
+      } else {
+        setItems(await fetchModule(view, win));
       }
     } finally {
       setLoading(false);
     }
-  }, [module, win]);
+  }, [view, win]);
 
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
 
-  const moduleMeta = module ? MODULES.find((m) => m.key === module)! : null;
+  const selectedMeta = view === "all" ? ALL_VIEW : MODULES.find((m) => m.key === view)!;
   const periodLabel = PERIODS.find((p) => p.key === period)!.label;
+  const isDefault = view === "all" && period === "today";
 
   const filterButton = (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button
           type="button"
-          aria-label={module ? `Filter: ${moduleMeta!.label}, ${periodLabel}` : "Filter dashboard"}
+          aria-label={`Filter: ${selectedMeta.label}, ${periodLabel}`}
           className={cn(
-            "flex h-9 items-center gap-2 rounded-md border border-input px-3 text-sm transition-colors hover:bg-primary/5",
-            module && "border-primary text-primary"
+            "flex h-9 w-9 items-center justify-center rounded-md border border-input transition-colors hover:bg-primary/5",
+            !isDefault && "border-primary text-primary"
           )}
         >
           <IconFilter className="h-4 w-4" />
-          <span className="hidden sm:inline">{module ? `${moduleMeta!.label} · ${periodLabel}` : "Filter"}</span>
         </button>
       </Popover.Trigger>
       <AnimatePresence>
@@ -139,23 +174,23 @@ export function useDashboardActivity() {
               >
                 <p className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">View</p>
                 <div className="grid grid-cols-1 gap-0.5">
-                  {MODULES.map((m) => {
-                    const Icon = m.icon;
+                  {VIEWS.map((v) => {
+                    const Icon = v.icon;
                     return (
                       <button
-                        key={m.key}
+                        key={v.key}
                         type="button"
-                        onClick={() => setModule(m.key)}
+                        onClick={() => setView(v.key)}
                         className={cn(
                           "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary/5",
-                          module === m.key && "bg-accent/60"
+                          view === v.key && "bg-accent/60"
                         )}
                       >
                         <span className="flex items-center gap-2">
                           <Icon className="h-4 w-4 text-muted-foreground" />
-                          {m.label}
+                          {v.label}
                         </span>
-                        {module === m.key && <IconCheck className="h-3.5 w-3.5 text-primary" />}
+                        {view === v.key && <IconCheck className="h-3.5 w-3.5 text-primary" />}
                       </button>
                     );
                   })}
@@ -185,20 +220,6 @@ export function useDashboardActivity() {
                     <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
                   </div>
                 )}
-
-                {module && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModule(null);
-                      setOpen(false);
-                    }}
-                    className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground hover:bg-primary/5"
-                  >
-                    <IconX className="h-3.5 w-3.5" />
-                    Clear filter
-                  </button>
-                )}
               </motion.div>
             </Popover.Content>
           </Popover.Portal>
@@ -207,42 +228,51 @@ export function useDashboardActivity() {
     </Popover.Root>
   );
 
-  const panel =
-    module && moduleMeta ? (
-      <Card className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <p className="flex items-center gap-2 text-sm font-medium">
-            <moduleMeta.icon className="h-4 w-4 text-muted-foreground" />
-            {moduleMeta.label} · {periodLabel}
-            {items && <span className="text-xs text-muted-foreground">({items.length})</span>}
-          </p>
+  const panel = (
+    <Card className="overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <p className="flex items-center gap-2 text-sm font-medium">
+          <selectedMeta.icon className="h-4 w-4 text-muted-foreground" />
+          {selectedMeta.label} · {periodLabel}
+          {items && <span className="text-xs text-muted-foreground">({items.length})</span>}
+        </p>
+        {!isDefault && (
           <button
             type="button"
-            onClick={() => setModule(null)}
+            onClick={() => {
+              setView("all");
+              setPeriod("today");
+            }}
             className="text-xs text-muted-foreground hover:text-foreground"
           >
-            Clear
+            Reset
           </button>
+        )}
+      </div>
+      {loading ? (
+        <div className="p-4">
+          <SkeletonList rows={4} />
         </div>
-        {loading ? (
-          <div className="p-4">
-            <SkeletonList rows={4} />
-          </div>
-        ) : !items || items.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-            {period === "range" && (!from || !to) ? "Pick a start and end date." : `No ${moduleMeta.label.toLowerCase()} in this period.`}
-          </p>
-        ) : (
-          <div className="flex max-h-96 flex-col divide-y divide-border/50 overflow-y-auto">
-            {items.map((it) => (
+      ) : !items || items.length === 0 ? (
+        <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+          {period === "range" && (!from || !to) ? "Pick a start and end date." : "Nothing in this period."}
+        </p>
+      ) : (
+        <div className="flex max-h-96 flex-col divide-y divide-border/50 overflow-y-auto">
+          {items.map((it) => {
+            const ItemIcon = MODULES.find((m) => m.key === it.moduleKey)!.icon;
+            return (
               <Link
-                key={it.id}
+                key={`${it.moduleKey}-${it.id}`}
                 href={it.href}
                 className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5"
               >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm">{it.title}</span>
-                  {it.subtitle && <span className="block truncate text-xs text-muted-foreground">{it.subtitle}</span>}
+                <span className="flex min-w-0 items-center gap-2.5">
+                  {view === "all" && <ItemIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm">{it.title}</span>
+                    {it.subtitle && <span className="block truncate text-xs text-muted-foreground">{it.subtitle}</span>}
+                  </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
                   {it.status && (
@@ -250,16 +280,17 @@ export function useDashboardActivity() {
                   )}
                   {it.date && (
                     <span className="text-xs text-muted-foreground">
-                      {format(parseISO(it.date), module === "meetings" ? "MMM d · h:mm a" : "MMM d")}
+                      {format(parseISO(it.date), it.moduleKey === "meetings" ? "MMM d · h:mm a" : "MMM d")}
                     </span>
                   )}
                 </span>
               </Link>
-            ))}
-          </div>
-        )}
-      </Card>
-    ) : null;
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
 
-  return { filterButton, panel, active: !!module };
+  return { filterButton, panel, active: !isDefault };
 }
