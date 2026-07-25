@@ -9,19 +9,25 @@ import { Card } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { IconFilter, IconCheck, IconLayoutGrid } from "@/components/icons";
+import { IconFilter, IconCheck, IconLayoutGrid, IconQuotations, IconInvoices } from "@/components/icons";
 import { DASHBOARD_MODULES, type DashboardModuleKey } from "@/lib/dashboard-modules";
 import { cn } from "@/lib/utils";
 
-type ModuleKey = DashboardModuleKey;
+type ModuleKey = DashboardModuleKey | "quotations" | "invoices";
 type ViewKey = ModuleKey | "all";
 type Period = "today" | "yesterday" | "upcoming" | "range";
 
-const MODULES = DASHBOARD_MODULES;
+/** Financial records — offered in the View list only to admins, and the API
+ *  itself refuses them for anyone else regardless of what the UI shows. */
+const FINANCIAL_MODULES: { key: ModuleKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: "quotations", label: "Quotations", icon: IconQuotations },
+  { key: "invoices", label: "Invoices", icon: IconInvoices },
+];
+
+const MODULES = [...DASHBOARD_MODULES, ...FINANCIAL_MODULES];
 
 /** Shown first in the view list and selected on load — everything, unfiltered by module. */
 const ALL_VIEW = { key: "all" as const, label: "All", icon: IconLayoutGrid };
-const VIEWS = [ALL_VIEW, ...MODULES];
 
 /** Cap on the merged "All" feed — each module already caps at 100 server-side,
  *  so five of them could otherwise dump 500 rows into one scrolling list. */
@@ -91,8 +97,12 @@ async function fetchModule(key: ModuleKey, win: { from?: string; to?: string }):
  * "All" is the resting state — selected on load, showing every module merged
  * into one feed — so the panel is always present rather than appearing only
  * once someone picks a module.
+ *
+ * `isAdmin` gates Quotations and Invoices out of the View list and out of the
+ * "All" fan-out entirely for a non-admin — the API would refuse them anyway,
+ * but there's no reason to even offer or request them.
  */
-export function useDashboardActivity() {
+export function useDashboardActivity(isAdmin = false) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewKey>("all");
@@ -101,6 +111,9 @@ export function useDashboardActivity() {
   const [to, setTo] = useState("");
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const fetchableModules = isAdmin ? MODULES : DASHBOARD_MODULES;
+  const views = useMemo(() => [ALL_VIEW, ...fetchableModules], [fetchableModules]);
 
   const win = useMemo(() => windowFor(period, from, to), [period, from, to]);
 
@@ -112,7 +125,7 @@ export function useDashboardActivity() {
     setLoading(true);
     try {
       if (view === "all") {
-        const perModule = await Promise.all(MODULES.map((m) => fetchModule(m.key, win)));
+        const perModule = await Promise.all(fetchableModules.map((m) => fetchModule(m.key, win)));
         const merged = perModule.flat().sort((a, b) => {
           if (!a.date && !b.date) return 0;
           if (!a.date) return 1;
@@ -126,7 +139,11 @@ export function useDashboardActivity() {
     } finally {
       setLoading(false);
     }
-  }, [view, win]);
+    // fetchableModules is a fresh array each render but stable in shape (keyed
+    // by isAdmin), so it's intentionally left out to avoid refetching on every
+    // unrelated render — isAdmin itself is a stable prop from the caller.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, win, isAdmin]);
 
   useEffect(() => {
     fetchItems();
@@ -163,7 +180,7 @@ export function useDashboardActivity() {
               >
                 <p className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">View</p>
                 <div className="grid grid-cols-1 gap-0.5">
-                  {VIEWS.map((v) => {
+                  {views.map((v) => {
                     const Icon = v.icon;
                     return (
                       <button

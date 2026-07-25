@@ -6,8 +6,15 @@ import { leadListWhere } from "@/lib/leads";
 import { taskListWhere } from "@/lib/tasks";
 import { projectListWhere } from "@/lib/projects";
 
-type Module = "leads" | "tasks" | "meetings" | "projects" | "attendance";
-const MODULES: Module[] = ["leads", "tasks", "meetings", "projects", "attendance"];
+type Module = "leads" | "tasks" | "meetings" | "projects" | "attendance" | "quotations" | "invoices";
+const MODULES: Module[] = ["leads", "tasks", "meetings", "projects", "attendance", "quotations", "invoices"];
+/** Financial records — shown in the dashboard filter only to admins. */
+const ADMIN_ONLY_MODULES = new Set<Module>(["quotations", "invoices"]);
+
+/** Turns a SCREAMING_SNAKE enum value into "Title case". */
+function humanize(value: string): string {
+  return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 interface ActivityUser {
   name: string;
@@ -47,11 +54,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unknown module" }, { status: 400 });
   }
 
+  const admin = isAdmin(user);
+  // Quotations and invoices are financial records — the UI never offers them
+  // to a non-admin, but a direct request for one is refused here too rather
+  // than trusted to have come from that UI.
+  if (ADMIN_ONLY_MODULES.has(mod) && !admin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const fromRaw = req.nextUrl.searchParams.get("from");
   const toRaw = req.nextUrl.searchParams.get("to");
   const from = fromRaw ? new Date(fromRaw) : null;
   const to = toRaw ? new Date(toRaw) : null;
-  const admin = isAdmin(user);
 
   // Narrows to one person's records instead of everything the caller can see.
   // Only admins can point this at someone else — a non-admin passing someone
@@ -180,21 +194,81 @@ export async function GET(req: NextRequest) {
         status: true,
         calculatedStatus: true,
         checkIn: true,
+        checkOut: true,
+        halfDayReason: true,
+        overrideReason: true,
         user: userSelect,
       },
       orderBy: { date: "desc" },
       take: 100,
     });
+    const time = (d: Date | null) => (d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null);
     // The user column now carries the owner, so the title is always the date —
     // matching what tasks/leads show (a description of the thing, not the person).
-    items = rows.map((a) => ({
-      id: a.id,
-      title: new Date(a.date).toLocaleDateString(),
-      subtitle: a.checkIn ? new Date(a.checkIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null,
-      date: a.date.toISOString(),
-      status: a.status ?? a.calculatedStatus ?? null,
-      href: admin ? "/admin/attendance" : "/attendance",
-      user: a.user,
+    items = rows.map((a) => {
+      const checkIn = time(a.checkIn);
+      const checkOut = time(a.checkOut);
+      // A half-day has a coded reason; a manual status override carries free text.
+      const reason = a.halfDayReason ? humanize(a.halfDayReason) : a.overrideReason;
+      const subtitle = [
+        checkIn && `In ${checkIn}`,
+        checkOut && `Out ${checkOut}`,
+        reason,
+      ]
+        .filter(Boolean)
+        .join(" · ") || null;
+      return {
+        id: a.id,
+        title: new Date(a.date).toLocaleDateString(),
+        subtitle,
+        date: a.date.toISOString(),
+        // Today's own record has no calculated status yet — checked in with
+        // nothing computed reads as "still in progress", not "no status".
+        status: a.status ?? a.calculatedStatus ?? (a.checkIn ? "PENDING" : null),
+        href: admin ? "/admin/attendance" : "/attendance",
+        user: a.user,
+      };
+    });
+  } else if (mod === "quotations") {
+    // Reachable only by admins (guarded above), so no own-records fallback is
+    // needed the way the other modules have one for non-admin callers.
+    const rows = await db.quotation.findMany({
+      where: {
+        ...(targetUserId && { createdById: targetUserId }),
+        ...(hasRange && { createdAt: range }),
+      },
+      select: { id: true, quotationNumber: true, clientName: true, status: true, createdAt: true, createdBy: userSelect },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    items = rows.map((q) => ({
+      id: q.id,
+      title: q.quotationNumber,
+      subtitle: q.clientName,
+      date: q.createdAt.toISOString(),
+      status: q.status,
+      href: "/quotations",
+      user: q.createdBy,
+    }));
+  } else if (mod === "invoices") {
+    // Reachable only by admins (guarded above).
+    const rows = await db.invoice.findMany({
+      where: {
+        ...(targetUserId && { createdById: targetUserId }),
+        ...(hasRange && { createdAt: range }),
+      },
+      select: { id: true, invoiceNumber: true, clientName: true, status: true, createdAt: true, createdBy: userSelect },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    items = rows.map((i) => ({
+      id: i.id,
+      title: i.invoiceNumber,
+      subtitle: i.clientName,
+      date: i.createdAt.toISOString(),
+      status: i.status,
+      href: "/invoices",
+      user: i.createdBy,
     }));
   }
 

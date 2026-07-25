@@ -171,7 +171,9 @@ function ChartCard({
 export function DashboardStats({ greetingName = "" }: { greetingName?: string }) {
   const router = useRouter();
   const { socket } = useSocket();
-  const { filterButton, panel } = useDashboardActivity();
+  // This component only renders for admins (see the dashboard page's own
+  // check), so the filter's Quotations/Invoices views are always offered here.
+  const { filterButton, panel } = useDashboardActivity(true);
   const { trigger: userViewTrigger, panel: userViewPanel, viewingUser } = useDashboardUserView();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
