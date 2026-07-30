@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { getSocialMembership, hasSocialMediaAccess, isSocialMediaLead } from "@/lib/social-media";
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ user: null }, { status: 401 });
+
+  const membership = await getSocialMembership(user.id);
 
   return NextResponse.json({
     user: {
@@ -21,6 +24,10 @@ export async function GET() {
       defaultLandingPage: user.defaultLandingPage,
       density: user.density,
       hasPin: !!user.pinHash,
+      socialMedia: {
+        hasAccess: hasSocialMediaAccess(user, membership),
+        isLead: isSocialMediaLead(user, membership),
+      },
     },
   });
 }

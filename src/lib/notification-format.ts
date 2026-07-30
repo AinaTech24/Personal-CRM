@@ -1,4 +1,4 @@
-import { IconLeads, IconTasks, IconProjects, IconQuotations, IconCalendar, IconClock } from "@/components/icons";
+import { IconLeads, IconTasks, IconProjects, IconQuotations, IconCalendar, IconClock, IconMegaphone } from "@/components/icons";
 
 export interface NotificationLike {
   type: string;
@@ -22,6 +22,7 @@ export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?:
   meeting_invited: IconCalendar,
   check_in_reminder: IconClock,
   check_out_reminder: IconClock,
+  social_client_assigned: IconMegaphone,
 };
 
 export function notificationMessage(n: NotificationLike): string {
@@ -72,6 +73,10 @@ export function notificationMessage(n: NotificationLike): string {
       const shiftName = typeof n.payload.shiftName === "string" ? n.payload.shiftName : "your shift";
       return `Don't forget to check out for ${shiftName} — the window closes soon`;
     }
+    case "social_client_assigned": {
+      const clientName = typeof n.payload.clientName === "string" ? n.payload.clientName : "a client";
+      return `${actor} assigned you the social media client "${clientName}"`;
+    }
     default:
       return "You have a new update";
   }
@@ -91,5 +96,8 @@ export function notificationHref(n: NotificationLike): string | null {
   if (n.type === "quotation_decided") return "/quotations";
   if (n.type === "meeting_invited") return "/meetings";
   if (n.type === "check_in_reminder" || n.type === "check_out_reminder") return "/attendance";
+  if (n.type === "social_client_assigned") {
+    return typeof n.payload.clientId === "string" ? `/social-media/${n.payload.clientId}` : "/social-media";
+  }
   return null;
 }

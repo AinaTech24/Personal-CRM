@@ -111,6 +111,15 @@ model User {
   messageReactions        MessageReaction[]    @relation("MessageReactionUser")
   pushSubscriptions       PushSubscription[]
   auditLogs               AuditLog[]           @relation("AuditActor")
+
+  socialMediaMembership  SocialMediaMember?
+  socialClientsCreated   SocialClient[]           @relation("SocialClientCreatedBy")
+  socialClientsAssigned  SocialClient[]           @relation("SocialClientAssignedTo")
+  socialContentCreated   SocialContentItem[]      @relation("SocialContentCreatedBy")
+  socialContentApprovals SocialContentApproval[]
+  socialAdsCreated       SocialAdCampaign[]       @relation("SocialAdCreatedBy")
+  socialReportsCreated   SocialMonthlyReport[]    @relation("SocialReportCreatedBy")
+  socialClientActivities SocialClientActivity[]
 }
 
 /// A browser/device push endpoint, so a user can be notified about a new
@@ -1086,4 +1095,237 @@ model AuditLog {
   @@index([createdAt])
   @@index([model, recordId])
   @@index([actorId])
+}
+
+// ---------- Social Media Management ----------
+//
+// Restricted to a specific team, not every department user — see
+// SocialMediaMember and src/lib/social-media.ts. Company Admin/Super Admin
+// always have full access without needing a membership row, same as every
+// other module's isAdmin() override.
+
+enum SocialClientStage {
+  ENQUIRY
+  CALLING
+  MEETING
+  PLAN_DISCUSSION
+  APPROVAL
+  ONBOARDED
+}
+
+enum SocialPlatform {
+  FACEBOOK
+  INSTAGRAM
+  LINKEDIN
+  TWITTER
+  YOUTUBE
+}
+
+enum SocialContentType {
+  STATIC_POST
+  CAROUSEL
+  AI_REEL
+  REAL_PERSON_REEL
+}
+
+/// One shared enum across all four content types; each type's valid ordered
+/// subsequence lives in code (src/lib/social-content-workflow.ts), not here
+/// — e.g. only REAL_PERSON_REEL passes through CLIENT_CLIPS_RECEIVED.
+enum SocialContentStage {
+  DRAFT
+  APPROVED_TO_PROCEED
+  CLIENT_CLIPS_RECEIVED
+  IN_PRODUCTION
+  SHARED_FOR_REVIEW
+  APPROVED_FINAL
+  PUBLISHED
+  CANCELLED
+}
+
+enum SocialAdObjective {
+  LEADS
+  REACH
+  FOLLOWERS
+}
+
+enum SocialAdStage {
+  DISCUSSION
+  BUDGET_DURATION
+  TARGETING
+  CONTENT_APPROVAL
+  AD_CREATION
+  GROUP_APPROVAL
+  CAMPAIGN_SETUP
+  RUNNING
+  REPORTING
+  COMPLETED
+  CANCELLED
+}
+
+/// Grants access to the Social Media module — presence of a row is the
+/// access check itself (src/lib/social-media.ts). `isLead` sees and manages
+/// every client instead of just their own.
+model SocialMediaMember {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isLead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model SocialClient {
+  id            String            @id @default(cuid())
+  name          String
+  companyName   String?
+  contactPerson String?
+  phone         String?
+  email         String?
+  stage         SocialClientStage @default(ENQUIRY)
+  planNotes     String?           @db.Text
+  approvedAt    DateTime?
+  onboardedAt   DateTime?
+  assignedToId  String?
+  assignedTo    User?             @relation("SocialClientAssignedTo", fields: [assignedToId], references: [id])
+  createdById   String
+  createdBy     User              @relation("SocialClientCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  platformAccounts SocialPlatformAccount[]
+  contentItems     SocialContentItem[]
+  adCampaigns      SocialAdCampaign[]
+  monthlyReports   SocialMonthlyReport[]
+  activities       SocialClientActivity[]
+
+  @@index([stage])
+  @@index([assignedToId])
+}
+
+/// Tracks which platforms are connected and whether login credentials have
+/// been collected — never the credentials themselves. No password field
+/// exists anywhere in this schema; a CRM breach can't leak a client's own
+/// social accounts.
+model SocialPlatformAccount {
+  id                  String         @id @default(cuid())
+  clientId            String
+  client              SocialClient   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  platform            SocialPlatform
+  handle              String?
+  credentialsReceived Boolean        @default(false)
+  notes               String?        @db.Text
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@unique([clientId, platform])
+}
+
+/// One row per piece of content across all four workflows (static post,
+/// carousel, AI reel, real-person reel). No assignedToId — visibility
+/// follows the parent client's ownership, since a client's content is
+/// worked on by whoever's covering that client, not assigned post-by-post.
+model SocialContentItem {
+  id           String             @id @default(cuid())
+  clientId     String
+  client       SocialClient       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type         SocialContentType
+  title        String
+  caption      String?            @db.Text
+  hashtags     String?
+  stage        SocialContentStage @default(DRAFT)
+  /// Comma-separated SocialPlatform values — "publish on all platforms"
+  /// means a single post can target more than one at once.
+  platforms    String
+  scheduledFor DateTime?
+  publishedAt  DateTime?
+  createdById  String
+  createdBy    User               @relation("SocialContentCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  approvals SocialContentApproval[]
+
+  @@index([clientId])
+  @@index([stage])
+  @@index([type])
+}
+
+/// Append-only stage-transition log, same shape as QuotationApproval.
+model SocialContentApproval {
+  id        String             @id @default(cuid())
+  contentId String
+  content   SocialContentItem  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  actorId   String
+  actor     User               @relation(fields: [actorId], references: [id])
+  fromStage SocialContentStage
+  toStage   SocialContentStage
+  comment   String?            @db.Text
+  decidedAt DateTime           @default(now())
+}
+
+model SocialAdCampaign {
+  id               String            @id @default(cuid())
+  clientId         String
+  client           SocialClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name             String
+  objective        SocialAdObjective
+  budget           Decimal?          @db.Decimal(12, 2)
+  durationDays     Int?
+  targetAudience   String?           @db.Text
+  location         String?
+  stage            SocialAdStage     @default(DISCUSSION)
+  startedAt        DateTime?
+  endedAt          DateTime?
+  leadsGenerated   Int?
+  reach            Int?
+  cost             Decimal?          @db.Decimal(12, 2)
+  ctr              Decimal?          @db.Decimal(5, 2)
+  conversions      Int?
+  retargetingNotes String?           @db.Text
+  createdById      String
+  createdBy        User              @relation("SocialAdCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([clientId])
+  @@index([stage])
+}
+
+model SocialMonthlyReport {
+  id                     String       @id @default(cuid())
+  clientId               String
+  client                 SocialClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  year                   Int
+  month                  Int
+  reach                  Int?
+  engagement             Int?
+  followersGained        Int?
+  bestPosts              String?      @db.Text
+  adSpend                Decimal?     @db.Decimal(12, 2)
+  adLeads                Int?
+  adCost                 Decimal?     @db.Decimal(12, 2)
+  adCtr                  Decimal?     @db.Decimal(5, 2)
+  adConversions          Int?
+  insights               String?      @db.Text
+  retargetingSuggestions String?      @db.Text
+  nextMonthPlan          String?      @db.Text
+  reviewedAt             DateTime?
+  createdById            String
+  createdBy              User         @relation("SocialReportCreatedBy", fields: [createdById], references: [id])
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  @@unique([clientId, year, month])
+}
+
+model SocialClientActivity {
+  id        String       @id @default(cuid())
+  clientId  String
+  client    SocialClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  actorId   String
+  actor     User         @relation(fields: [actorId], references: [id])
+  action    String
+  meta      Json?
+  createdAt DateTime     @default(now())
+
+  @@index([clientId])
 }

@@ -26,7 +26,7 @@ const bodySchema = z.object({
   // "meetings" and "attendance" were missing here even though both were
   // already listed in NOTIFICATION_CATEGORIES — toggling either off/on in
   // Settings would 400 against this route.
-  category: z.enum(["leads", "tasks", "projects", "quotations", "meetings", "attendance"]),
+  category: z.enum(["leads", "tasks", "projects", "quotations", "meetings", "attendance", "social"]),
   inApp: z.boolean(),
 });
 
