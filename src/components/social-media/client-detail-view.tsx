@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dropdown } from "@/components/ui/dropdown";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -428,7 +430,7 @@ function PlatformsTab({
                 <Input id="platform-handle" value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@handle" />
               </div>
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={received} onChange={(e) => setReceived(e.target.checked)} className="h-4 w-4 rounded border-input" />
+                <Checkbox checked={received} onChange={setReceived} aria-label="Login credentials received from client" />
                 Login credentials received from client
               </label>
               <div className="flex flex-col gap-1.5">
@@ -628,7 +630,7 @@ function ContentTab({ clientId }: { clientId: string }) {
                 <div className="flex flex-wrap gap-3">
                   {PLATFORM_OPTIONS.map((p) => (
                     <label key={p.value} className="flex items-center gap-1.5 text-sm">
-                      <input type="checkbox" checked={platforms.includes(p.value)} onChange={() => togglePlatform(p.value)} className="h-4 w-4 rounded border-input" />
+                      <Checkbox checked={platforms.includes(p.value)} onChange={() => togglePlatform(p.value)} aria-label={p.label} />
                       {p.label}
                     </label>
                   ))}
@@ -636,7 +638,7 @@ function ContentTab({ clientId }: { clientId: string }) {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="content-scheduled">Scheduled for</Label>
-                <Input id="content-scheduled" type="date" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+                <DatePicker id="content-scheduled" value={scheduledFor} onChange={setScheduledFor} placeholder="Pick a date" />
               </div>
             </form>
           </DialogBody>
