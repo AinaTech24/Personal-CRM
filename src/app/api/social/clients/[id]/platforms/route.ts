@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, getSocialClientForUser, logSocialClientActivity } from "@/lib/social-media";
+import { encryptSecret, credentialsEncryptionConfigured } from "@/lib/crypto";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -14,17 +15,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const platforms = await db.socialPlatformAccount.findMany({ where: { clientId: id }, orderBy: { platform: "asc" } });
+  // The ciphertext itself never leaves the server in a bulk fetch — only the
+  // dedicated reveal route (platforms/[platformId]/reveal) ever decrypts and
+  // returns a password, and it does that one row at a time, logged.
+  const platforms = await db.socialPlatformAccount.findMany({
+    where: { clientId: id },
+    omit: { encryptedCredentials: true },
+    orderBy: { platform: "asc" },
+  });
   return NextResponse.json({ platforms });
 }
 
-// Deliberately no password/credential-value field — see SocialPlatformAccount's
-// schema comment. This form only ever records a handle and whether login
-// details have been collected, never the details themselves.
 const bodySchema = z.object({
   platform: z.enum(["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TWITTER", "YOUTUBE"]),
   handle: z.string().max(120).optional().nullable(),
   credentialsReceived: z.boolean().optional(),
+  /** Omitted = leave whatever's already stored untouched; empty string clears it. */
+  password: z.string().max(500).optional(),
   notes: z.string().max(2000).optional().nullable(),
 });
 
@@ -42,20 +49,38 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const data = parsed.data;
 
+  if (data.password && !credentialsEncryptionConfigured) {
+    return NextResponse.json({ error: "Credential storage isn't configured on this server" }, { status: 500 });
+  }
+
+  // A password field left untouched shouldn't wipe what's already saved —
+  // only write the credential columns when the caller actually sent one.
+  const credentialFields =
+    data.password !== undefined
+      ? {
+          encryptedCredentials: data.password ? encryptSecret(data.password) : null,
+          credentialsUpdatedAt: data.password ? new Date() : null,
+          credentialsUpdatedById: data.password ? user.id : null,
+          // Typing a real password in is itself evidence credentials were received.
+          credentialsReceived: data.password ? true : (data.credentialsReceived ?? false),
+        }
+      : { credentialsReceived: data.credentialsReceived ?? false };
+
   const platformAccount = await db.socialPlatformAccount.upsert({
     where: { clientId_platform: { clientId: id, platform: data.platform } },
     create: {
       clientId: id,
       platform: data.platform,
       handle: data.handle || null,
-      credentialsReceived: data.credentialsReceived ?? false,
       notes: data.notes || null,
+      ...credentialFields,
     },
     update: {
       handle: data.handle || null,
-      credentialsReceived: data.credentialsReceived ?? false,
       notes: data.notes || null,
+      ...credentialFields,
     },
+    omit: { encryptedCredentials: true },
   });
 
   await logSocialClientActivity(id, user.id, "platform_updated", { platform: data.platform });

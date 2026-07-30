@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
-      platformAccounts: true,
+      platformAccounts: { omit: { encryptedCredentials: true } },
       _count: { select: { contentItems: true, adCampaigns: true, monthlyReports: true } },
     },
   });

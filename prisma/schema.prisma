@@ -120,6 +120,7 @@ model User {
   socialAdsCreated       SocialAdCampaign[]       @relation("SocialAdCreatedBy")
   socialReportsCreated   SocialMonthlyReport[]    @relation("SocialReportCreatedBy")
   socialClientActivities SocialClientActivity[]
+  socialPlatformCredentialsUpdated SocialPlatformAccount[] @relation("SocialPlatformCredentialsUpdatedBy")
 }
 
 /// A browser/device push endpoint, so a user can be notified about a new
@@ -1202,19 +1203,24 @@ model SocialClient {
 }
 
 /// Tracks which platforms are connected and whether login credentials have
-/// been collected — never the credentials themselves. No password field
-/// exists anywhere in this schema; a CRM breach can't leak a client's own
-/// social accounts.
+/// been collected. The password itself, when stored, lives only as
+/// `encryptedCredentials` — AES-256-GCM ciphertext via src/lib/crypto.ts,
+/// never plaintext. It's omitted from every normal fetch and only decrypted
+/// by the dedicated reveal route, which logs who looked at it and when.
 model SocialPlatformAccount {
-  id                  String         @id @default(cuid())
-  clientId            String
-  client              SocialClient   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  platform            SocialPlatform
-  handle              String?
-  credentialsReceived Boolean        @default(false)
-  notes               String?        @db.Text
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  id                     String         @id @default(cuid())
+  clientId               String
+  client                 SocialClient   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  platform               SocialPlatform
+  handle                 String?
+  credentialsReceived    Boolean        @default(false)
+  encryptedCredentials   String?        @db.Text
+  credentialsUpdatedAt   DateTime?
+  credentialsUpdatedById String?
+  credentialsUpdatedBy   User?          @relation("SocialPlatformCredentialsUpdatedBy", fields: [credentialsUpdatedById], references: [id])
+  notes                  String?        @db.Text
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
 
   @@unique([clientId, platform])
 }

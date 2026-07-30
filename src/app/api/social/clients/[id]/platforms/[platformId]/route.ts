@@ -13,7 +13,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const platform = await db.socialPlatformAccount.findUnique({ where: { id: platformId } });
+  const platform = await db.socialPlatformAccount.findUnique({ where: { id: platformId }, omit: { encryptedCredentials: true } });
   if (!platform || platform.clientId !== id) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await db.socialPlatformAccount.delete({ where: { id: platformId } });

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SkeletonForm } from "@/components/ui/skeleton";
-import { IconChevronLeft, IconPlus, IconTrash } from "@/components/icons";
+import { IconChevronLeft, IconPlus, IconTrash, IconEye, IconEyeOff } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { stagesFor, nextStage, stageLabel } from "@/lib/social-content-workflow";
 import { cn } from "@/lib/utils";
@@ -82,7 +82,14 @@ interface Client {
   planNotes: string | null;
   assignedTo: { id: string; name: string } | null;
   createdBy: { id: string; name: string };
-  platformAccounts: { id: string; platform: string; handle: string | null; credentialsReceived: boolean; notes: string | null }[];
+  platformAccounts: {
+    id: string;
+    platform: string;
+    handle: string | null;
+    credentialsReceived: boolean;
+    credentialsUpdatedAt: string | null;
+    notes: string | null;
+  }[];
   _count: { contentItems: number; adCampaigns: number; monthlyReports: number };
 }
 
@@ -332,18 +339,46 @@ function PlatformsTab({
 }) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [platform, setPlatform] = useState("FACEBOOK");
   const [handle, setHandle] = useState("");
   const [received, setReceived] = useState(false);
   const [notes, setNotes] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [hasStoredPassword, setHasStoredPassword] = useState(false);
+  const [revealing, setRevealing] = useState(false);
   const [saving, setSaving] = useState(false);
 
   function openFor(existing?: Client["platformAccounts"][number]) {
+    setEditingId(existing?.id ?? null);
     setPlatform(existing?.platform ?? "FACEBOOK");
     setHandle(existing?.handle ?? "");
     setReceived(existing?.credentialsReceived ?? false);
     setNotes(existing?.notes ?? "");
+    setPassword("");
+    setPasswordTouched(false);
+    setShowPassword(false);
+    setHasStoredPassword(!!existing?.credentialsUpdatedAt);
     setOpen(true);
+  }
+
+  async function reveal() {
+    if (!editingId) return;
+    setRevealing(true);
+    try {
+      const res = await fetch(`/api/social/clients/${clientId}/platforms/${editingId}/reveal`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't reveal password", data.error);
+      setPassword(data.password);
+      setShowPassword(true);
+      // Doesn't count as "touched" — this is the existing saved value, not a
+      // new one. Saving without further edits should leave it as-is rather
+      // than re-encrypt-and-store what's already stored.
+    } finally {
+      setRevealing(false);
+    }
   }
 
   async function save(e: React.FormEvent) {
@@ -353,7 +388,13 @@ function PlatformsTab({
       const res = await fetch(`/api/social/clients/${clientId}/platforms`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ platform, handle: handle || null, credentialsReceived: received, notes: notes || null }),
+        body: JSON.stringify({
+          platform,
+          handle: handle || null,
+          credentialsReceived: received,
+          notes: notes || null,
+          ...(passwordTouched && { password }),
+        }),
       });
       const data = await res.json();
       if (!res.ok) return toast.error("Couldn't save platform", data.error);
@@ -376,7 +417,7 @@ function PlatformsTab({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Handle and whether login details were collected — the CRM never stores the credentials themselves.
+          Handle and login password, encrypted at rest. Viewing a saved password is logged to this client&apos;s Activity tab.
         </p>
         <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openFor()}>
           <IconPlus className="h-4 w-4" />
@@ -429,13 +470,53 @@ function PlatformsTab({
                 <Label htmlFor="platform-handle">Handle / username</Label>
                 <Input id="platform-handle" value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@handle" />
               </div>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="platform-password">Password</Label>
+                  {hasStoredPassword && !passwordTouched && (
+                    <button
+                      type="button"
+                      onClick={reveal}
+                      disabled={revealing}
+                      className="text-xs text-primary hover:underline disabled:opacity-50"
+                    >
+                      {revealing ? "Revealing..." : "Reveal saved password"}
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Input
+                    id="platform-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="off"
+                    className="pr-9"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setPasswordTouched(true);
+                    }}
+                    placeholder={hasStoredPassword ? "•••••••• (saved — reveal or type to replace)" : "Enter password"}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Stored encrypted. Leave blank to keep the existing password unchanged.
+                </p>
+              </div>
               <label className="flex items-center gap-2 text-sm">
                 <Checkbox checked={received} onChange={setReceived} aria-label="Login credentials received from client" />
                 Login credentials received from client
               </label>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="platform-notes">Notes</Label>
-                <Textarea id="platform-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Never enter a password here." />
+                <Textarea id="platform-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
               </div>
             </form>
           </DialogBody>
@@ -570,7 +651,7 @@ function ContentTab({ clientId }: { clientId: string }) {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {item.platforms.split(",").map((p) => PLATFORM_OPTIONS.find((o) => o.value === p)?.label ?? p).join(", ")}
-                        {item.scheduledFor && ` · Scheduled ${format(parseISO(item.scheduledFor), "MMM d, yyyy")}`}
+                        {item.scheduledFor && ` · Scheduled ${format(parseISO(item.scheduledFor), "MMM d, yyyy · h:mm a")}`}
                       </p>
                     </div>
                     <button type="button" aria-label={`Delete ${item.title}`} onClick={() => remove(item)} className="text-muted-foreground hover:text-destructive">
@@ -638,7 +719,12 @@ function ContentTab({ clientId }: { clientId: string }) {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="content-scheduled">Scheduled for</Label>
-                <DatePicker id="content-scheduled" value={scheduledFor} onChange={setScheduledFor} placeholder="Pick a date" />
+                <DateTimePicker
+                  id="content-scheduled"
+                  value={scheduledFor ? parseISO(scheduledFor) : null}
+                  onChange={(d) => setScheduledFor(d.toISOString())}
+                  placeholder="Pick a date & time"
+                />
               </div>
             </form>
           </DialogBody>
@@ -1083,7 +1169,7 @@ function CalendarTab({ clientId }: { clientId: string }) {
                     <span>
                       {item.title} <span className="text-xs text-muted-foreground">({CONTENT_TYPE_OPTIONS.find((t) => t.value === item.type)?.label})</span>
                     </span>
-                    <span className="text-xs text-muted-foreground">{format(parseISO(item.scheduledFor!), "EEE, MMM d")}</span>
+                    <span className="text-xs text-muted-foreground">{format(parseISO(item.scheduledFor!), "EEE, MMM d · h:mm a")}</span>
                   </div>
                 ))}
               </div>
