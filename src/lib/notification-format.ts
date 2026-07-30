@@ -1,4 +1,4 @@
-import { IconLeads, IconTasks, IconProjects, IconQuotations, IconCalendar } from "@/components/icons";
+import { IconLeads, IconTasks, IconProjects, IconQuotations, IconCalendar, IconClock } from "@/components/icons";
 
 export interface NotificationLike {
   type: string;
@@ -20,6 +20,8 @@ export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?:
   project_task_assigned: IconProjects,
   quotation_decided: IconQuotations,
   meeting_invited: IconCalendar,
+  check_in_reminder: IconClock,
+  check_out_reminder: IconClock,
 };
 
 export function notificationMessage(n: NotificationLike): string {
@@ -62,6 +64,14 @@ export function notificationMessage(n: NotificationLike): string {
       const meetingTitle = typeof n.payload.meetingTitle === "string" ? n.payload.meetingTitle : "a meeting";
       return `${actor} invited you to the meeting "${meetingTitle}"`;
     }
+    case "check_in_reminder": {
+      const shiftName = typeof n.payload.shiftName === "string" ? n.payload.shiftName : "your shift";
+      return `Don't forget to check in for ${shiftName} — the window closes soon`;
+    }
+    case "check_out_reminder": {
+      const shiftName = typeof n.payload.shiftName === "string" ? n.payload.shiftName : "your shift";
+      return `Don't forget to check out for ${shiftName} — the window closes soon`;
+    }
     default:
       return "You have a new update";
   }
@@ -80,5 +90,6 @@ export function notificationHref(n: NotificationLike): string | null {
   }
   if (n.type === "quotation_decided") return "/quotations";
   if (n.type === "meeting_invited") return "/meetings";
+  if (n.type === "check_in_reminder" || n.type === "check_out_reminder") return "/attendance";
   return null;
 }

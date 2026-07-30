@@ -23,7 +23,10 @@ export async function GET() {
 }
 
 const bodySchema = z.object({
-  category: z.enum(["leads", "tasks", "projects", "quotations"]),
+  // "meetings" and "attendance" were missing here even though both were
+  // already listed in NOTIFICATION_CATEGORIES — toggling either off/on in
+  // Settings would 400 against this route.
+  category: z.enum(["leads", "tasks", "projects", "quotations", "meetings", "attendance"]),
   inApp: z.boolean(),
 });
 
