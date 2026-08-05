@@ -61,6 +61,18 @@ interface UserRow {
   role: string;
   isActive: boolean;
   department: { id: string; name: string } | null;
+  socialMediaMembership: { isLead: boolean } | null;
+}
+
+const SOCIAL_MEDIA_ROLE_OPTIONS = [
+  { value: "NONE", label: "None" },
+  { value: "MEMBER", label: "Social Media User" },
+  { value: "ADMIN", label: "Social Media (Admin)" },
+];
+
+function socialMediaRoleOf(u: Pick<UserRow, "socialMediaMembership">): string {
+  if (!u.socialMediaMembership) return "NONE";
+  return u.socialMediaMembership.isLead ? "ADMIN" : "MEMBER";
 }
 
 /** Full name = name + surname, falling back to just the name. */
@@ -92,6 +104,7 @@ export default function UsersPage() {
   const [editUser, setEditUser] = useState<UserRow | null>(null);
   const [editRole, setEditRole] = useState("DEPARTMENT_USER");
   const [editDept, setEditDept] = useState("");
+  const [editSocialMediaRole, setEditSocialMediaRole] = useState("NONE");
   const [editSaving, setEditSaving] = useState(false);
 
   // Delete confirm state
@@ -173,6 +186,7 @@ export default function UsersPage() {
     setEditUser(u);
     setEditRole(u.role);
     setEditDept(u.department?.id ?? "");
+    setEditSocialMediaRole(socialMediaRoleOf(u));
   }
 
   async function saveEdit() {
@@ -182,7 +196,7 @@ export default function UsersPage() {
       const res = await fetch(`/api/users/${editUser.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: editRole, departmentId: editDept || null }),
+        body: JSON.stringify({ role: editRole, departmentId: editDept || null, socialMediaRole: editSocialMediaRole }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -450,6 +464,15 @@ export default function UsersPage() {
                   onChange={setEditDept}
                   placeholder="None"
                   options={deptOptions}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="edit-social-media-role">Social Media role</Label>
+                <Dropdown
+                  id="edit-social-media-role"
+                  value={editSocialMediaRole}
+                  onChange={setEditSocialMediaRole}
+                  options={SOCIAL_MEDIA_ROLE_OPTIONS}
                 />
               </div>
             </div>

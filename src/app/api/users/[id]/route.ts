@@ -9,6 +9,9 @@ const patchSchema = z.object({
   role: z.enum(["SUPER_ADMIN", "ADMIN", "DEPARTMENT_USER"]).optional(),
   departmentId: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
+  /** Social Media team membership — not a real company Role, a separate
+   *  SocialMediaMember row. "NONE" removes membership entirely. */
+  socialMediaRole: z.enum(["NONE", "MEMBER", "ADMIN"]).optional(),
 });
 
 /** Blocks the last remaining active Super Admin from being demoted, blocked, or deleted. */
@@ -53,12 +56,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.departmentId !== undefined && { departmentId: data.departmentId || null }),
       ...(data.isActive !== undefined && { isActive: data.isActive }),
     },
-    include: { department: true },
+    include: { department: true, socialMediaMembership: { select: { isLead: true } } },
     omit: { passwordHash: true, resetCode: true, resetCodeExpiresAt: true, pinHash: true, pinResetCode: true, pinResetCodeExpiresAt: true },
   });
 
+  if (data.socialMediaRole === "NONE") {
+    await db.socialMediaMember.deleteMany({ where: { userId: id } });
+  } else if (data.socialMediaRole === "MEMBER" || data.socialMediaRole === "ADMIN") {
+    await db.socialMediaMember.upsert({
+      where: { userId: id },
+      create: { userId: id, isLead: data.socialMediaRole === "ADMIN" },
+      update: { isLead: data.socialMediaRole === "ADMIN" },
+    });
+  }
+  // Re-read so the response reflects the membership change made just above —
+  // the `updated` object above was fetched before it.
+  const withMembership =
+    data.socialMediaRole !== undefined
+      ? { ...updated, socialMediaMembership: await db.socialMediaMember.findUnique({ where: { userId: id }, select: { isLead: true } }) }
+      : updated;
+
   emitToAdmins("user_updated", { id: updated.id });
-  return NextResponse.json({ user: updated });
+  return NextResponse.json({ user: withMembership });
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
