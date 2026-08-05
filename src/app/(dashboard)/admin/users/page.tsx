@@ -28,6 +28,19 @@ const ROLE_OPTIONS = [
   { value: "SUPER_ADMIN", label: "Super Admin" },
 ];
 
+/**
+ * "Social Media (Admin)"/"Social Media User" aren't real company Roles — the
+ * account still gets created as DEPARTMENT_USER, but the invite also grants
+ * Social Media module access the moment it's accepted (as team lead or a
+ * regular member, respectively). Kept as their own list so the real Role
+ * enum (used by the edit dialog / roleLabel) never sees these sentinels.
+ */
+const INVITE_ROLE_OPTIONS = [
+  ...ROLE_OPTIONS,
+  { value: "SOCIAL_MEDIA_ADMIN", label: "Social Media (Admin)" },
+  { value: "SOCIAL_MEDIA_MEMBER", label: "Social Media User" },
+];
+
 const FILTER_OPTIONS = [
   { value: "ALL", label: "All users" },
   { value: "USERS", label: "Users" },
@@ -130,10 +143,18 @@ export default function UsersPage() {
     setInviteError(null);
     setInviteLoading(true);
     try {
+      const socialMediaAdmin = role === "SOCIAL_MEDIA_ADMIN";
+      const socialMediaMember = role === "SOCIAL_MEDIA_MEMBER";
       const res = await fetch("/api/invites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, role, departmentId: departmentId || null }),
+        body: JSON.stringify({
+          email,
+          role: socialMediaAdmin || socialMediaMember ? "DEPARTMENT_USER" : role,
+          departmentId: departmentId || null,
+          socialMediaAdmin,
+          socialMediaMember,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -381,7 +402,7 @@ export default function UsersPage() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="invite-role">Role</Label>
-                <Dropdown id="invite-role" value={role} onChange={setRole} options={ROLE_OPTIONS} />
+                <Dropdown id="invite-role" value={role} onChange={setRole} options={INVITE_ROLE_OPTIONS} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="invite-department">Department (optional)</Label>

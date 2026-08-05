@@ -16,6 +16,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const reports = await db.socialMonthlyReport.findMany({
     where: { clientId: id },
+    include: {
+      createdBy: { select: { id: true, name: true } },
+      updatedBy: { select: { id: true, name: true } },
+      files: { include: { uploadedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
+    },
     orderBy: [{ year: "desc" }, { month: "desc" }],
   });
 
@@ -25,6 +30,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 const bodySchema = z.object({
   year: z.number().int().min(2000).max(2100),
   month: z.number().int().min(1).max(12),
+  title: z.string().max(200).optional().nullable(),
+  description: z.string().max(3000).optional().nullable(),
   reach: z.number().int().nonnegative().optional().nullable(),
   engagement: z.number().int().nonnegative().optional().nullable(),
   followersGained: z.number().int().optional().nullable(),
@@ -54,13 +61,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const data = parsed.data;
 
-  const report = await db.socialMonthlyReport.upsert({
+  const existing = await db.socialMonthlyReport.findUnique({
     where: { clientId_year_month: { clientId: id, year: data.year, month: data.month } },
-    create: { ...data, clientId: id, createdById: user.id },
-    update: data,
+    select: { id: true },
   });
 
-  await logSocialClientActivity(id, user.id, "monthly_report_saved", { year: data.year, month: data.month });
+  const report = await db.socialMonthlyReport.upsert({
+    where: { clientId_year_month: { clientId: id, year: data.year, month: data.month } },
+    create: { ...data, clientId: id, createdById: user.id, updatedById: user.id },
+    update: { ...data, updatedById: user.id },
+    include: {
+      createdBy: { select: { id: true, name: true } },
+      updatedBy: { select: { id: true, name: true } },
+      files: { include: { uploadedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
+    },
+  });
+
+  await logSocialClientActivity(id, user.id, existing ? "monthly_report_updated" : "monthly_report_created", { year: data.year, month: data.month });
 
   return NextResponse.json({ report }, { status: 201 });
 }

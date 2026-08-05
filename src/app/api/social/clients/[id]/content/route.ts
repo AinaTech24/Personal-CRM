@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, getSocialClientForUser, logSocialClientActivity } from "@/lib/social-media";
+import { stagesFor } from "@/lib/social-content-workflow";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -16,7 +17,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const content = await db.socialContentItem.findMany({
     where: { clientId: id },
-    include: { createdBy: { select: { id: true, name: true } } },
+    include: {
+      createdBy: { select: { id: true, name: true } },
+      updatedBy: { select: { id: true, name: true } },
+    },
     orderBy: { updatedAt: "desc" },
   });
 
@@ -53,9 +57,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       title: data.title,
       caption: data.caption || null,
       hashtags: data.hashtags || null,
+      stage: stagesFor(data.type)[0],
       platforms: data.platforms.join(","),
       scheduledFor: data.scheduledFor ? new Date(data.scheduledFor) : null,
       createdById: user.id,
+      updatedById: user.id,
     },
   });
 

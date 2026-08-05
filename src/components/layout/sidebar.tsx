@@ -21,7 +21,6 @@ import {
   IconChevronLeft,
   IconGrid,
   IconHistory,
-  IconMegaphone,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,6 +43,7 @@ const mainNav: NavItem[] = [
   { href: "/quotations", label: "Quotations", icon: IconQuotations },
   { href: "/invoices", label: "Invoices", icon: IconInvoices },
   { href: "/attendance", label: "My Attendance", icon: IconClock },
+  { href: "/activity", label: "My Activity", icon: IconHistory },
 ];
 
 const adminNav: NavItem[] = [
@@ -51,13 +51,20 @@ const adminNav: NavItem[] = [
   { href: "/admin/logs", label: "View logs", icon: IconHistory },
   { href: "/admin/departments", label: "Departments", icon: IconBuilding },
   { href: "/admin/users", label: "Users & Invites", icon: IconUsers },
-  { href: "/admin/social-media", label: "Social Media Team", icon: IconMegaphone },
   { href: "/admin/attendance", label: "Attendance", icon: IconClock },
   { href: "/admin/email", label: "Email (SMTP)", icon: IconMail },
   { href: "/admin/settings", label: "Application", icon: IconSettings },
 ];
 
-const socialMediaNavItem: NavItem = { href: "/social-media", label: "Social Media", icon: IconMegaphone };
+/**
+ * Social Media is deliberately absent from every sidebar now — not company
+ * admins, not the team's own members or lead. Its pages/API/data are
+ * untouched; this only pulls the navigation entry points. A Social Media
+ * team member still doesn't get the global hidden-modules toggle applied to
+ * them (see restrictToSocialMedia below) since Quotations access for that
+ * team is still enforced server-side, independent of what the sidebar shows.
+ */
+const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
 
 /**
  * Presentational sidebar rail. Its width is driven by the parent grid column
@@ -65,7 +72,7 @@ const socialMediaNavItem: NavItem = { href: "/social-media", label: "Social Medi
  */
 export function Sidebar({
   isAdmin,
-  hasSocialMediaAccess,
+  restrictToSocialMedia,
   collapsed,
   onToggle,
   /** Rendered inside the mobile drawer: always visible, always expanded. */
@@ -73,7 +80,7 @@ export function Sidebar({
   onNavigate,
 }: {
   isAdmin: boolean;
-  hasSocialMediaAccess: boolean;
+  restrictToSocialMedia: boolean;
   collapsed: boolean;
   onToggle: () => void;
   mobile?: boolean;
@@ -108,15 +115,21 @@ export function Sidebar({
     };
   }, [isAdmin]);
 
-  const visibleMainNav = isAdmin
+  let visibleMainNav = isAdmin
     ? [...mainNav]
-    : mainNav.filter((item) => item.href === "/" || !hiddenModules.includes(item.href.replace(/^\//, "")));
+    : mainNav.filter(
+        // "My Activity" is a personal record of one's own actions, not a
+        // toggleable module — an admin hiding it would just be hiding the
+        // one place a regular user can see their own history.
+        (item) => item.href === "/" || item.href === "/activity" || !hiddenModules.includes(item.href.replace(/^\//, ""))
+      );
 
-  // Restricted to its own team, not the global hidden-modules toggle every
-  // other item goes through — presence here is an access grant, not a
-  // preference an admin can hide from someone who otherwise could see it.
-  // A fresh copy either way, so this never mutates the shared mainNav const.
-  if (hasSocialMediaAccess) visibleMainNav.push(socialMediaNavItem);
+  // Social Media team members (regular or lead, not a company admin) still
+  // don't get Quotations — that's enforced server-side independent of the
+  // sidebar — but no Social Media entry point is ever added to their nav.
+  if (restrictToSocialMedia) {
+    visibleMainNav = visibleMainNav.filter((item) => !SOCIAL_MEDIA_EXCLUDED_HREFS.includes(item.href));
+  }
 
   // Unread chat messages, for the badge on Messages. Driven by the socket so it
   // reacts the moment something arrives; the poll is a backstop for a dropped
@@ -279,7 +292,7 @@ export function Sidebar({
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 py-2">
         {!navReady
           ? // Placeholder rows while we learn which modules this user may see.
-            Array.from({ length: mainNav.length + (hasSocialMediaAccess ? 1 : 0) }, (_, i) => (
+            Array.from({ length: mainNav.length }, (_, i) => (
               <div key={i} className="flex items-center gap-2.5 px-2.5 py-2">
                 <Skeleton className="h-4 w-4 shrink-0" />
                 {!collapsed && <Skeleton className="h-3.5 flex-1" />}

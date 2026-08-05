@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { userOptionLabel } from "@/lib/user-display";
 import { motion } from "framer-motion";
 import {
@@ -21,8 +22,8 @@ import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { IconTrash } from "@/components/icons";
+import { useToast } from "@/components/providers/toast-provider";
 import {
-  LEAD_STATUSES,
   MEETING_STATUS_OPTIONS,
   PRIORITY_OPTIONS,
   type AssignableUser,
@@ -62,6 +63,7 @@ export function LeadDetailDialog({
   leadId,
   initialSummary,
   assignableUsers,
+  statusOptions,
   onClose,
   onChanged,
   onDeleted,
@@ -69,10 +71,14 @@ export function LeadDetailDialog({
   leadId: string | null;
   initialSummary?: LeadSummary | null;
   assignableUsers: AssignableUser[];
+  /** The viewer's stage list/labels — Social Media's own pipeline, or the default company one. */
+  statusOptions: { value: LeadStatus; label: string }[];
   onClose: () => void;
   onChanged: () => void;
   onDeleted?: () => void;
 }) {
+  const router = useRouter();
+  const toast = useToast();
   const [lead, setLead] = useState<LeadDetail | null>(null);
   const [noteBody, setNoteBody] = useState("");
   const [reminderDue, setReminderDue] = useState<Date | null>(null);
@@ -103,6 +109,15 @@ export function LeadDetailDialog({
         body: JSON.stringify(fields),
       });
       if (res.ok) {
+        const data = await res.json().catch(() => null);
+        // Social Media's "Approval" (WON) auto-creates the matching client —
+        // jump straight to its folder instead of leaving this dialog open.
+        if (data?.convertedClientId) {
+          toast.success("Lead approved", "Converted to a client — opening its folder now.");
+          onClose();
+          router.push(`/social-media/${data.convertedClientId}`);
+          return;
+        }
         await load();
         onChanged();
       }
@@ -201,7 +216,7 @@ export function LeadDetailDialog({
                   value={lead.status}
                   disabled={savingField === "status"}
                   onChange={(v) => patchLead({ status: v as LeadStatus })}
-                  options={LEAD_STATUSES.map((s) => ({ value: s.value, label: s.label }))}
+                  options={statusOptions}
                 />
               </div>
               <div className="flex flex-col gap-1.5">

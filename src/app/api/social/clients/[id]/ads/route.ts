@@ -14,13 +14,21 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const ads = await db.socialAdCampaign.findMany({ where: { clientId: id }, orderBy: { updatedAt: "desc" } });
+  const ads = await db.socialAdCampaign.findMany({
+    where: { clientId: id },
+    include: {
+      createdBy: { select: { id: true, name: true } },
+      updatedBy: { select: { id: true, name: true } },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
   return NextResponse.json({ ads });
 }
 
 const bodySchema = z.object({
   name: z.string().min(1).max(200),
   objective: z.enum(["LEADS", "REACH", "FOLLOWERS"]),
+  platforms: z.array(z.enum(["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TWITTER", "YOUTUBE"])).min(1),
   budget: z.number().nonnegative().optional().nullable(),
   durationDays: z.number().int().positive().optional().nullable(),
   targetAudience: z.string().max(2000).optional().nullable(),
@@ -46,11 +54,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       clientId: id,
       name: data.name,
       objective: data.objective,
+      platforms: data.platforms.join(","),
       budget: data.budget ?? null,
       durationDays: data.durationDays ?? null,
       targetAudience: data.targetAudience || null,
       location: data.location || null,
       createdById: user.id,
+      updatedById: user.id,
     },
   });
 

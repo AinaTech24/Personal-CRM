@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { format, parseISO } from "date-fns";
+import * as Popover from "@radix-ui/react-popover";
+import { format, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
   Dialog,
   DialogContent,
@@ -21,9 +23,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SkeletonForm } from "@/components/ui/skeleton";
-import { IconChevronLeft, IconPlus, IconTrash, IconEye, IconEyeOff } from "@/components/icons";
+import { Tooltip } from "@/components/ui/tooltip";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconChevronDown,
+  IconCheck,
+  IconPlus,
+  IconTrash,
+  IconPencil,
+  IconEye,
+  IconEyeOff,
+  IconCalendar,
+} from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
-import { stagesFor, nextStage, stageLabel } from "@/lib/social-content-workflow";
+import { useSocket } from "@/components/providers/socket-provider";
+import { stagesFor, stageLabel } from "@/lib/social-content-workflow";
+import { adStages, adStageLabel } from "@/lib/social-ad-workflow";
 import { cn } from "@/lib/utils";
 
 const STAGE_OPTIONS = [
@@ -50,26 +67,105 @@ const CONTENT_TYPE_OPTIONS = [
   { value: "REAL_PERSON_REEL", label: "Real Person Reel" },
 ];
 
-const AD_STAGE_OPTIONS = [
-  { value: "DISCUSSION", label: "Campaign discussion" },
-  { value: "BUDGET_DURATION", label: "Budget & duration" },
-  { value: "TARGETING", label: "Targeting" },
-  { value: "CONTENT_APPROVAL", label: "Content approval" },
-  { value: "AD_CREATION", label: "Ad creation" },
-  { value: "GROUP_APPROVAL", label: "Group approval" },
-  { value: "CAMPAIGN_SETUP", label: "Campaign setup" },
-  { value: "RUNNING", label: "Running" },
-  { value: "REPORTING", label: "Reporting" },
-  { value: "COMPLETED", label: "Completed" },
-  { value: "CANCELLED", label: "Cancelled" },
-];
-
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
 
-const MONTHLY_TARGETS = { STATIC_POST: 8, CAROUSEL: 2, AI_REEL: 2, REAL_PERSON_REEL: 2 } as const;
+interface ActorRef {
+  id: string;
+  name: string;
+}
+
+/**
+ * A checkbox-style multi-select rendered as a dropdown instead of an inline
+ * list — used everywhere a piece of content/an ad needs one or more
+ * platforms, limited to the ones this client has actually handed over
+ * credentials for (nothing to publish to otherwise).
+ */
+function PlatformMultiSelect({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: string; label: string }[];
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  function toggle(v: string) {
+    onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
+  }
+  const label = value.length
+    ? options
+        .filter((o) => value.includes(o.value))
+        .map((o) => o.label)
+        .join(", ")
+    : "Select platforms";
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm transition-colors hover:bg-primary/5"
+        >
+          <span className={cn("truncate", value.length === 0 && "text-muted-foreground")}>{label}</span>
+          <IconChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          sideOffset={4}
+          className="z-50 w-[var(--radix-popover-trigger-width)] rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+        >
+          {options.length === 0 ? (
+            <p className="px-2 py-2 text-sm text-muted-foreground">No platforms with credentials received yet.</p>
+          ) : (
+            options.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => toggle(o.value)}
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-primary/5"
+              >
+                {o.label}
+                {value.includes(o.value) && <IconCheck className="h-4 w-4 text-primary" />}
+              </button>
+            ))
+          )}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+/** "Added by X on <date>" / "Edited by Y on <date>" line shown on every card across Platforms/Content/Ads/Reports. */
+function AuditLine({
+  createdAt,
+  createdBy,
+  updatedAt,
+  updatedBy,
+}: {
+  createdAt: string;
+  createdBy: ActorRef | null;
+  updatedAt: string;
+  updatedBy: ActorRef | null;
+}) {
+  const created = format(parseISO(createdAt), "MMM d, yyyy · h:mm a");
+  const edited = format(parseISO(updatedAt), "MMM d, yyyy · h:mm a");
+  const wasEdited = updatedAt !== createdAt;
+  return (
+    <p className="text-[11px] text-muted-foreground/80">
+      Added by {createdBy?.name ?? "—"} on {created}
+      {wasEdited && (
+        <>
+          {" · "}Edited by {updatedBy?.name ?? createdBy?.name ?? "—"} on {edited}
+        </>
+      )}
+    </p>
+  );
+}
 
 interface Client {
   id: string;
@@ -87,13 +183,155 @@ interface Client {
     platform: string;
     handle: string | null;
     credentialsReceived: boolean;
-    credentialsUpdatedAt: string | null;
+    password: string | null;
     notes: string | null;
+    createdAt: string;
+    updatedAt: string;
+    createdBy: ActorRef | null;
+    updatedBy: ActorRef | null;
   }[];
   _count: { contentItems: number; adCampaigns: number; monthlyReports: number };
 }
 
 type TabKey = "platforms" | "content" | "ads" | "reports" | "calendar" | "activity";
+
+/** Lets the parent's single shared "+" button (in the tab bar row) trigger whichever tab is active. */
+interface TabCreateHandle {
+  openCreate: () => void;
+}
+
+/**
+ * The workflow stepper shared by Content and Ads — done/current/next/undo,
+ * and (while editing) a cancelled item's whole sequence offered back as
+ * "restore to here" options. `sequence` excludes CANCELLED; that's handled
+ * separately via `isCancelled`.
+ */
+function StageStepper({
+  sequence,
+  currentStage,
+  isCancelled,
+  isEditing,
+  labelFor,
+  onTransition,
+}: {
+  sequence: string[];
+  currentStage: string;
+  isCancelled: boolean;
+  isEditing: boolean;
+  labelFor: (stage: string) => string;
+  onTransition: (stage: string) => void;
+}) {
+  const currentIdx = sequence.indexOf(currentStage);
+  const upcoming = !isCancelled && currentIdx !== -1 && currentIdx < sequence.length - 1 ? sequence[currentIdx + 1] : null;
+
+  if (isCancelled) {
+    if (!isEditing) return <Badge variant="destructive">Cancelled</Badge>;
+    return (
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5">
+        <Badge variant="destructive">Cancelled</Badge>
+        {sequence.map((stage) => (
+          <div key={stage} className="flex items-center gap-1">
+            <IconChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />
+            <Tooltip label="Restore to here">
+              <button
+                type="button"
+                onClick={() => onTransition(stage)}
+                className="rounded-full border border-dashed border-amber-500 px-2.5 py-1 text-xs font-medium text-amber-600 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
+              >
+                {labelFor(stage)}
+              </button>
+            </Tooltip>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5">
+      {sequence.map((stage, idx) => {
+        const isDone = idx < currentIdx;
+        const isCurrent = idx === currentIdx;
+        const isNext = stage === upcoming;
+        return (
+          <div key={stage} className="flex items-center gap-1">
+            {idx > 0 && <IconChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />}
+            {isNext ? (
+              <Tooltip label="Click to move here">
+                <button
+                  type="button"
+                  onClick={() => onTransition(stage)}
+                  className="rounded-full border border-dashed border-primary px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                >
+                  {labelFor(stage)}
+                </button>
+              </Tooltip>
+            ) : isDone && isEditing ? (
+              <Tooltip label="Undo to here">
+                <button
+                  type="button"
+                  onClick={() => onTransition(stage)}
+                  className="flex items-center gap-1 rounded-full border border-dashed border-amber-500 px-2.5 py-1 text-xs font-medium text-amber-600 transition-colors hover:bg-amber-500/10 dark:text-amber-400"
+                >
+                  <IconCheck className="h-3 w-3 shrink-0" />
+                  {labelFor(stage)}
+                </button>
+              </Tooltip>
+            ) : (
+              <span
+                className={cn(
+                  "flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
+                  isCurrent
+                    ? "bg-primary text-primary-foreground"
+                    : isDone
+                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      : "bg-muted text-muted-foreground/50"
+                )}
+              >
+                {isDone && <IconCheck className="h-3 w-3 shrink-0" />}
+                {labelFor(stage)}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The pencil/done toggle for a stepper's edit mode. Yellow while editing an
+ * in-progress item, red while editing one that's already at its terminal
+ * stage (Published/Completed) — a visual "careful, this one's finished"
+ * signal, not just a plain color-neutral pencil.
+ */
+function StageEditToggle({
+  isEditing,
+  isTerminal,
+  itemLabel,
+  onToggle,
+}: {
+  isEditing: boolean;
+  isTerminal: boolean;
+  itemLabel: string;
+  onToggle: () => void;
+}) {
+  return (
+    <Tooltip label={isEditing ? "Done" : "Edit stage (undo)"}>
+      <button
+        type="button"
+        aria-label={isEditing ? `Done editing ${itemLabel}` : `Edit ${itemLabel} stage`}
+        onClick={onToggle}
+        className={cn(
+          "text-muted-foreground hover:text-foreground",
+          isEditing && (isTerminal ? "text-red-500" : "text-amber-500")
+        )}
+      >
+        {isEditing ? <IconCheck className="h-4 w-4" /> : <IconPencil className="h-4 w-4" />}
+      </button>
+    </Tooltip>
+  );
+}
 
 export function SocialClientDetailView({ clientId }: { clientId: string }) {
   const [client, setClient] = useState<Client | null>(null);
@@ -101,6 +339,16 @@ export function SocialClientDetailView({ clientId }: { clientId: string }) {
   const [notFound, setNotFound] = useState(false);
   const [tab, setTab] = useState<TabKey>("platforms");
   const [editOpen, setEditOpen] = useState(false);
+  const platformsRef = useRef<TabCreateHandle>(null);
+  const contentRef = useRef<TabCreateHandle>(null);
+  const adsRef = useRef<TabCreateHandle>(null);
+  const reportsRef = useRef<TabCreateHandle>(null);
+  const createHandleForTab: Partial<Record<TabKey, React.RefObject<TabCreateHandle | null>>> = {
+    platforms: platformsRef,
+    content: contentRef,
+    ads: adsRef,
+    reports: reportsRef,
+  };
 
   async function load() {
     setLoading(true);
@@ -145,7 +393,7 @@ export function SocialClientDetailView({ clientId }: { clientId: string }) {
     { key: "content", label: "Content", count: client._count.contentItems },
     { key: "ads", label: "Ads", count: client._count.adCampaigns },
     { key: "reports", label: "Monthly Reports", count: client._count.monthlyReports },
-    { key: "calendar", label: "Calendar" },
+    { key: "calendar", label: "Content Calendar" },
     { key: "activity", label: "Activity" },
   ];
 
@@ -176,27 +424,36 @@ export function SocialClientDetailView({ clientId }: { clientId: string }) {
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap gap-1 border-b border-border">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={cn(
-              "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
-              tab === t.key ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {t.label}
-            {t.count !== undefined && <span className="ml-1 text-xs tabular-nums text-muted-foreground">({t.count})</span>}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={cn(
+                "border-b-2 px-3 py-2 text-sm transition-colors",
+                tab === t.key ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {t.label}
+              {t.count !== undefined && <span className="ml-1 text-xs tabular-nums text-muted-foreground">({t.count})</span>}
+            </button>
+          ))}
+        </div>
+        {createHandleForTab[tab] && (
+          <Tooltip label="New">
+            <Button size="icon" aria-label="New" className="mb-1.5 shrink-0" onClick={() => createHandleForTab[tab]?.current?.openCreate()}>
+              <IconPlus className="h-4 w-4" />
+            </Button>
+          </Tooltip>
+        )}
       </div>
 
-      {tab === "platforms" && <PlatformsTab clientId={client.id} accounts={client.platformAccounts} onChanged={load} />}
-      {tab === "content" && <ContentTab clientId={client.id} />}
-      {tab === "ads" && <AdsTab clientId={client.id} onChanged={load} />}
-      {tab === "reports" && <ReportsTab clientId={client.id} onChanged={load} />}
+      {tab === "platforms" && <PlatformsTab ref={platformsRef} clientId={client.id} accounts={client.platformAccounts} onChanged={load} />}
+      {tab === "content" && <ContentTab ref={contentRef} clientId={client.id} platformAccounts={client.platformAccounts} />}
+      {tab === "ads" && <AdsTab ref={adsRef} clientId={client.id} onChanged={load} platformAccounts={client.platformAccounts} />}
+      {tab === "reports" && <ReportsTab ref={reportsRef} clientId={client.id} onChanged={load} />}
       {tab === "calendar" && <CalendarTab clientId={client.id} />}
       {tab === "activity" && <ActivityTab clientId={client.id} />}
 
@@ -217,11 +474,40 @@ function stageLabel2(stage: string) {
   return STAGE_OPTIONS.find((s) => s.value === stage)?.label ?? stage;
 }
 
+/**
+ * Points back at whichever list view the viewer actually has: "Clients" for
+ * a Social Media team member (regular or lead), "Social Media" for a
+ * company admin — the admin-facing table page doesn't exist in their nav at
+ * all, so linking there would dead-end on a page they'd never navigate to.
+ */
 function BackLink() {
+  const [restricted, setRestricted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!active) return;
+        const role = d.user?.role;
+        const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
+        setRestricted(!isAdmin && !!d.user?.socialMedia?.hasAccess);
+      })
+      .catch(() => {
+        if (active) setRestricted(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const href = restricted ? "/clients" : "/social-media";
+  const label = restricted ? "Back to Clients" : "Back to Social Media";
+
   return (
-    <Link href="/social-media" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+    <Link href={href} className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
       <IconChevronLeft className="h-4 w-4" />
-      Back to Social Media
+      {label}
     </Link>
   );
 }
@@ -328,58 +614,33 @@ function EditClientDialog({
 
 // ---------- Platforms ----------
 
-function PlatformsTab({
-  clientId,
-  accounts,
-  onChanged,
-}: {
+const PlatformsTab = forwardRef<TabCreateHandle, {
   clientId: string;
   accounts: Client["platformAccounts"];
   onChanged: () => void;
-}) {
+}>(function PlatformsTab({ clientId, accounts, onChanged }, ref) {
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [platform, setPlatform] = useState("FACEBOOK");
   const [handle, setHandle] = useState("");
   const [received, setReceived] = useState(false);
   const [notes, setNotes] = useState("");
   const [password, setPassword] = useState("");
-  const [passwordTouched, setPasswordTouched] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [hasStoredPassword, setHasStoredPassword] = useState(false);
-  const [revealing, setRevealing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Client["platformAccounts"][number] | null>(null);
 
   function openFor(existing?: Client["platformAccounts"][number]) {
-    setEditingId(existing?.id ?? null);
     setPlatform(existing?.platform ?? "FACEBOOK");
     setHandle(existing?.handle ?? "");
     setReceived(existing?.credentialsReceived ?? false);
     setNotes(existing?.notes ?? "");
-    setPassword("");
-    setPasswordTouched(false);
+    setPassword(existing?.password ?? "");
     setShowPassword(false);
-    setHasStoredPassword(!!existing?.credentialsUpdatedAt);
     setOpen(true);
   }
 
-  async function reveal() {
-    if (!editingId) return;
-    setRevealing(true);
-    try {
-      const res = await fetch(`/api/social/clients/${clientId}/platforms/${editingId}/reveal`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) return toast.error("Couldn't reveal password", data.error);
-      setPassword(data.password);
-      setShowPassword(true);
-      // Doesn't count as "touched" — this is the existing saved value, not a
-      // new one. Saving without further edits should leave it as-is rather
-      // than re-encrypt-and-store what's already stored.
-    } finally {
-      setRevealing(false);
-    }
-  }
+  useImperativeHandle(ref, () => ({ openCreate: () => openFor() }));
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -388,13 +649,7 @@ function PlatformsTab({
       const res = await fetch(`/api/social/clients/${clientId}/platforms`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          platform,
-          handle: handle || null,
-          credentialsReceived: received,
-          notes: notes || null,
-          ...(passwordTouched && { password }),
-        }),
+        body: JSON.stringify({ platform, handle: handle || null, credentialsReceived: received, notes: notes || null, password }),
       });
       const data = await res.json();
       if (!res.ok) return toast.error("Couldn't save platform", data.error);
@@ -406,28 +661,20 @@ function PlatformsTab({
     }
   }
 
-  async function remove(id: string) {
-    const res = await fetch(`/api/social/clients/${clientId}/platforms/${id}`, { method: "DELETE" });
+  async function confirmRemove() {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/social/clients/${clientId}/platforms/${deleteTarget.id}`, { method: "DELETE" });
     if (!res.ok) return toast.error("Couldn't remove platform");
     toast.success("Platform removed");
+    setDeleteTarget(null);
     onChanged();
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Handle and login password, encrypted at rest. Viewing a saved password is logged to this client&apos;s Activity tab.
-        </p>
-        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openFor()}>
-          <IconPlus className="h-4 w-4" />
-          Add platform
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="flex flex-wrap gap-3">
         {accounts.map((a) => (
-          <Card key={a.id} className="cursor-pointer" onClick={() => openFor(a)}>
+          <Card key={a.id} className="w-64 shrink-0 cursor-pointer" onClick={() => openFor(a)}>
             <CardContent className="flex flex-col gap-1 p-4">
               <div className="flex items-center justify-between">
                 <p className="font-medium">{PLATFORM_OPTIONS.find((p) => p.value === a.platform)?.label ?? a.platform}</p>
@@ -436,7 +683,7 @@ function PlatformsTab({
                   aria-label={`Remove ${a.platform}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    remove(a.id);
+                    setDeleteTarget(a);
                   }}
                   className="text-muted-foreground hover:text-destructive"
                 >
@@ -447,11 +694,12 @@ function PlatformsTab({
               <Badge variant={a.credentialsReceived ? "success" : "secondary"} className="w-fit">
                 {a.credentialsReceived ? "Credentials received" : "Awaiting credentials"}
               </Badge>
+              <AuditLine createdAt={a.createdAt} createdBy={a.createdBy} updatedAt={a.updatedAt} updatedBy={a.updatedBy} />
             </CardContent>
           </Card>
         ))}
         {accounts.length === 0 && (
-          <p className="col-span-full py-8 text-center text-sm text-muted-foreground">No platforms added yet.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">No platforms added yet.</p>
         )}
       </div>
 
@@ -471,19 +719,7 @@ function PlatformsTab({
                 <Input id="platform-handle" value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@handle" />
               </div>
               <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="platform-password">Password</Label>
-                  {hasStoredPassword && !passwordTouched && (
-                    <button
-                      type="button"
-                      onClick={reveal}
-                      disabled={revealing}
-                      className="text-xs text-primary hover:underline disabled:opacity-50"
-                    >
-                      {revealing ? "Revealing..." : "Reveal saved password"}
-                    </button>
-                  )}
-                </div>
+                <Label htmlFor="platform-password">Password</Label>
                 <div className="relative">
                   <Input
                     id="platform-password"
@@ -491,11 +727,8 @@ function PlatformsTab({
                     autoComplete="off"
                     className="pr-9"
                     value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      setPasswordTouched(true);
-                    }}
-                    placeholder={hasStoredPassword ? "•••••••• (saved — reveal or type to replace)" : "Enter password"}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
                   />
                   <button
                     type="button"
@@ -506,9 +739,6 @@ function PlatformsTab({
                     {showPassword ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Stored encrypted. Leave blank to keep the existing password unchanged.
-                </p>
               </div>
               <label className="flex items-center gap-2 text-sm">
                 <Checkbox checked={received} onChange={setReceived} aria-label="Login credentials received from client" />
@@ -527,9 +757,17 @@ function PlatformsTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title={`Remove ${deleteTarget ? PLATFORM_OPTIONS.find((p) => p.value === deleteTarget.platform)?.label ?? deleteTarget.platform : ""}?`}
+        description="This permanently removes the platform account, including its saved password and notes. This cannot be undone."
+        onConfirm={confirmRemove}
+      />
     </div>
   );
-}
+});
 
 // ---------- Content ----------
 
@@ -542,13 +780,25 @@ interface ContentItem {
   stage: string;
   platforms: string;
   scheduledFor: string | null;
-  createdBy: { id: string; name: string };
+  createdAt: string;
+  createdBy: ActorRef;
   updatedAt: string;
+  updatedBy: ActorRef | null;
 }
 
-function ContentTab({ clientId }: { clientId: string }) {
+const ContentTab = forwardRef<TabCreateHandle, { clientId: string; platformAccounts: Client["platformAccounts"] }>(function ContentTab(
+  { clientId, platformAccounts },
+  ref
+) {
   const toast = useToast();
   const [items, setItems] = useState<ContentItem[] | null>(null);
+  const credentialedPlatforms = useMemo(
+    () =>
+      platformAccounts
+        .filter((a) => a.credentialsReceived)
+        .map((a) => PLATFORM_OPTIONS.find((p) => p.value === a.platform) ?? { value: a.platform, label: a.platform }),
+    [platformAccounts]
+  );
   const [open, setOpen] = useState(false);
   const [type, setType] = useState("STATIC_POST");
   const [title, setTitle] = useState("");
@@ -557,6 +807,9 @@ function ContentTab({ clientId }: { clientId: string }) {
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [scheduledFor, setScheduledFor] = useState("");
   const [saving, setSaving] = useState(false);
+  /** Which item's stepper is unlocked for undo — past stages become clickable while set. */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ContentItem | null>(null);
 
   async function load() {
     const res = await fetch(`/api/social/clients/${clientId}/content`);
@@ -578,9 +831,7 @@ function ContentTab({ clientId }: { clientId: string }) {
     setOpen(true);
   }
 
-  function togglePlatform(p: string) {
-    setPlatforms((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
-  }
+  useImperativeHandle(ref, () => ({ openCreate }));
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -610,26 +861,21 @@ function ContentTab({ clientId }: { clientId: string }) {
     });
     const data = await res.json();
     if (!res.ok) return toast.error("Couldn't move stage", data.error);
-    toast.success(toStage === "CANCELLED" ? "Content cancelled" : `Moved to ${stageLabel(toStage as never)}`);
+    toast.success(toStage === "CANCELLED" ? "Content cancelled" : `Moved to ${stageLabel(item.type as never, toStage as never)}`);
     load();
   }
 
-  async function remove(item: ContentItem) {
-    const res = await fetch(`/api/social/content/${item.id}`, { method: "DELETE" });
+  async function confirmRemove() {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/social/content/${deleteTarget.id}`, { method: "DELETE" });
     if (!res.ok) return toast.error("Couldn't delete content");
     toast.success("Content deleted");
+    setDeleteTarget(null);
     load();
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button size="sm" className="gap-1.5" onClick={openCreate}>
-          <IconPlus className="h-4 w-4" />
-          New content
-        </Button>
-      </div>
-
       {items === null ? (
         <SkeletonForm fields={4} />
       ) : items.length === 0 ? (
@@ -639,10 +885,12 @@ function ContentTab({ clientId }: { clientId: string }) {
       ) : (
         <div className="flex flex-col gap-2">
           {items.map((item) => {
-            const upcoming = nextStage(item.type as never, item.stage as never);
+            const sequence = stagesFor(item.type as never);
+            const isCancelled = item.stage === "CANCELLED";
+            const isEditing = editingId === item.id;
             return (
               <Card key={item.id}>
-                <CardContent className="flex flex-col gap-2 p-4">
+                <CardContent className="flex flex-col gap-2 p-3.5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="flex items-center gap-2 font-medium">
@@ -654,28 +902,42 @@ function ContentTab({ clientId }: { clientId: string }) {
                         {item.scheduledFor && ` · Scheduled ${format(parseISO(item.scheduledFor), "MMM d, yyyy · h:mm a")}`}
                       </p>
                     </div>
-                    <button type="button" aria-label={`Delete ${item.title}`} onClick={() => remove(item)} className="text-muted-foreground hover:text-destructive">
-                      <IconTrash className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <StageEditToggle
+                        isEditing={isEditing}
+                        isTerminal={item.stage === "PUBLISHED"}
+                        itemLabel={item.title}
+                        onToggle={() => setEditingId((id) => (id === item.id ? null : item.id))}
+                      />
+                      <button type="button" aria-label={`Delete ${item.title}`} onClick={() => setDeleteTarget(item)} className="text-muted-foreground hover:text-destructive">
+                        <IconTrash className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={item.stage === "PUBLISHED" ? "success" : item.stage === "CANCELLED" ? "destructive" : "default"}>
-                      {stageLabel(item.stage as never)}
-                    </Badge>
-                    {upcoming && (
-                      <Button size="sm" variant="outline" onClick={() => transition(item, upcoming)}>
-                        Move to: {stageLabel(upcoming)}
-                      </Button>
-                    )}
-                    {item.stage !== "PUBLISHED" && item.stage !== "CANCELLED" && (
-                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => transition(item, "CANCELLED")}>
+
+                  {/* One row: the whole workflow as a stepper (done/current/upcoming),
+                      not a separate "Move to" button plus a redundant static sequence line.
+                      Toggling edit mode unlocks past stages so you can undo back to one. */}
+                  <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5">
+                    <StageStepper
+                      sequence={sequence}
+                      currentStage={item.stage}
+                      isCancelled={isCancelled}
+                      isEditing={isEditing}
+                      labelFor={(s) => stageLabel(item.type as never, s as never)}
+                      onTransition={(s) => transition(item, s)}
+                    />
+                    {!isCancelled && item.stage !== "PUBLISHED" && (
+                      <button
+                        type="button"
+                        onClick={() => transition(item, "CANCELLED")}
+                        className="ml-1 text-xs text-muted-foreground hover:text-destructive"
+                      >
                         Cancel
-                      </Button>
+                      </button>
                     )}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    Sequence: {stagesFor(item.type as never).map((s) => stageLabel(s)).join(" → ")}
-                  </div>
+                  <AuditLine createdAt={item.createdAt} createdBy={item.createdBy} updatedAt={item.updatedAt} updatedBy={item.updatedBy} />
                 </CardContent>
               </Card>
             );
@@ -708,14 +970,7 @@ function ContentTab({ clientId }: { clientId: string }) {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Platforms</Label>
-                <div className="flex flex-wrap gap-3">
-                  {PLATFORM_OPTIONS.map((p) => (
-                    <label key={p.value} className="flex items-center gap-1.5 text-sm">
-                      <Checkbox checked={platforms.includes(p.value)} onChange={() => togglePlatform(p.value)} aria-label={p.label} />
-                      {p.label}
-                    </label>
-                  ))}
-                </div>
+                <PlatformMultiSelect options={credentialedPlatforms} value={platforms} onChange={setPlatforms} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="content-scheduled">Scheduled for</Label>
@@ -735,9 +990,17 @@ function ContentTab({ clientId }: { clientId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title={`Delete "${deleteTarget?.title}"?`}
+        description="This permanently deletes the content item along with its approval history. This cannot be undone."
+        onConfirm={confirmRemove}
+      />
     </div>
   );
-}
+});
 
 // ---------- Ads ----------
 
@@ -745,23 +1008,42 @@ interface AdCampaign {
   id: string;
   name: string;
   objective: string;
+  platforms: string | null;
   stage: string;
   budget: string | number | null;
   reach: number | null;
   leadsGenerated: number | null;
+  createdAt: string;
+  createdBy: ActorRef;
+  updatedAt: string;
+  updatedBy: ActorRef | null;
 }
 
-function AdsTab({ clientId, onChanged }: { clientId: string; onChanged: () => void }) {
+const AdsTab = forwardRef<
+  TabCreateHandle,
+  { clientId: string; onChanged: () => void; platformAccounts: Client["platformAccounts"] }
+>(function AdsTab({ clientId, onChanged, platformAccounts }, ref) {
   const toast = useToast();
   const [ads, setAds] = useState<AdCampaign[] | null>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [objective, setObjective] = useState("LEADS");
+  const [platforms, setPlatforms] = useState<string[]>([]);
   const [budget, setBudget] = useState("");
   const [durationDays, setDurationDays] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
   const [location, setLocation] = useState("");
   const [saving, setSaving] = useState(false);
+  /** Which campaign's stepper is unlocked for undo — past stages become clickable while set. */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdCampaign | null>(null);
+  const credentialedPlatforms = useMemo(
+    () =>
+      platformAccounts
+        .filter((a) => a.credentialsReceived)
+        .map((a) => PLATFORM_OPTIONS.find((p) => p.value === a.platform) ?? { value: a.platform, label: a.platform }),
+    [platformAccounts]
+  );
 
   async function load() {
     const res = await fetch(`/api/social/clients/${clientId}/ads`);
@@ -776,6 +1058,7 @@ function AdsTab({ clientId, onChanged }: { clientId: string; onChanged: () => vo
   function openCreate() {
     setName("");
     setObjective("LEADS");
+    setPlatforms([]);
     setBudget("");
     setDurationDays("");
     setTargetAudience("");
@@ -783,8 +1066,11 @@ function AdsTab({ clientId, onChanged }: { clientId: string; onChanged: () => vo
     setOpen(true);
   }
 
+  useImperativeHandle(ref, () => ({ openCreate }));
+
   async function create(e: React.FormEvent) {
     e.preventDefault();
+    if (platforms.length === 0) return toast.error("Pick at least one platform");
     setSaving(true);
     try {
       const res = await fetch(`/api/social/clients/${clientId}/ads`, {
@@ -793,6 +1079,7 @@ function AdsTab({ clientId, onChanged }: { clientId: string; onChanged: () => vo
         body: JSON.stringify({
           name,
           objective,
+          platforms,
           budget: budget ? Number(budget) : null,
           durationDays: durationDays ? Number(durationDays) : null,
           targetAudience: targetAudience || null,
@@ -810,28 +1097,30 @@ function AdsTab({ clientId, onChanged }: { clientId: string; onChanged: () => vo
     }
   }
 
-  async function setStage(ad: AdCampaign, stage: string) {
-    setAds((prev) => prev?.map((a) => (a.id === ad.id ? { ...a, stage } : a)) ?? null);
+  async function transitionAd(ad: AdCampaign, stage: string) {
     const res = await fetch(`/api/social/ads/${ad.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ stage }),
     });
-    if (!res.ok) {
-      toast.error("Couldn't update stage");
-      load();
-    }
+    const data = await res.json();
+    if (!res.ok) return toast.error("Couldn't move stage", data.error);
+    toast.success(stage === "CANCELLED" ? "Campaign cancelled" : `Moved to ${adStageLabel(stage as never)}`);
+    load();
+  }
+
+  async function confirmRemove() {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/social/ads/${deleteTarget.id}`, { method: "DELETE" });
+    if (!res.ok) return toast.error("Couldn't delete campaign");
+    toast.success("Campaign deleted");
+    setDeleteTarget(null);
+    load();
+    onChanged();
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button size="sm" className="gap-1.5" onClick={openCreate}>
-          <IconPlus className="h-4 w-4" />
-          New campaign
-        </Button>
-      </div>
-
       {ads === null ? (
         <SkeletonForm fields={3} />
       ) : ads.length === 0 ? (
@@ -840,23 +1129,59 @@ function AdsTab({ clientId, onChanged }: { clientId: string; onChanged: () => vo
         </Card>
       ) : (
         <div className="flex flex-col gap-2">
-          {ads.map((ad) => (
-            <Card key={ad.id}>
-              <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                <div>
-                  <p className="font-medium">{ad.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Objective: {ad.objective} {ad.budget != null && `· Budget ₹${ad.budget}`}
-                    {ad.reach != null && ` · Reach ${ad.reach}`}
-                    {ad.leadsGenerated != null && ` · Leads ${ad.leadsGenerated}`}
-                  </p>
-                </div>
-                <div className="w-56">
-                  <Dropdown size="sm" value={ad.stage} onChange={(v) => setStage(ad, v)} options={AD_STAGE_OPTIONS} />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {ads.map((ad) => {
+            const sequence = adStages();
+            const isCancelled = ad.stage === "CANCELLED";
+            const isEditing = editingId === ad.id;
+            return (
+              <Card key={ad.id}>
+                <CardContent className="flex flex-col gap-2 p-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{ad.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {ad.platforms && `${ad.platforms.split(",").map((p) => PLATFORM_OPTIONS.find((o) => o.value === p)?.label ?? p).join(", ")} · `}
+                        Objective: {ad.objective} {ad.budget != null && `· Budget ₹${ad.budget}`}
+                        {ad.reach != null && ` · Reach ${ad.reach}`}
+                        {ad.leadsGenerated != null && ` · Leads ${ad.leadsGenerated}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <StageEditToggle
+                        isEditing={isEditing}
+                        isTerminal={ad.stage === "COMPLETED"}
+                        itemLabel={ad.name}
+                        onToggle={() => setEditingId((id) => (id === ad.id ? null : ad.id))}
+                      />
+                      <button type="button" aria-label={`Delete ${ad.name}`} onClick={() => setDeleteTarget(ad)} className="text-muted-foreground hover:text-destructive">
+                        <IconTrash className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5">
+                    <StageStepper
+                      sequence={sequence}
+                      currentStage={ad.stage}
+                      isCancelled={isCancelled}
+                      isEditing={isEditing}
+                      labelFor={(s) => adStageLabel(s as never)}
+                      onTransition={(s) => transitionAd(ad, s)}
+                    />
+                    {!isCancelled && ad.stage !== "COMPLETED" && (
+                      <button
+                        type="button"
+                        onClick={() => transitionAd(ad, "CANCELLED")}
+                        className="ml-1 text-xs text-muted-foreground hover:text-destructive"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                  <AuditLine createdAt={ad.createdAt} createdBy={ad.createdBy} updatedAt={ad.updatedAt} updatedBy={ad.updatedBy} />
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -883,6 +1208,10 @@ function AdsTab({ clientId, onChanged }: { clientId: string; onChanged: () => vo
                     { value: "FOLLOWERS", label: "Followers" },
                   ]}
                 />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Platforms</Label>
+                <PlatformMultiSelect options={credentialedPlatforms} value={platforms} onChange={setPlatforms} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
@@ -911,16 +1240,34 @@ function AdsTab({ clientId, onChanged }: { clientId: string; onChanged: () => vo
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title={`Delete "${deleteTarget?.name}"?`}
+        description="This permanently deletes the ad campaign and its stats. This cannot be undone."
+        onConfirm={confirmRemove}
+      />
     </div>
   );
-}
+});
 
 // ---------- Monthly Reports ----------
+
+interface ReportFile {
+  id: string;
+  fileName: string;
+  filePath: string;
+  createdAt: string;
+  uploadedBy: ActorRef | null;
+}
 
 interface MonthlyReport {
   id: string;
   year: number;
   month: number;
+  title: string | null;
+  description: string | null;
   reach: number | null;
   engagement: number | null;
   followersGained: number | null;
@@ -928,15 +1275,91 @@ interface MonthlyReport {
   insights: string | null;
   nextMonthPlan: string | null;
   reviewedAt: string | null;
+  files: ReportFile[];
+  createdAt: string;
+  createdBy: ActorRef;
+  updatedAt: string;
+  updatedBy: ActorRef | null;
 }
 
-function ReportsTab({ clientId, onChanged }: { clientId: string; onChanged: () => void }) {
+/** Add/remove/replace files on an already-saved report — same base64-in-MySQL upload used for task attachments and project documents. */
+function ReportFiles({ report, onChanged }: { report: MonthlyReport; onChanged: () => void }) {
+  const toast = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function upload(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const body = new FormData();
+        body.set("file", file);
+        const res = await fetch(`/api/social/reports/${report.id}/files`, { method: "POST", body });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(`Couldn't upload ${file.name}`, data.error);
+          continue;
+        }
+      }
+      onChanged();
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function remove(fileId: string) {
+    const res = await fetch(`/api/social/reports/${report.id}/files/${fileId}`, { method: "DELETE" });
+    if (!res.ok) return toast.error("Couldn't remove the file");
+    onChanged();
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {report.files.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {report.files.map((f) => (
+            <li key={f.id} className="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1 text-xs">
+              <a
+                href={`/api/uploads/${f.filePath}?mode=view`}
+                target="_blank"
+                rel="noreferrer"
+                className="truncate text-primary hover:underline"
+              >
+                {f.fileName}
+              </a>
+              <button
+                type="button"
+                aria-label={`Remove ${f.fileName}`}
+                onClick={() => remove(f.id)}
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+              >
+                <IconTrash className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div>
+        <input ref={inputRef} type="file" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
+        <Button type="button" size="sm" variant="outline" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          {uploading ? "Uploading..." : report.files.length > 0 ? "Add more files" : "Upload files"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+const ReportsTab = forwardRef<TabCreateHandle, { clientId: string; onChanged: () => void }>(function ReportsTab({ clientId, onChanged }, ref) {
   const toast = useToast();
   const now = new Date();
   const [reports, setReports] = useState<MonthlyReport[] | null>(null);
   const [open, setOpen] = useState(false);
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [reach, setReach] = useState("");
   const [engagement, setEngagement] = useState("");
   const [followersGained, setFollowersGained] = useState("");
@@ -946,6 +1369,7 @@ function ReportsTab({ clientId, onChanged }: { clientId: string; onChanged: () =
   const [retargetingSuggestions, setRetargetingSuggestions] = useState("");
   const [nextMonthPlan, setNextMonthPlan] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<MonthlyReport | null>(null);
 
   async function load() {
     const res = await fetch(`/api/social/clients/${clientId}/reports`);
@@ -960,6 +1384,8 @@ function ReportsTab({ clientId, onChanged }: { clientId: string; onChanged: () =
   function openCreate() {
     setYear(now.getFullYear());
     setMonth(now.getMonth() + 1);
+    setTitle("");
+    setDescription("");
     setReach("");
     setEngagement("");
     setFollowersGained("");
@@ -971,6 +1397,8 @@ function ReportsTab({ clientId, onChanged }: { clientId: string; onChanged: () =
     setOpen(true);
   }
 
+  useImperativeHandle(ref, () => ({ openCreate }));
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -981,6 +1409,8 @@ function ReportsTab({ clientId, onChanged }: { clientId: string; onChanged: () =
         body: JSON.stringify({
           year,
           month,
+          title: title || null,
+          description: description || null,
           reach: reach ? Number(reach) : null,
           engagement: engagement ? Number(engagement) : null,
           followersGained: followersGained ? Number(followersGained) : null,
@@ -1002,15 +1432,18 @@ function ReportsTab({ clientId, onChanged }: { clientId: string; onChanged: () =
     }
   }
 
+  async function confirmRemove() {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/social/reports/${deleteTarget.id}`, { method: "DELETE" });
+    if (!res.ok) return toast.error("Couldn't delete report");
+    toast.success("Monthly report deleted");
+    setDeleteTarget(null);
+    load();
+    onChanged();
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
-        <Button size="sm" className="gap-1.5" onClick={openCreate}>
-          <IconPlus className="h-4 w-4" />
-          New monthly report
-        </Button>
-      </div>
-
       {reports === null ? (
         <SkeletonForm fields={3} />
       ) : reports.length === 0 ? (
@@ -1022,15 +1455,26 @@ function ReportsTab({ clientId, onChanged }: { clientId: string; onChanged: () =
           {reports.map((r) => (
             <Card key={r.id}>
               <CardContent className="flex flex-col gap-1 p-4">
-                <p className="font-medium">
-                  {MONTH_NAMES[r.month - 1]} {r.year}
-                  {r.reviewedAt && <Badge variant="success" className="ml-2">Reviewed</Badge>}
-                </p>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="font-medium">
+                    {r.title || `${MONTH_NAMES[r.month - 1]} ${r.year}`}
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      {MONTH_NAMES[r.month - 1]} {r.year}
+                    </span>
+                    {r.reviewedAt && <Badge variant="success" className="ml-2">Reviewed</Badge>}
+                  </p>
+                  <button type="button" aria-label={`Delete ${MONTH_NAMES[r.month - 1]} ${r.year} report`} onClick={() => setDeleteTarget(r)} className="text-muted-foreground hover:text-destructive">
+                    <IconTrash className="h-4 w-4" />
+                  </button>
+                </div>
+                {r.description && <p className="text-sm">{r.description}</p>}
                 <p className="text-xs text-muted-foreground">
                   Reach {r.reach ?? "—"} · Engagement {r.engagement ?? "—"} · Followers gained {r.followersGained ?? "—"} · Ad leads {r.adLeads ?? "—"}
                 </p>
                 {r.insights && <p className="mt-1 text-sm">{r.insights}</p>}
                 {r.nextMonthPlan && <p className="text-sm text-muted-foreground">Next month: {r.nextMonthPlan}</p>}
+                <ReportFiles report={r} onChanged={load} />
+                <AuditLine createdAt={r.createdAt} createdBy={r.createdBy} updatedAt={r.updatedAt} updatedBy={r.updatedBy} />
               </CardContent>
             </Card>
           ))}
@@ -1058,6 +1502,14 @@ function ReportsTab({ clientId, onChanged }: { clientId: string; onChanged: () =
                   <Label htmlFor="report-year">Year</Label>
                   <Input id="report-year" type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
                 </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="report-title">Title</Label>
+                <Input id="report-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`${MONTH_NAMES[month - 1]} ${year}`} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="report-description">Description</Label>
+                <Textarea id="report-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
@@ -1104,79 +1556,570 @@ function ReportsTab({ clientId, onChanged }: { clientId: string; onChanged: () =
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title={`Delete ${deleteTarget ? `${MONTH_NAMES[deleteTarget.month - 1]} ${deleteTarget.year}` : ""} report?`}
+        description="This permanently deletes the monthly report. This cannot be undone."
+        onConfirm={confirmRemove}
+      />
     </div>
+  );
+});
+
+// ---------- Content Calendar ----------
+
+type CalendarWeekday = "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY";
+type CalendarSlotStatus = "NOT_UPLOADED" | "PENDING" | "DONE";
+
+interface CalendarSlot {
+  id: string;
+  clientId: string;
+  year: number;
+  month: number;
+  week: number;
+  weekday: CalendarWeekday;
+  contentType: "STATIC_POST" | "CAROUSEL" | "AI_REEL" | "REAL_PERSON_REEL" | null;
+  note: string | null;
+  manualNumber: number | null;
+  status: CalendarSlotStatus;
+}
+
+const CALENDAR_WEEKDAYS: CalendarWeekday[] = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+const CALENDAR_WEEKDAY_LABELS: Record<CalendarWeekday, string> = {
+  MONDAY: "Monday",
+  TUESDAY: "Tuesday",
+  WEDNESDAY: "Wednesday",
+  THURSDAY: "Thursday",
+  FRIDAY: "Friday",
+  SATURDAY: "Saturday",
+};
+const CALENDAR_WEEKS = [1, 2, 3, 4];
+
+/** AI and real-person reels share one "Reel" bucket for display/numbering — the doc's deliverables count them together. */
+const CALENDAR_DISPLAY_GROUP: Record<NonNullable<CalendarSlot["contentType"]>, string> = {
+  STATIC_POST: "Static",
+  CAROUSEL: "Carousel",
+  AI_REEL: "Reel",
+  REAL_PERSON_REEL: "Reel",
+};
+
+const CALENDAR_TYPE_OPTIONS = [
+  { value: "", label: "Empty" },
+  { value: "STATIC_POST", label: "Static Post" },
+  { value: "CAROUSEL", label: "Carousel" },
+  { value: "AI_REEL", label: "AI Reel" },
+  { value: "REAL_PERSON_REEL", label: "Real Person Reel" },
+  { value: "OTHER", label: "Other (note)" },
+];
+
+/** Base list shown before any search/typing narrows it down. */
+const CALENDAR_NUMBER_BASE_RANGE = Array.from({ length: 20 }, (_, i) => i + 1);
+
+const CALENDAR_STATUS_OPTIONS: { value: CalendarSlotStatus; label: string }[] = [
+  { value: "DONE", label: "Completed / Uploaded" },
+  { value: "PENDING", label: "Pending" },
+  { value: "NOT_UPLOADED", label: "Not Uploaded" },
+];
+
+/** Text color for a filled cell's label, by status — green/orange/red. */
+const CALENDAR_STATUS_TEXT_CLASS: Record<CalendarSlotStatus, string> = {
+  DONE: "text-emerald-600 dark:text-emerald-400",
+  PENDING: "text-amber-600 dark:text-amber-400",
+  NOT_UPLOADED: "text-red-600 dark:text-red-400",
+};
+
+const CALENDAR_DATE_FILTER_OPTIONS = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "yearly", label: "Yearly" },
+  { value: "range", label: "Date range" },
+];
+
+const CALENDAR_DELIVERABLES = { STATIC_POST: 8, CAROUSEL: 2, REEL: 4 } as const;
+
+function calendarSlotKey(week: number, weekday: string) {
+  return `${week}-${weekday}`;
+}
+
+/**
+ * Display label for a slot — "Static - 3", "Reel - 1", a freeform note, or
+ * null for an empty cell. A slot with manualNumber set uses that number
+ * directly; slots left on "Auto" get the next sequential position among
+ * only the other auto-numbered slots of the same type.
+ */
+function calendarLabelsFor(slots: CalendarSlot[]): Map<string, string> {
+  const ordered = [...slots].sort((a, b) => a.week - b.week || CALENDAR_WEEKDAYS.indexOf(a.weekday) - CALENDAR_WEEKDAYS.indexOf(b.weekday));
+  const counts: Record<string, number> = {};
+  const result = new Map<string, string>();
+  for (const s of ordered) {
+    if (s.contentType) {
+      const group = CALENDAR_DISPLAY_GROUP[s.contentType];
+      let n: number;
+      if (s.manualNumber) {
+        n = s.manualNumber;
+      } else {
+        counts[group] = (counts[group] ?? 0) + 1;
+        n = counts[group];
+      }
+      result.set(s.id, `${group} - ${n}`);
+    } else if (s.note) {
+      result.set(s.id, s.note);
+    }
+  }
+  return result;
+}
+
+/** Resolves a date-filter preset to the month/year it should jump to. "range" is handled separately via the date picker. */
+function resolveCalendarPreset(preset: string): { month: number; year: number } | null {
+  const now = new Date();
+  switch (preset) {
+    case "today":
+      return { month: now.getMonth() + 1, year: now.getFullYear() };
+    case "yesterday": {
+      const d = subDays(now, 1);
+      return { month: d.getMonth() + 1, year: d.getFullYear() };
+    }
+    case "weekly": {
+      const d = startOfWeek(now, { weekStartsOn: 1 });
+      return { month: d.getMonth() + 1, year: d.getFullYear() };
+    }
+    case "monthly":
+      return { month: now.getMonth() + 1, year: now.getFullYear() };
+    case "quarterly": {
+      const d = startOfQuarter(now);
+      return { month: d.getMonth() + 1, year: d.getFullYear() };
+    }
+    case "yearly":
+      return { month: 1, year: now.getFullYear() };
+    default:
+      return null;
+  }
+}
+
+/** An icon-only trigger that opens a text menu of options — compact header control. */
+function IconOnlyDropdown({
+  icon: Icon,
+  label,
+  value,
+  onChange,
+  options,
+  footer,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  footer?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <span>
+          <Tooltip label={label}>
+            <button
+              type="button"
+              aria-label={label}
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-md text-primary-foreground/80 transition-colors hover:bg-white/10 hover:text-primary-foreground",
+                open && "bg-white/10 text-primary-foreground"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          </Tooltip>
+        </span>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="end"
+          sideOffset={6}
+          className="z-50 min-w-44 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+        >
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => {
+                onChange(opt.value);
+                if (opt.value !== "range") setOpen(false);
+              }}
+              className={cn(
+                "flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-primary/5",
+                opt.value === value && "bg-accent/60"
+              )}
+            >
+              <span className="truncate">{opt.label}</span>
+              {opt.value === value && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
+            </button>
+          ))}
+          {footer}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
-// ---------- Calendar ----------
+/**
+ * The "Number" field: "Auto (by order)" stays pinned at the top exactly as
+ * before, plus a search box that filters the base 1–20 list and, if you
+ * type a number outside that range, offers it as an addable custom option.
+ */
+function CalendarNumberDropdown({
+  value,
+  onChange,
+}: {
+  /** "" = Auto (by order). */
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
-function CalendarTab({ clientId }: { clientId: string }) {
-  const [items, setItems] = useState<ContentItem[] | null>(null);
-  const now = new Date();
+  const trimmed = search.trim();
+  const typedNumber = /^\d+$/.test(trimmed) ? Number(trimmed) : null;
+  const filtered = trimmed
+    ? CALENDAR_NUMBER_BASE_RANGE.filter((n) => String(n).includes(trimmed))
+    : CALENDAR_NUMBER_BASE_RANGE;
+  const showAddCustom = typedNumber !== null && typedNumber > 0 && !CALENDAR_NUMBER_BASE_RANGE.includes(typedNumber);
 
-  useEffect(() => {
-    fetch(`/api/social/clients/${clientId}/content`)
-      .then((r) => r.json())
-      .then((d) => setItems(d.content))
-      .catch(() => setItems([]));
-  }, [clientId]);
-
-  if (items === null) return <SkeletonForm fields={3} />;
-
-  const thisMonth = items.filter((i) => {
-    if (!i.scheduledFor) return false;
-    const d = parseISO(i.scheduledFor);
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-  });
-
-  const counts = { STATIC_POST: 0, CAROUSEL: 0, AI_REEL: 0, REAL_PERSON_REEL: 0 } as Record<string, number>;
-  for (const i of thisMonth) counts[i.type] = (counts[i.type] ?? 0) + 1;
-
-  const weeks = new Map<number, ContentItem[]>();
-  for (const item of thisMonth) {
-    const weekOfMonth = Math.ceil(parseISO(item.scheduledFor!).getDate() / 7);
-    weeks.set(weekOfMonth, [...(weeks.get(weekOfMonth) ?? []), item]);
+  function pick(n: string) {
+    onChange(n);
+    setSearch("");
+    setOpen(false);
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card>
-        <CardContent className="p-4">
-          <p className="mb-2 text-sm font-medium">
-            {MONTH_NAMES[now.getMonth()]} {now.getFullYear()} — pace against the suggested monthly deliverables
-          </p>
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-            <span>Static posts: {counts.STATIC_POST}/{MONTHLY_TARGETS.STATIC_POST}</span>
-            <span>Carousels: {counts.CAROUSEL}/{MONTHLY_TARGETS.CAROUSEL}</span>
-            <span>AI reels: {counts.AI_REEL}/{MONTHLY_TARGETS.AI_REEL}</span>
-            <span>Real-person reels: {counts.REAL_PERSON_REEL}/{MONTHLY_TARGETS.REAL_PERSON_REEL}</span>
+    <Popover.Root
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) setSearch("");
+      }}
+    >
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          id="cc-number"
+          className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-sm transition-colors hover:border-ring/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          <span className={cn("truncate", !value && "text-muted-foreground")}>{value || "Auto (by order)"}</span>
+          <IconChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          sideOffset={6}
+          className="z-50 w-[var(--radix-popover-trigger-width)] min-w-40 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+        >
+          <div className="p-1">
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="Search or type a number..."
+              className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
+            />
           </div>
-        </CardContent>
-      </Card>
+          <div className="max-h-52 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => pick("")}
+              className={cn(
+                "flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-primary/5",
+                value === "" && "bg-accent/60"
+              )}
+            >
+              <span className="truncate">Auto (by order)</span>
+              {value === "" && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
+            </button>
+            {showAddCustom && (
+              <button
+                type="button"
+                onClick={() => pick(String(typedNumber))}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-primary outline-none hover:bg-primary/5"
+              >
+                <IconPlus className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Add {typedNumber}</span>
+              </button>
+            )}
+            {filtered.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => pick(String(n))}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-primary/5",
+                  String(n) === value && "bg-accent/60"
+                )}
+              >
+                <span className="truncate">{n}</span>
+                {String(n) === value && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
+              </button>
+            ))}
+            {filtered.length === 0 && !showAddCustom && (
+              <p className="px-2 py-3 text-center text-sm text-muted-foreground">No matches</p>
+            )}
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
 
-      {thisMonth.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-sm text-muted-foreground">Nothing scheduled this month yet.</CardContent>
-        </Card>
+/**
+ * Lives inside this one client's folder now (used to be its own page,
+ * picked a client from a dropdown) — same grid, edit dialog, and date
+ * filter, just scoped to `clientId` from the tab's own props.
+ */
+function CalendarTab({ clientId }: { clientId: string }) {
+  const toast = useToast();
+  const { socket } = useSocket();
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [dateFilter, setDateFilter] = useState("monthly");
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
+  const [slots, setSlots] = useState<CalendarSlot[] | null>(null);
+
+  const [editing, setEditing] = useState<{ week: number; weekday: CalendarWeekday } | null>(null);
+  const [editType, setEditType] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [editNumber, setEditNumber] = useState("");
+  const [editStatus, setEditStatus] = useState<CalendarSlotStatus>("NOT_UPLOADED");
+  const [saving, setSaving] = useState(false);
+
+  function load() {
+    setSlots(null);
+    fetch(`/api/social/calendar?clientId=${clientId}&year=${year}&month=${month}`)
+      .then((r) => r.json())
+      .then((d) => setSlots(d.slots ?? []))
+      .catch(() => setSlots([]));
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, year, month]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (payload: { clientId?: string }) => {
+      if (payload?.clientId === clientId) load();
+    };
+    socket.on("social_calendar_updated", handler);
+    return () => {
+      socket.off("social_calendar_updated", handler);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, clientId, year, month]);
+
+  const byKey = useMemo(() => {
+    const map = new Map<string, CalendarSlot>();
+    for (const s of slots ?? []) map.set(calendarSlotKey(s.week, s.weekday), s);
+    return map;
+  }, [slots]);
+
+  const labels = useMemo(() => calendarLabelsFor(slots ?? []), [slots]);
+
+  function applyDateFilter(preset: string) {
+    setDateFilter(preset);
+    const resolved = resolveCalendarPreset(preset);
+    if (resolved) {
+      setMonth(resolved.month);
+      setYear(resolved.year);
+    }
+  }
+
+  function applyDateRange(from: string, to: string) {
+    setRangeFrom(from);
+    setRangeTo(to);
+    setDateFilter("range");
+    // The grid can only show one month — jump to the range's start date.
+    if (!from) return;
+    const d = parseISO(from);
+    setMonth(d.getMonth() + 1);
+    setYear(d.getFullYear());
+  }
+
+  function openCell(week: number, weekday: CalendarWeekday) {
+    const existing = byKey.get(calendarSlotKey(week, weekday));
+    setEditType(existing?.contentType ?? (existing?.note ? "OTHER" : ""));
+    setEditNote(existing?.note ?? "");
+    setEditNumber(existing?.manualNumber ? String(existing.manualNumber) : "");
+    setEditStatus(existing?.status ?? "NOT_UPLOADED");
+    setEditing({ week, weekday });
+  }
+
+  async function saveCell() {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      const contentType = editType && editType !== "OTHER" ? editType : null;
+      const note = editType === "OTHER" ? editNote : null;
+      const res = await fetch("/api/social/calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          year,
+          month,
+          week: editing.week,
+          weekday: editing.weekday,
+          contentType,
+          note: note || null,
+          manualNumber: editNumber ? Number(editNumber) : null,
+          status: editStatus,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't save", data.error);
+      setEditing(null);
+      load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearCell() {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/social/calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, year, month, week: editing.week, weekday: editing.weekday, contentType: null, note: null }),
+      });
+      if (!res.ok) return toast.error("Couldn't clear cell");
+      setEditing(null);
+      load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const dateFilterDropdown = (
+    <IconOnlyDropdown
+      icon={IconCalendar}
+      label="Date filter"
+      value={dateFilter}
+      onChange={applyDateFilter}
+      options={CALENDAR_DATE_FILTER_OPTIONS}
+      footer={
+        dateFilter === "range" ? (
+          <div className="px-2 pb-1 pt-2">
+            <DateRangePicker from={rangeFrom} to={rangeTo} onChange={applyDateRange} placeholder="Pick a range" />
+          </div>
+        ) : null
+      }
+    />
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      {slots === null ? (
+        <SkeletonForm fields={4} />
       ) : (
-        [...weeks.entries()].sort(([a], [b]) => a - b).map(([week, weekItems]) => (
-          <Card key={week}>
-            <CardContent className="p-4">
-              <p className="mb-2 text-sm font-medium">Week {week}</p>
-              <div className="flex flex-col gap-1.5">
-                {weekItems.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between text-sm">
-                    <span>
-                      {item.title} <span className="text-xs text-muted-foreground">({CONTENT_TYPE_OPTIONS.find((t) => t.value === item.type)?.label})</span>
-                    </span>
-                    <span className="text-xs text-muted-foreground">{format(parseISO(item.scheduledFor!), "EEE, MMM d · h:mm a")}</span>
-                  </div>
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between gap-3 bg-primary px-5 py-3 text-sm font-medium text-primary-foreground">
+            <span>
+              {MONTH_NAMES[month - 1]} {year} · Deliverables: {CALENDAR_DELIVERABLES.STATIC_POST} Static Posts &bull;{" "}
+              {CALENDAR_DELIVERABLES.CAROUSEL} Carousels &bull; {CALENDAR_DELIVERABLES.REEL} Reels
+            </span>
+            <span className="flex items-center gap-1">{dateFilterDropdown}</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-primary/90 text-primary-foreground">
+                  <th className="px-4 py-2.5 text-center font-medium">Week</th>
+                  {CALENDAR_WEEKDAYS.map((d) => (
+                    <th key={d} className="px-4 py-2.5 text-center font-medium">{CALENDAR_WEEKDAY_LABELS[d]}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {CALENDAR_WEEKS.map((week) => (
+                  <tr key={week} className="border-b border-border last:border-b-0 odd:bg-muted/30">
+                    <td className="px-4 py-3 font-medium">Week {week}</td>
+                    {CALENDAR_WEEKDAYS.map((weekday) => {
+                      const slot = byKey.get(calendarSlotKey(week, weekday));
+                      const label = slot ? labels.get(slot.id) : undefined;
+                      return (
+                        <td key={weekday} className="px-2 py-2">
+                          <button
+                            type="button"
+                            onClick={() => openCell(week, weekday)}
+                            className={cn(
+                              "flex w-full min-w-[7rem] items-center justify-center rounded-md border border-dashed border-border px-3 py-2 text-sm transition-colors hover:border-primary hover:bg-primary/5",
+                              label ? cn("border-solid bg-card font-medium", CALENDAR_STATUS_TEXT_CLASS[slot!.status]) : "text-muted-foreground"
+                            )}
+                          >
+                            {label ?? "—"}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
-        ))
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
+
+      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editing && `Week ${editing.week} · ${CALENDAR_WEEKDAY_LABELS[editing.weekday]}`}
+            </DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="cc-type">Type</Label>
+                <Dropdown id="cc-type" value={editType} onChange={setEditType} options={CALENDAR_TYPE_OPTIONS} />
+              </div>
+              {editType && editType !== "OTHER" && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="cc-number">Number</Label>
+                  <CalendarNumberDropdown value={editNumber} onChange={setEditNumber} />
+                </div>
+              )}
+              {editType === "OTHER" && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="cc-note">Note</Label>
+                  <Textarea id="cc-note" value={editNote} onChange={(e) => setEditNote(e.target.value)} rows={2} placeholder="e.g. Planning Meeting" />
+                </div>
+              )}
+              {editType && (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="cc-status">Status</Label>
+                  <Dropdown id="cc-status" value={editStatus} onChange={(v) => setEditStatus(v as CalendarSlotStatus)} options={CALENDAR_STATUS_OPTIONS} />
+                </div>
+              )}
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            {byKey.has(editing ? calendarSlotKey(editing.week, editing.weekday) : "") && (
+              <Button variant="outline" onClick={clearCell} disabled={saving}>
+                Clear
+              </Button>
+            )}
+            <Button onClick={saveCell} disabled={saving}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1191,6 +2134,71 @@ interface ActivityRow {
   createdAt: string;
 }
 
+/** Human-readable label for every action string this module logs, across all six tabs. */
+const ACTIVITY_LABELS: Record<string, string> = {
+  created: "Client created",
+  created_from_lead: "Client created (from an approved lead)",
+  stage_changed: "Client stage changed",
+  platform_added: "Platform added",
+  platform_updated: "Platform updated",
+  platform_removed: "Platform removed",
+  content_created: "Content created",
+  content_updated: "Content updated",
+  content_stage_changed: "Content stage changed",
+  content_deleted: "Content deleted",
+  ad_campaign_created: "Ad campaign created",
+  ad_campaign_updated: "Ad campaign updated",
+  ad_stage_changed: "Ad campaign stage changed",
+  ad_campaign_deleted: "Ad campaign deleted",
+  monthly_report_created: "Monthly report created",
+  monthly_report_updated: "Monthly report updated",
+  monthly_report_deleted: "Monthly report deleted",
+  calendar_slot_updated: "Calendar slot added/updated",
+  calendar_slot_cleared: "Calendar slot cleared",
+};
+
+function activityLabel(action: string): string {
+  return ACTIVITY_LABELS[action] ?? action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+type ActivityKind = "created" | "updated" | "deleted" | "viewed" | "other";
+
+function activityKind(action: string): ActivityKind {
+  if (action.includes("deleted") || action.includes("removed") || action.includes("cleared")) return "deleted";
+  if (action.includes("created")) return "created";
+  if (action.includes("updated") || action.includes("changed")) return "updated";
+  if (action.includes("viewed")) return "viewed";
+  return "other";
+}
+
+const ACTIVITY_BADGE_VARIANT: Record<ActivityKind, "success" | "default" | "destructive" | "secondary"> = {
+  created: "success",
+  updated: "default",
+  deleted: "destructive",
+  viewed: "secondary",
+  other: "secondary",
+};
+
+/** A short "what" line pulled from the event's meta — the specific platform, title, or stage transition involved. */
+function activityDetail(a: ActivityRow): string | null {
+  const meta = a.meta;
+  if (!meta) return null;
+  if (typeof meta.from === "string" && typeof meta.to === "string") {
+    return `${meta.from.replace(/_/g, " ")} → ${meta.to.replace(/_/g, " ")}`;
+  }
+  if (typeof meta.title === "string") return meta.title;
+  if (typeof meta.name === "string") return meta.name;
+  if (typeof meta.platform === "string") return meta.platform;
+  if (typeof meta.year === "number" && typeof meta.month === "number") return `${MONTH_NAMES[meta.month - 1]} ${meta.year}`;
+  if (typeof meta.week === "number" && typeof meta.weekday === "string") return `Week ${meta.week} · ${meta.weekday}`;
+  return null;
+}
+
+/**
+ * A proper table — Action | Details | Performed by | Date & time — instead
+ * of a flat sentence feed. Every create/update/delete this module logs (see
+ * ACTIVITY_LABELS) shows up here with who did it and exactly when.
+ */
 function ActivityTab({ clientId }: { clientId: string }) {
   const [activities, setActivities] = useState<ActivityRow[] | null>(null);
 
@@ -1212,16 +2220,34 @@ function ActivityTab({ clientId }: { clientId: string }) {
 
   return (
     <Card>
-      <CardContent className="divide-y divide-border/60 p-0">
-        {activities.map((a) => (
-          <div key={a.id} className="flex items-center justify-between gap-4 px-5 py-3 text-sm">
-            <span>
-              <span className="font-medium">{a.actor.name}</span> {a.action.replace(/_/g, " ")}
-            </span>
-            <span className="text-xs text-muted-foreground">{format(parseISO(a.createdAt), "MMM d, h:mm a")}</span>
-          </div>
-        ))}
-      </CardContent>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs text-muted-foreground">
+              <th className="px-4 py-2.5 font-medium">Action</th>
+              <th className="px-4 py-2.5 font-medium">Details</th>
+              <th className="px-4 py-2.5 font-medium">Performed by</th>
+              <th className="px-4 py-2.5 font-medium">Date &amp; time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activities.map((a) => {
+              const kind = activityKind(a.action);
+              const detail = activityDetail(a);
+              return (
+                <tr key={a.id} className="border-b border-border last:border-b-0">
+                  <td className="px-4 py-2.5">
+                    <Badge variant={ACTIVITY_BADGE_VARIANT[kind]}>{activityLabel(a.action)}</Badge>
+                  </td>
+                  <td className="px-4 py-2.5 text-muted-foreground">{detail ?? "—"}</td>
+                  <td className="px-4 py-2.5 font-medium">{a.actor.name}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground">{format(parseISO(a.createdAt), "MMM d, yyyy · h:mm a")}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }

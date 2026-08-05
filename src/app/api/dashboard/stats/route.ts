@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
@@ -11,10 +11,25 @@ function tally<T extends { status: string }>(rows: { status: T["status"]; _count
   return out;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  // Narrows every figure on the panel to one department — same idea as the
+  // activity feed's own department filter below it, kept in sync so picking
+  // a department changes the whole panel consistently, not just the table.
+  const departmentId = req.nextUrl.searchParams.get("department");
+  const userWhere = departmentId ? { departmentId } : undefined;
+  const leadWhere = departmentId ? { departmentId } : undefined;
+  // Tasks have no departmentId column — a department's tasks are whichever
+  // have an assignee or creator that belongs to it.
+  const taskWhere = departmentId
+    ? { OR: [{ assignedTo: { departmentId } }, { createdBy: { departmentId } }] }
+    : undefined;
+  const projectWhere = departmentId ? { departmentId } : undefined;
+  const quotationWhere = departmentId ? { departmentId } : undefined;
+  const invoiceWhere = departmentId ? { departmentId } : undefined;
 
   const [
     userGroups,
@@ -30,18 +45,18 @@ export async function GET() {
     totalQuotations,
     totalInvoices,
   ] = await Promise.all([
-    db.user.groupBy({ by: ["role"], _count: true }),
-    db.user.count({ where: { isActive: true } }),
-    db.lead.groupBy({ by: ["status"], _count: true }),
-    db.task.groupBy({ by: ["status"], _count: true }),
-    db.project.groupBy({ by: ["status"], _count: true }),
-    db.quotation.groupBy({ by: ["status"], _count: true }),
-    db.invoice.groupBy({ by: ["status"], _count: true }),
-    db.lead.count(),
-    db.task.count(),
-    db.project.count(),
-    db.quotation.count(),
-    db.invoice.count(),
+    db.user.groupBy({ by: ["role"], _count: true, where: userWhere }),
+    db.user.count({ where: { isActive: true, ...userWhere } }),
+    db.lead.groupBy({ by: ["status"], _count: true, where: leadWhere }),
+    db.task.groupBy({ by: ["status"], _count: true, where: taskWhere }),
+    db.project.groupBy({ by: ["status"], _count: true, where: projectWhere }),
+    db.quotation.groupBy({ by: ["status"], _count: true, where: quotationWhere }),
+    db.invoice.groupBy({ by: ["status"], _count: true, where: invoiceWhere }),
+    db.lead.count({ where: leadWhere }),
+    db.task.count({ where: taskWhere }),
+    db.project.count({ where: projectWhere }),
+    db.quotation.count({ where: quotationWhere }),
+    db.invoice.count({ where: invoiceWhere }),
   ]);
 
   const roleCounts: Counts = {};

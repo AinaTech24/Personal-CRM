@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, getSocialAdForUser, logSocialClientActivity } from "@/lib/social-media";
+import { isValidAdTransition } from "@/lib/social-ad-workflow";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -20,6 +21,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   objective: z.enum(["LEADS", "REACH", "FOLLOWERS"]).optional(),
+  platforms: z.array(z.enum(["FACEBOOK", "INSTAGRAM", "LINKEDIN", "TWITTER", "YOUTUBE"])).min(1).optional(),
   budget: z.number().nonnegative().optional().nullable(),
   durationDays: z.number().int().positive().optional().nullable(),
   targetAudience: z.string().max(2000).optional().nullable(),
@@ -62,12 +64,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const data = parsed.data;
 
   const stageChanged = data.stage !== undefined && data.stage !== access.stage;
+  if (stageChanged && !isValidAdTransition(access.stage, data.stage!)) {
+    return NextResponse.json({ error: `Can't move from ${access.stage} to ${data.stage}` }, { status: 400 });
+  }
 
   const ad = await db.socialAdCampaign.update({
     where: { id },
     data: {
       ...(data.name !== undefined && { name: data.name }),
       ...(data.objective !== undefined && { objective: data.objective }),
+      ...(data.platforms !== undefined && { platforms: data.platforms.join(",") }),
       ...(data.budget !== undefined && { budget: data.budget }),
       ...(data.durationDays !== undefined && { durationDays: data.durationDays }),
       ...(data.targetAudience !== undefined && { targetAudience: data.targetAudience || null }),
@@ -81,11 +87,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.ctr !== undefined && { ctr: data.ctr }),
       ...(data.conversions !== undefined && { conversions: data.conversions }),
       ...(data.retargetingNotes !== undefined && { retargetingNotes: data.retargetingNotes || null }),
+      updatedById: user.id,
     },
   });
 
   if (stageChanged) {
     await logSocialClientActivity(access.clientId, user.id, "ad_stage_changed", { adId: id, from: access.stage, to: data.stage });
+  }
+  const fieldsChanged = Object.keys(data).some((k) => k !== "stage");
+  if (fieldsChanged) {
+    await logSocialClientActivity(access.clientId, user.id, "ad_campaign_updated", { adId: id, name: ad.name });
   }
 
   return NextResponse.json({ ad });

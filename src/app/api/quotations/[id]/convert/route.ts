@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isRestrictedFromModule } from "@/lib/social-media";
 import { canAccessBillingRecord, toNumber } from "@/lib/billing";
 import { broadcastInvoiceChange, nextInvoiceNumber } from "@/lib/invoices";
 
@@ -8,6 +9,9 @@ import { broadcastInvoiceChange, nextInvoiceNumber } from "@/lib/invoices";
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Converting still reads the full Quotation record (line items, seller
+  // data) even though the output is an Invoice — same Quotations block applies.
+  if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const quotation = await db.quotation.findUnique({ where: { id }, include: { items: true } });

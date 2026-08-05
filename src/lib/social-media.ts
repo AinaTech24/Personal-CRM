@@ -1,12 +1,13 @@
 import { db } from "@/lib/db";
-import type { PermissionUser } from "@/lib/permissions";
+import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
-import { canAccessSocialClient, type SocialMembership } from "@/lib/social-media-permissions";
+import { canAccessSocialClient, isSocialMediaLead, isSocialMediaOnlyUser, type SocialMembership } from "@/lib/social-media-permissions";
 
 export type { SocialMembership };
 export {
   hasSocialMediaAccess,
   isSocialMediaLead,
+  isSocialMediaOnlyUser,
   socialClientListWhere,
   canAccessSocialClient,
 } from "@/lib/social-media-permissions";
@@ -14,6 +15,38 @@ export {
 /** The current user's Social Media membership row, or null if they have none (and aren't a company admin). */
 export async function getSocialMembership(userId: string): Promise<SocialMembership | null> {
   return db.socialMediaMember.findUnique({ where: { userId }, select: { isLead: true } });
+}
+
+/** Every user id currently on the Social Media team (regular members and leads alike). */
+export async function getSocialMediaTeamUserIds(): Promise<string[]> {
+  const members = await db.socialMediaMember.findMany({ select: { userId: true } });
+  return members.map((m) => m.userId);
+}
+
+/**
+ * The Social Media team's user ids, but only when this caller is a
+ * team-scoped lead who isn't already a company Admin/Super Admin — a company
+ * admin already sees everything unconditionally and doesn't need broadening,
+ * and a regular (non-lead) member gets no broadening at all. Returns null
+ * whenever there's nothing to widen the caller's own-record visibility with,
+ * so call sites can treat null as "no team scoping applies here."
+ */
+export async function socialMediaTeamScopeFor(user: PermissionUser): Promise<string[] | null> {
+  if (isAdmin(user)) return null;
+  const membership = await getSocialMembership(user.id);
+  if (!isSocialMediaLead(user, membership)) return null;
+  return getSocialMediaTeamUserIds();
+}
+
+/**
+ * One-call guard for routes a Social Media team member (regular or lead,
+ * not a company admin) shouldn't reach at all — e.g. Quotations. Does the
+ * membership lookup itself so callers don't need getSocialMembership wired
+ * through just for this check.
+ */
+export async function isRestrictedFromModule(user: PermissionUser): Promise<boolean> {
+  const membership = await getSocialMembership(user.id);
+  return isSocialMediaOnlyUser(user, membership);
 }
 
 /**

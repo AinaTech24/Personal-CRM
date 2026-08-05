@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { getSocialMembership, isSocialMediaLead } from "@/lib/social-media";
 
-/** Admin-only: who's on the Social Media team. Granting access is an admin action, not a member one. */
+/** Who's on the Social Media team — company admins and the team's own lead can both manage this, not a regular member. */
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const membership = await getSocialMembership(user.id);
+  if (!isSocialMediaLead(user, membership)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const members = await db.socialMediaMember.findMany({
     include: { user: { select: { id: true, name: true, surname: true, email: true } } },
@@ -24,7 +26,9 @@ const bodySchema = z.object({
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const membership = await getSocialMembership(user.id);
+  if (!isSocialMediaLead(user, membership)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

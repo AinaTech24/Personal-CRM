@@ -52,7 +52,7 @@ const HEX = {
 };
 
 const STATUS_HEX: Record<string, string> = {
-  NEW: HEX.primary, CONTACTED: HEX.indigo, QUALIFIED: HEX.emerald, PROPOSAL_SENT: HEX.amber,
+  NEW: HEX.primary, CONTACTED: HEX.indigo, MEETING: HEX.indigo, QUALIFIED: HEX.emerald, PROPOSAL_SENT: HEX.amber,
   NEGOTIATION: HEX.amberLight, WON: HEX.emerald, LOST: HEX.red,
   TODO: HEX.gray, IN_PROGRESS: HEX.amber, REVIEW: HEX.primary, COMPLETED: HEX.emerald, CANCELLED: HEX.red,
   PLANNED: HEX.gray, ACTIVE: HEX.emerald, ON_HOLD: HEX.amber,
@@ -61,7 +61,7 @@ const STATUS_HEX: Record<string, string> = {
 };
 
 const STATUS_ORDER: Record<EntityKey, string[]> = {
-  leads: ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL_SENT", "NEGOTIATION", "WON", "LOST"],
+  leads: ["NEW", "CONTACTED", "MEETING", "QUALIFIED", "PROPOSAL_SENT", "NEGOTIATION", "WON", "LOST"],
   tasks: ["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELLED"],
   projects: ["PLANNED", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"],
   quotations: ["DRAFT", "SENT", "APPROVED", "REJECTED", "EXPIRED"],
@@ -173,7 +173,7 @@ export function DashboardStats({ greetingName = "" }: { greetingName?: string })
   const { socket } = useSocket();
   // This component only renders for admins (see the dashboard page's own
   // check), so the filter's Quotations/Invoices views are always offered here.
-  const { filterButton, panel } = useDashboardActivity(true);
+  const { filterButton, departmentFilterButton, panel, department } = useDashboardActivity(true);
   const { trigger: userViewTrigger, panel: userViewPanel, viewingUser } = useDashboardUserView();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -189,7 +189,9 @@ export function DashboardStats({ greetingName = "" }: { greetingName?: string })
     async (initial = false) => {
       if (initial) setLoading(true);
       try {
-        const res = await fetch("/api/dashboard/stats");
+        const params = new URLSearchParams();
+        if (department) params.set("department", department);
+        const res = await fetch(`/api/dashboard/stats?${params.toString()}`);
         if (res.ok) {
           const data = await res.json();
           setStats(data.stats);
@@ -200,11 +202,14 @@ export function DashboardStats({ greetingName = "" }: { greetingName?: string })
         if (initial) setLoading(false);
       }
     },
-    [router]
+    [router, department]
   );
 
   useEffect(() => {
-    load(true);
+    // Not "initial" after the very first load — a department change should
+    // swap the numbers in place, not flash the full skeleton grid again.
+    load(stats === null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   // Live refresh: any create/update/delete anywhere in the app re-pulls the counts.
@@ -253,6 +258,7 @@ export function DashboardStats({ greetingName = "" }: { greetingName?: string })
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {departmentFilterButton}
           {filterButton}
           {userViewTrigger}
         </div>

@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { getSocialMembership, isSocialMediaLead } from "@/lib/social-media";
 
 const patchSchema = z.object({ isLead: z.boolean() });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const membership = await getSocialMembership(user.id);
+  if (!isSocialMediaLead(user, membership)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { userId } = await params;
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
@@ -28,7 +30,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ us
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const membership = await getSocialMembership(user.id);
+  if (!isSocialMediaLead(user, membership)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { userId } = await params;
   await db.socialMediaMember.deleteMany({ where: { userId } });

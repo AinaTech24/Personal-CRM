@@ -23,6 +23,17 @@ export function isSocialMediaLead(user: PermissionUser, membership: SocialMember
   return isAdmin(user) || !!membership?.isLead;
 }
 
+/**
+ * A Social Media team member (regular or lead) who ISN'T also a company
+ * Admin/Super Admin. Their nav and access are restricted to the curated
+ * Social Media set of modules (Dashboard/Tasks/Leads/Clients/Meetings/
+ * Messages/Content Calendar/My Attendance) — company admins always see
+ * everything, even if they also happen to hold a membership row.
+ */
+export function isSocialMediaOnlyUser(user: PermissionUser, membership: SocialMembership | null): boolean {
+  return !isAdmin(user) && !!membership;
+}
+
 /** A client is visible to a lead/admin unconditionally; a regular member only sees what they created or are assigned. */
 export function socialClientListWhere(user: PermissionUser, membership: SocialMembership | null) {
   if (isSocialMediaLead(user, membership)) return {};

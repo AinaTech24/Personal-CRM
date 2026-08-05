@@ -50,7 +50,7 @@ function matchesSignature(buffer: Buffer, ext: string): boolean {
  * executable) is rejected here rather than stored and later served back with
  * whatever Content-Type its fake extension implies.
  */
-async function readUploadedFile(scope: "tasks" | "projects", entityId: string, file: File) {
+async function readUploadedFile(scope: "tasks" | "projects" | "reports", entityId: string, file: File) {
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new UploadValidationError(`File exceeds the ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB limit`);
   }
@@ -77,6 +77,10 @@ export function saveTaskAttachment(taskId: string, file: File) {
 
 export function saveProjectDocument(projectId: string, file: File) {
   return readUploadedFile("projects", projectId, file);
+}
+
+export function saveReportFile(reportId: string, file: File) {
+  return readUploadedFile("reports", reportId, file);
 }
 
 const MIME_TYPES: Record<string, string> = {

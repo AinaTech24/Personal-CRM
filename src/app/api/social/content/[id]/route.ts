@@ -18,6 +18,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     where: { id },
     include: {
       createdBy: { select: { id: true, name: true } },
+      updatedBy: { select: { id: true, name: true } },
       approvals: { include: { actor: { select: { id: true, name: true } } }, orderBy: { decidedAt: "asc" } },
     },
   });
@@ -56,8 +57,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.hashtags !== undefined && { hashtags: data.hashtags || null }),
       ...(data.platforms !== undefined && { platforms: data.platforms.join(",") }),
       ...(data.scheduledFor !== undefined && { scheduledFor: data.scheduledFor ? new Date(data.scheduledFor) : null }),
+      updatedById: user.id,
     },
   });
+
+  await logSocialClientActivity(access.clientId, user.id, "content_updated", { contentId: id, title: content.title });
 
   return NextResponse.json({ content });
 }

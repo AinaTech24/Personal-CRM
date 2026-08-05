@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageTask } from "@/lib/tasks";
 import { getProjectForUser } from "@/lib/projects";
+import { getSocialMembership, getSocialReportForUser } from "@/lib/social-media";
 import { mimeTypeFor } from "@/lib/uploads";
 
 /** Serves task attachments and project documents straight from their base64 MySQL column. */
@@ -37,6 +38,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
     if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
     fileName = document.fileName;
     data = document.data;
+  } else if (scope === "reports") {
+    const reportFile = await db.socialReportFile.findFirst({ where: { filePath: relativePath } });
+    if (!reportFile) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const membership = await getSocialMembership(user.id);
+    const access = await getSocialReportForUser(user, membership, reportFile.reportId);
+    if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    fileName = reportFile.fileName;
+    data = reportFile.data;
   } else {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Lets the dev server accept requests proxied in from another device on the
+  // LAN (e.g. via nginx at http://<lan-ip>:8080) — without this, Next blocks
+  // dev-only asset/RSC requests whose Origin isn't localhost, which silently
+  // breaks hydration/styling for anyone testing from a different machine.
+  allowedDevOrigins: ["192.168.29.249"],
   async headers() {
     return [
       {

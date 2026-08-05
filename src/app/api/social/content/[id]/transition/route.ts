@@ -49,6 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: {
         stage: toStage,
         ...(toStage === "PUBLISHED" && { publishedAt: new Date() }),
+        updatedById: user.id,
       },
     }),
     db.socialContentApproval.create({
