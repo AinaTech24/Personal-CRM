@@ -145,7 +145,7 @@ function ModuleCard({
  */
 export function useDashboardUserView() {
   const [open, setOpen] = useState(false);
-  const [userListOpen, setUserListOpen] = useState(false);
+  const [expandedGroup, setExpandedGroup] = useState<"users" | "admins" | null>(null);
   const [users, setUsers] = useState<DashboardUser[]>([]);
   const [usersLoaded, setUsersLoaded] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -175,6 +175,8 @@ export function useDashboardUserView() {
   }, [open, usersLoaded]);
 
   const selectedUser = useMemo(() => users.find((u) => u.id === selectedUserId) ?? null, [users, selectedUserId]);
+  const regularUsers = useMemo(() => users.filter((u) => u.role === "DEPARTMENT_USER"), [users]);
+  const administrators = useMemo(() => users.filter((u) => u.role === "ADMIN" || u.role === "SUPER_ADMIN"), [users]);
   const win = useMemo(() => windowFor(period, customDate, from, to), [period, customDate, from, to]);
 
   const fetchAll = useCallback(async () => {
@@ -211,7 +213,7 @@ export function useDashboardUserView() {
 
   function pickUser(id: string | null) {
     setSelectedUserId(id);
-    setUserListOpen(false);
+    setExpandedGroup(null);
     if (!id) setOpen(false);
   }
 
@@ -222,7 +224,7 @@ export function useDashboardUserView() {
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
-        if (!v) setUserListOpen(false);
+        if (!v) setExpandedGroup(null);
       }}
     >
       <Popover.Trigger asChild>
@@ -248,74 +250,94 @@ export function useDashboardUserView() {
                 transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
                 className="z-50 w-72 origin-top-right rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-lg"
               >
-                <p className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">User</p>
+                <p className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">View</p>
 
-                {/* Expands in place rather than opening a nested popover — the
-                    same sub-dropdown pattern the list-page filters use. */}
                 <button
                   type="button"
-                  onClick={() => setUserListOpen((v) => !v)}
-                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary/5"
+                  onClick={() => pickUser(null)}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary/5",
+                    !selectedUserId && "bg-accent/60"
+                  )}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    {selectedUser && <Avatar user={selectedUser} />}
-                    <span className={cn("truncate", !selectedUser && "text-muted-foreground")}>
-                      {selectedUser ? userOptionLabel(selectedUser) : "Everyone (aggregate view)"}
-                    </span>
-                  </span>
-                  <IconChevronDown
-                    className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", userListOpen && "rotate-180")}
-                  />
+                  <span className="text-muted-foreground">Everyone (aggregate view)</span>
+                  {!selectedUserId && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
                 </button>
 
-                <AnimatePresence initial={false}>
-                  {userListOpen && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                      className="overflow-hidden"
+                {(
+                  [
+                    { key: "users" as const, label: "Users", list: regularUsers },
+                    { key: "admins" as const, label: "Administrators", list: administrators },
+                  ]
+                ).map((group) => (
+                  <div key={group.key}>
+                    {/* Expands in place rather than opening a nested popover — the
+                        same sub-dropdown pattern the list-page filters use. */}
+                    <button
+                      type="button"
+                      onClick={() => setExpandedGroup((v) => (v === group.key ? null : group.key))}
+                      className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary/5"
                     >
-                      <div className="max-h-52 overflow-y-auto pb-1">
-                        <button
-                          type="button"
-                          onClick={() => pickUser(null)}
-                          className={cn(
-                            "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-1.5 text-left text-sm hover:bg-primary/5",
-                            !selectedUserId && "bg-accent/60"
-                          )}
-                        >
-                          <span className="text-muted-foreground">Everyone (aggregate view)</span>
-                          {!selectedUserId && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                        </button>
-                        {!usersLoaded && (
-                          <div className="flex flex-col gap-1 px-3 py-2">
-                            <Skeleton className="h-4 w-full" />
-                            <Skeleton className="h-4 w-4/5" />
-                          </div>
+                      <span className="flex min-w-0 items-center gap-2">
+                        {selectedUser && group.list.some((u) => u.id === selectedUser.id) ? (
+                          <>
+                            <Avatar user={selectedUser} />
+                            <span className="truncate">{userOptionLabel(selectedUser)}</span>
+                          </>
+                        ) : (
+                          <span className="truncate">{group.label}</span>
                         )}
-                        {users.map((u) => (
-                          <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => pickUser(u.id)}
-                            className={cn(
-                              "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-1.5 text-left text-sm hover:bg-primary/5",
-                              u.id === selectedUserId && "bg-accent/60"
+                      </span>
+                      <IconChevronDown
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+                          expandedGroup === group.key && "rotate-180"
+                        )}
+                      />
+                    </button>
+
+                    <AnimatePresence initial={false}>
+                      {expandedGroup === group.key && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                          className="overflow-hidden"
+                        >
+                          <div className="max-h-52 overflow-y-auto pb-1">
+                            {!usersLoaded && (
+                              <div className="flex flex-col gap-1 px-3 py-2">
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-4/5" />
+                              </div>
                             )}
-                          >
-                            <span className="flex min-w-0 items-center gap-2">
-                              <Avatar user={u} />
-                              <span className="truncate">{userOptionLabel(u)}</span>
-                            </span>
-                            {u.id === selectedUserId && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                          </button>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                            {usersLoaded && group.list.length === 0 && (
+                              <p className="px-3 py-2 text-xs text-muted-foreground">No one here yet.</p>
+                            )}
+                            {group.list.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => pickUser(u.id)}
+                                className={cn(
+                                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-1.5 text-left text-sm hover:bg-primary/5",
+                                  u.id === selectedUserId && "bg-accent/60"
+                                )}
+                              >
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <Avatar user={u} />
+                                  <span className="truncate">{userOptionLabel(u)}</span>
+                                </span>
+                                {u.id === selectedUserId && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                ))}
 
                 {selectedUserId && (
                   <>

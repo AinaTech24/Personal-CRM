@@ -2,7 +2,7 @@ import type { InputJsonObject } from "@/generated/prisma/internal/prismaNamespac
 import { db } from "@/lib/db";
 import { emitToUser } from "@/lib/socket-emit";
 
-export type NotificationCategory = "leads" | "tasks" | "projects" | "quotations" | "meetings" | "attendance";
+export type NotificationCategory = "leads" | "tasks" | "projects" | "quotations" | "meetings" | "attendance" | "social";
 
 /** Maps every concrete notification `type` to the user-facing category it's toggled under. */
 const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
@@ -17,6 +17,7 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   meeting_invited: "meetings",
   check_in_reminder: "attendance",
   check_out_reminder: "attendance",
+  social_client_assigned: "social",
 };
 
 export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: string; description: string }[] = [
@@ -26,6 +27,7 @@ export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: stri
   { value: "meetings", label: "Meetings", description: "When you're invited to a meeting" },
   { value: "quotations", label: "Quotations", description: "When a quotation you created is approved or rejected" },
   { value: "attendance", label: "Attendance", description: "Reminders to check in or check out before your shift window closes" },
+  { value: "social", label: "Social Media", description: "When a social media client is assigned to you" },
 ];
 
 /**

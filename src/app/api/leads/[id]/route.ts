@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { broadcastLeadChange, canDeleteLead, getLeadForUser } from "@/lib/leads";
+import { getSocialMembership, isSocialMediaOnlyUser, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
 import { notifyUser } from "@/lib/notify";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -43,6 +44,7 @@ const patchSchema = z.object({
   status: z.enum([
     "NEW",
     "CONTACTED",
+    "MEETING",
     "QUALIFIED",
     "PROPOSAL_SENT",
     "NEGOTIATION",
@@ -121,12 +123,42 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
+  // A Social Media team member moving their own lead to "Approval" (WON,
+  // their pipeline's label for it) auto-creates the matching Social Media
+  // client — nobody outside that team ever sees "Approval" as an option, so
+  // this can't fire for an unrelated sales lead. `convertedToClientId` makes
+  // it idempotent: re-saving WON (or saving other fields afterward) never
+  // creates a second client.
+  let convertedClientId: string | null = null;
+  if (data.status === "WON" && before.status !== "WON" && !before.convertedToClientId) {
+    const membership = await getSocialMembership(user.id);
+    if (isSocialMediaOnlyUser(user, membership)) {
+      const client = await db.socialClient.create({
+        data: {
+          name: lead.name,
+          companyName: lead.company,
+          contactPerson: lead.name,
+          phone: lead.phone,
+          email: lead.email,
+          stage: "APPROVAL",
+          assignedToId: lead.assignedToId,
+          createdById: user.id,
+          planNotes: `Auto-converted from lead "${lead.name}" on approval.`,
+        },
+      });
+      await db.lead.update({ where: { id }, data: { convertedToClientId: client.id } });
+      await logSocialClientActivity(client.id, user.id, "created_from_lead", { leadId: id });
+      await broadcastSocialChange("social_client_created", { clientId: client.id });
+      convertedClientId = client.id;
+    }
+  }
+
   broadcastLeadChange("lead_updated", lead);
   if (before.assignedToId && before.assignedToId !== lead.assignedToId) {
     broadcastLeadChange("lead_updated", { ...lead, assignedToId: before.assignedToId, departmentId: before.departmentId });
   }
 
-  return NextResponse.json({ lead });
+  return NextResponse.json({ lead: convertedClientId ? { ...lead, convertedToClientId: convertedClientId } : lead, convertedClientId });
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

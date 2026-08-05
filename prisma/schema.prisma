@@ -30,21 +30,21 @@ model Department {
 }
 
 model User {
-  id                 String      @id @default(cuid())
-  email              String      @unique
-  passwordHash       String
-  name               String
-  surname            String?
+  id                    String      @id @default(cuid())
+  email                 String      @unique
+  passwordHash          String
+  name                  String
+  surname               String?
   // @unique with a nullable String is fine in MySQL — any number of NULL rows
   // are allowed, only two rows sharing the same non-null value would collide.
-  mobile             String?     @unique
-  avatarDataUrl      String?     @db.LongText
-  role               Role        @default(DEPARTMENT_USER)
-  departmentId       String?
-  department         Department? @relation(fields: [departmentId], references: [id])
-  isActive           Boolean     @default(true)
-  resetCode          String? // bcrypt hash of the email login/reset code
-  resetCodeExpiresAt DateTime?
+  mobile                String?     @unique
+  avatarDataUrl         String?     @db.LongText
+  role                  Role        @default(DEPARTMENT_USER)
+  departmentId          String?
+  department            Department? @relation(fields: [departmentId], references: [id])
+  isActive              Boolean     @default(true)
+  resetCode             String? // bcrypt hash of the email login/reset code
+  resetCodeExpiresAt    DateTime?
   // Alternate sign-in: mobile number + 6-digit PIN, alongside email+password.
   // Never required — null until the user (or an admin) sets one.
   pinHash               String? // bcrypt hash of the 6-digit PIN
@@ -79,17 +79,17 @@ model User {
   taskComments    TaskComment[]
   taskAttachments TaskAttachment[]
 
-  projectsCreated      Project[]         @relation("ProjectCreatedBy")
-  projectsAssigned     Project[]         @relation("ProjectAssignedTo")
-  projectMemberships   ProjectMember[]
-  projectDocuments     ProjectDocument[]
-  projectActivities    ProjectActivity[]
-  projectTasksAssigned ProjectTask[]     @relation("ProjectTaskAssignedTo")
-  projectTasksAssignedBy ProjectTask[]   @relation("ProjectTaskAssignedBy")
-  projectTasksCreated    ProjectTask[]   @relation("ProjectTaskCreatedBy")
-  projectSupporting    ProjectSupporter[] @relation("ProjectSupporter")
-  projectTimeEntries   ProjectTimeEntry[] @relation("ProjectTimeEntryUser")
-  projectTimeLogged    ProjectTimeEntry[] @relation("ProjectTimeEntryCreatedBy")
+  projectsCreated        Project[]          @relation("ProjectCreatedBy")
+  projectsAssigned       Project[]          @relation("ProjectAssignedTo")
+  projectMemberships     ProjectMember[]
+  projectDocuments       ProjectDocument[]
+  projectActivities      ProjectActivity[]
+  projectTasksAssigned   ProjectTask[]      @relation("ProjectTaskAssignedTo")
+  projectTasksAssignedBy ProjectTask[]      @relation("ProjectTaskAssignedBy")
+  projectTasksCreated    ProjectTask[]      @relation("ProjectTaskCreatedBy")
+  projectSupporting      ProjectSupporter[] @relation("ProjectSupporter")
+  projectTimeEntries     ProjectTimeEntry[] @relation("ProjectTimeEntryUser")
+  projectTimeLogged      ProjectTimeEntry[] @relation("ProjectTimeEntryCreatedBy")
 
   quotationsCreated  Quotation[]         @relation("QuotationCreatedBy")
   quotationApprovals QuotationApproval[]
@@ -111,6 +111,23 @@ model User {
   messageReactions        MessageReaction[]    @relation("MessageReactionUser")
   pushSubscriptions       PushSubscription[]
   auditLogs               AuditLog[]           @relation("AuditActor")
+
+  socialMediaMembership            SocialMediaMember?
+  socialClientsCreated             SocialClient[]              @relation("SocialClientCreatedBy")
+  socialClientsAssigned            SocialClient[]              @relation("SocialClientAssignedTo")
+  socialContentCreated             SocialContentItem[]         @relation("SocialContentCreatedBy")
+  socialContentUpdated             SocialContentItem[]         @relation("SocialContentUpdatedBy")
+  socialContentApprovals           SocialContentApproval[]
+  socialAdsCreated                 SocialAdCampaign[]          @relation("SocialAdCreatedBy")
+  socialAdsUpdated                 SocialAdCampaign[]          @relation("SocialAdUpdatedBy")
+  socialReportsCreated             SocialMonthlyReport[]       @relation("SocialReportCreatedBy")
+  socialReportsUpdated             SocialMonthlyReport[]       @relation("SocialReportUpdatedBy")
+  socialReportFilesUploaded        SocialReportFile[]          @relation("SocialReportFileUploadedBy")
+  socialClientActivities           SocialClientActivity[]
+  socialPlatformsCreated           SocialPlatformAccount[]     @relation("SocialPlatformCreatedBy")
+  socialPlatformsUpdated           SocialPlatformAccount[]     @relation("SocialPlatformUpdatedBy")
+  socialPlatformCredentialsUpdated SocialPlatformAccount[]     @relation("SocialPlatformCredentialsUpdatedBy")
+  socialCalendarSlotsCreated       SocialContentCalendarSlot[] @relation("SocialCalendarSlotCreatedBy")
 }
 
 /// A browser/device push endpoint, so a user can be notified about a new
@@ -130,8 +147,8 @@ model PushSubscription {
   auth     String @db.Text
 
   /// Labels the row in Settings so a user can tell their devices apart.
-  userAgent String? @db.Text
-  createdAt DateTime @default(now())
+  userAgent  String?   @db.Text
+  createdAt  DateTime  @default(now())
   /// Cleared out when the push service reports the endpoint is dead (404/410).
   lastUsedAt DateTime?
 
@@ -139,17 +156,27 @@ model PushSubscription {
 }
 
 model Invite {
-  id           String      @id @default(cuid())
-  email        String
-  role         Role
-  departmentId String?
-  department   Department? @relation(fields: [departmentId], references: [id])
-  token        String      @unique
-  invitedById  String
-  invitedBy    User        @relation("InvitedBy", fields: [invitedById], references: [id])
-  expiresAt    DateTime
-  acceptedAt   DateTime?
-  createdAt    DateTime    @default(now())
+  id                String      @id @default(cuid())
+  email             String
+  role              Role
+  departmentId      String?
+  department        Department? @relation(fields: [departmentId], references: [id])
+  /// "Social Media (Admin)" in the invite Role picker isn't a real company
+  /// Role — the account is still created as DEPARTMENT_USER, this just tells
+  /// acceptance to also provision a SocialMediaMember(isLead: true) row, so
+  /// full social-media access is granted the moment they accept rather than
+  /// needing a separate admin step afterward.
+  socialMediaAdmin  Boolean     @default(false)
+  /// Same idea as socialMediaAdmin, but for a regular (non-lead) team member —
+  /// provisions SocialMediaMember(isLead: false) on acceptance instead.
+  /// Mutually exclusive with socialMediaAdmin in practice, not enforced here.
+  socialMediaMember Boolean     @default(false)
+  token             String      @unique
+  invitedById       String
+  invitedBy         User        @relation("InvitedBy", fields: [invitedById], references: [id])
+  expiresAt         DateTime
+  acceptedAt        DateTime?
+  createdAt         DateTime    @default(now())
 
   @@index([email])
 }
@@ -202,6 +229,11 @@ model Session {
 enum LeadStatus {
   NEW
   CONTACTED
+  /// Social Media's custom pipeline only (see SOCIAL_MEDIA_LEAD_STATUSES in
+  /// src/components/leads/types.ts) — other departments never see or pick
+  /// this value, but it lives in the same shared Lead table/enum as everyone
+  /// else's leads.
+  MEETING
   QUALIFIED
   PROPOSAL_SENT
   NEGOTIATION
@@ -223,26 +255,32 @@ enum MeetingStatus {
 }
 
 model Lead {
-  id             String         @id @default(cuid())
-  name           String
-  company        String?
-  email          String?
-  phone          String?
-  source         String?
-  product        String?
-  priority       Priority       @default(MEDIUM)
-  status         LeadStatus     @default(NEW)
-  leadArriveDate DateTime?
-  meetingDate    DateTime?
-  meetingStatus  MeetingStatus?
-  assignedToId   String?
-  assignedTo     User?          @relation("LeadAssignedTo", fields: [assignedToId], references: [id])
-  departmentId   String?
-  department     Department?    @relation(fields: [departmentId], references: [id])
-  createdById    String
-  createdBy      User           @relation("LeadCreatedBy", fields: [createdById], references: [id])
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id                  String         @id @default(cuid())
+  name                String
+  company             String?
+  email               String?
+  phone               String?
+  source              String?
+  product             String?
+  priority            Priority       @default(MEDIUM)
+  status              LeadStatus     @default(NEW)
+  leadArriveDate      DateTime?
+  meetingDate         DateTime?
+  meetingStatus       MeetingStatus?
+  assignedToId        String?
+  assignedTo          User?          @relation("LeadAssignedTo", fields: [assignedToId], references: [id])
+  departmentId        String?
+  department          Department?    @relation(fields: [departmentId], references: [id])
+  createdById         String
+  createdBy           User           @relation("LeadCreatedBy", fields: [createdById], references: [id])
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  /// Set once, the first time a Social Media team member moves this lead to
+  /// "Approval" (WON) — auto-creates a SocialClient and records its id here
+  /// so re-saving the same status never creates a second client. Not a
+  /// Prisma relation on purpose: Lead and SocialClient are otherwise
+  /// unrelated domains, this is just a soft pointer for the redirect/link.
+  convertedToClientId String?
 
   notes      LeadNote[]
   activities LeadActivity[]
@@ -412,20 +450,20 @@ model ProjectSupporter {
 /// timestamps: the CRM records effort after the fact, and a day is the unit
 /// people actually report in.
 model ProjectTimeEntry {
-  id        String   @id @default(cuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation("ProjectTimeEntryUser", fields: [userId], references: [id])
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation("ProjectTimeEntryUser", fields: [userId], references: [id])
   /// Date-only: two entries on the same day are separate rows, not merged, so
   /// their descriptions survive.
-  workDate  DateTime @db.Date
+  workDate    DateTime @db.Date
   /// Minutes, not fractional hours — decimal hours accumulate rounding error
   /// across a sum, and "1h 20m" has no exact float representation.
-  minutes   Int
-  description String? @db.Text
+  minutes     Int
+  description String?  @db.Text
   createdById String
-  createdBy   User    @relation("ProjectTimeEntryCreatedBy", fields: [createdById], references: [id])
+  createdBy   User     @relation("ProjectTimeEntryCreatedBy", fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -720,34 +758,34 @@ model CompanyProfile {
  * JWT_SECRET is read by proxy.ts on the edge, where there's no database connection.
  */
 model AppSettings {
-  id        String   @id @default("default")
+  id            String   @id @default("default")
   /**
    * Base URL used to build links in outbound email. Falls back to APP_URL when unset.
    */
-  appUrl    String?
+  appUrl        String?
   /**
    * Sidebar module keys hidden from non-admin users (e.g. ["quotations","invoices"]).
    * Admins always see every module. Null/absent = nothing hidden.
    */
   hiddenModules Json?
-  updatedAt DateTime @updatedAt
+  updatedAt     DateTime @updatedAt
 }
 
 model SmtpSettings {
-  id        String   @id @default("default")
-  host      String?
-  port      Int      @default(587)
-  secure    Boolean  @default(false)
-  username  String?
-  password  String?
-  fromEmail String?
-  fromName  String?  @default("Aina CRM")
+  id                   String   @id @default("default")
+  host                 String?
+  port                 Int      @default(587)
+  secure               Boolean  @default(false)
+  username             String?
+  password             String?
+  fromEmail            String?
+  fromName             String?  @default("Aina CRM")
   /**
    * When true, invites may be sent to public email providers (Gmail, Outlook,
    * iCloud, Yahoo) in addition to @ainatech.in. Off by default.
    */
-  allowExternalInvites Boolean @default(false)
-  updatedAt DateTime @updatedAt
+  allowExternalInvites Boolean  @default(false)
+  updatedAt            DateTime @updatedAt
 }
 
 model Payment {
@@ -926,10 +964,10 @@ model Meeting {
   endsAt      DateTime?
   status      MeetingState @default(SCHEDULED)
   organizerId String
-  organizer   User          @relation("MeetingOrganizer", fields: [organizerId], references: [id])
-  attendees   User[]        @relation("MeetingAttendees")
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  organizer   User         @relation("MeetingOrganizer", fields: [organizerId], references: [id])
+  attendees   User[]       @relation("MeetingAttendees")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   @@index([startsAt])
   @@index([organizerId])
@@ -943,20 +981,20 @@ enum ConversationType {
 }
 
 model Conversation {
-  id          String           @id @default(cuid())
-  type        ConversationType
+  id           String           @id @default(cuid())
+  type         ConversationType
   /// Group name; null for 1:1 direct chats.
-  title       String?
+  title        String?
   /// Group description, shown in Group info.
-  description String?          @db.Text
+  description  String?          @db.Text
   /// Group avatar as a base64 data URL (same storage approach as user avatars).
-  imageDataUrl String?         @db.LongText
+  imageDataUrl String?          @db.LongText
   /// True for the auto-managed "Aina Family" group every user belongs to.
-  isSystem    Boolean          @default(false)
-  createdById String?
-  createdBy   User?            @relation("ConversationCreatedBy", fields: [createdById], references: [id])
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  isSystem     Boolean          @default(false)
+  createdById  String?
+  createdBy    User?            @relation("ConversationCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   members  ConversationMember[]
   messages Message[]
@@ -1086,4 +1124,337 @@ model AuditLog {
   @@index([createdAt])
   @@index([model, recordId])
   @@index([actorId])
+}
+
+// ---------- Social Media Management ----------
+//
+// Restricted to a specific team, not every department user — see
+// SocialMediaMember and src/lib/social-media.ts. Company Admin/Super Admin
+// always have full access without needing a membership row, same as every
+// other module's isAdmin() override.
+
+enum SocialClientStage {
+  ENQUIRY
+  CALLING
+  MEETING
+  PLAN_DISCUSSION
+  APPROVAL
+  ONBOARDED
+}
+
+enum SocialPlatform {
+  FACEBOOK
+  INSTAGRAM
+  LINKEDIN
+  TWITTER
+  YOUTUBE
+}
+
+enum SocialContentType {
+  STATIC_POST
+  CAROUSEL
+  AI_REEL
+  REAL_PERSON_REEL
+}
+
+/// The four fixed columns of the suggested monthly content calendar grid.
+enum SocialCalendarWeekday {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
+/// Upload/production status shown as colored text on a filled calendar
+/// slot — green (DONE), orange (PENDING), red (NOT_UPLOADED, the default).
+enum SocialCalendarSlotStatus {
+  NOT_UPLOADED
+  PENDING
+  DONE
+}
+
+/// One shared enum across all four content types; each type's own ordered
+/// subsequence lives in code (src/lib/social-content-workflow.ts), not here —
+/// static post/carousel, AI reel, and real-person reel each walk a different
+/// subset (e.g. only REAL_PERSON_REEL passes through CLIENT_CLIPS_RECEIVED and
+/// EDITING; only the two reel types start at SCRIPT). DRAFT is legacy — kept
+/// so old rows created before the per-type workflows still resolve to a
+/// value, no longer used as a starting stage for new content.
+enum SocialContentStage {
+  DRAFT
+  SCRIPT
+  SCRIPT_APPROVED
+  SHARED_IN_GROUP
+  APPROVED_TO_PROCEED
+  CLIENT_CLIPS_RECEIVED
+  EDITING
+  IN_PRODUCTION
+  SHARED_FOR_REVIEW
+  APPROVED_FINAL
+  PUBLISHED
+  CANCELLED
+}
+
+enum SocialAdObjective {
+  LEADS
+  REACH
+  FOLLOWERS
+}
+
+enum SocialAdStage {
+  DISCUSSION
+  BUDGET_DURATION
+  TARGETING
+  CONTENT_APPROVAL
+  AD_CREATION
+  GROUP_APPROVAL
+  CAMPAIGN_SETUP
+  RUNNING
+  REPORTING
+  COMPLETED
+  CANCELLED
+}
+
+/// Grants access to the Social Media module — presence of a row is the
+/// access check itself (src/lib/social-media.ts). `isLead` sees and manages
+/// every client instead of just their own.
+model SocialMediaMember {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isLead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model SocialClient {
+  id            String            @id @default(cuid())
+  name          String
+  companyName   String?
+  contactPerson String?
+  phone         String?
+  email         String?
+  stage         SocialClientStage @default(ENQUIRY)
+  planNotes     String?           @db.Text
+  approvedAt    DateTime?
+  onboardedAt   DateTime?
+  assignedToId  String?
+  assignedTo    User?             @relation("SocialClientAssignedTo", fields: [assignedToId], references: [id])
+  createdById   String
+  createdBy     User              @relation("SocialClientCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  /// Manual drag-to-reorder position in the Clients folder grid. Shared
+  /// across the team, not per-viewer; ties (the default 0) fall back to
+  /// createdAt so unordered clients still sort consistently.
+  folderOrder   Int               @default(0)
+
+  platformAccounts SocialPlatformAccount[]
+  contentItems     SocialContentItem[]
+  adCampaigns      SocialAdCampaign[]
+  monthlyReports   SocialMonthlyReport[]
+  activities       SocialClientActivity[]
+  calendarSlots    SocialContentCalendarSlot[]
+
+  @@index([stage])
+  @@index([assignedToId])
+}
+
+/// Tracks which platforms are connected and whether login credentials have
+/// been collected. `password` is stored as plain text, per explicit request —
+/// no hashing or encryption here (unlike User.passwordHash/pinHash, which
+/// stay one-way hashes since those are never meant to come back out).
+model SocialPlatformAccount {
+  id                     String         @id @default(cuid())
+  clientId               String
+  client                 SocialClient   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  platform               SocialPlatform
+  handle                 String?
+  credentialsReceived    Boolean        @default(false)
+  password               String?        @db.Text
+  credentialsUpdatedAt   DateTime?
+  credentialsUpdatedById String?
+  credentialsUpdatedBy   User?          @relation("SocialPlatformCredentialsUpdatedBy", fields: [credentialsUpdatedById], references: [id])
+  notes                  String?        @db.Text
+  createdById            String?
+  createdBy              User?          @relation("SocialPlatformCreatedBy", fields: [createdById], references: [id])
+  updatedById            String?
+  updatedBy              User?          @relation("SocialPlatformUpdatedBy", fields: [updatedById], references: [id])
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  @@unique([clientId, platform])
+}
+
+/// One cell in the suggested monthly content calendar grid (4 weeks x
+/// Monday/Wednesday/Friday/Saturday, per doc section 7). Deliberately a
+/// lightweight planning entry, not a real SocialContentItem — this is a plan
+/// slot ("Static #1", "Reel #2", or a freeform note like "Planning Meeting"),
+/// independent of the Content tab's own DRAFT->PUBLISHED workflow. Display
+/// numbering ("#N") is computed at render time from ordering (week, then
+/// weekday) among same-contentType slots, not stored.
+model SocialContentCalendarSlot {
+  id           String                   @id @default(cuid())
+  clientId     String
+  client       SocialClient             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  year         Int
+  month        Int
+  week         Int
+  weekday      SocialCalendarWeekday
+  contentType  SocialContentType?
+  /// Freeform label, only meaningful when contentType is null (e.g. "Planning Meeting").
+  note         String?
+  /// Overrides the auto-computed "#N" position within this month's same
+  /// contentType (ordered by week/weekday) — null keeps the automatic order.
+  manualNumber Int?
+  status       SocialCalendarSlotStatus @default(NOT_UPLOADED)
+  createdById  String
+  createdBy    User                     @relation("SocialCalendarSlotCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  @@unique([clientId, year, month, week, weekday])
+  @@index([clientId, year, month])
+}
+
+/// One row per piece of content across all four workflows (static post,
+/// carousel, AI reel, real-person reel). No assignedToId — visibility
+/// follows the parent client's ownership, since a client's content is
+/// worked on by whoever's covering that client, not assigned post-by-post.
+model SocialContentItem {
+  id           String             @id @default(cuid())
+  clientId     String
+  client       SocialClient       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type         SocialContentType
+  title        String
+  caption      String?            @db.Text
+  hashtags     String?
+  stage        SocialContentStage @default(DRAFT)
+  /// Comma-separated SocialPlatform values — "publish on all platforms"
+  /// means a single post can target more than one at once.
+  platforms    String
+  scheduledFor DateTime?
+  publishedAt  DateTime?
+  createdById  String
+  createdBy    User               @relation("SocialContentCreatedBy", fields: [createdById], references: [id])
+  updatedById  String?
+  updatedBy    User?              @relation("SocialContentUpdatedBy", fields: [updatedById], references: [id])
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  approvals SocialContentApproval[]
+
+  @@index([clientId])
+  @@index([stage])
+  @@index([type])
+}
+
+/// Append-only stage-transition log, same shape as QuotationApproval.
+model SocialContentApproval {
+  id        String             @id @default(cuid())
+  contentId String
+  content   SocialContentItem  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  actorId   String
+  actor     User               @relation(fields: [actorId], references: [id])
+  fromStage SocialContentStage
+  toStage   SocialContentStage
+  comment   String?            @db.Text
+  decidedAt DateTime           @default(now())
+}
+
+model SocialAdCampaign {
+  id               String            @id @default(cuid())
+  clientId         String
+  client           SocialClient      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name             String
+  objective        SocialAdObjective
+  /// Comma-separated SocialPlatform values, same shape as
+  /// SocialContentItem.platforms — null on ads created before this field.
+  platforms        String?
+  budget           Decimal?          @db.Decimal(12, 2)
+  durationDays     Int?
+  targetAudience   String?           @db.Text
+  location         String?
+  stage            SocialAdStage     @default(DISCUSSION)
+  startedAt        DateTime?
+  endedAt          DateTime?
+  leadsGenerated   Int?
+  reach            Int?
+  cost             Decimal?          @db.Decimal(12, 2)
+  ctr              Decimal?          @db.Decimal(5, 2)
+  conversions      Int?
+  retargetingNotes String?           @db.Text
+  createdById      String
+  createdBy        User              @relation("SocialAdCreatedBy", fields: [createdById], references: [id])
+  updatedById      String?
+  updatedBy        User?             @relation("SocialAdUpdatedBy", fields: [updatedById], references: [id])
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([clientId])
+  @@index([stage])
+}
+
+model SocialMonthlyReport {
+  id                     String       @id @default(cuid())
+  clientId               String
+  client                 SocialClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  year                   Int
+  month                  Int
+  title                  String?
+  description            String?      @db.Text
+  reach                  Int?
+  engagement             Int?
+  followersGained        Int?
+  bestPosts              String?      @db.Text
+  adSpend                Decimal?     @db.Decimal(12, 2)
+  adLeads                Int?
+  adCost                 Decimal?     @db.Decimal(12, 2)
+  adCtr                  Decimal?     @db.Decimal(5, 2)
+  adConversions          Int?
+  insights               String?      @db.Text
+  retargetingSuggestions String?      @db.Text
+  nextMonthPlan          String?      @db.Text
+  reviewedAt             DateTime?
+  createdById            String
+  createdBy              User         @relation("SocialReportCreatedBy", fields: [createdById], references: [id])
+  updatedById            String?
+  updatedBy              User?        @relation("SocialReportUpdatedBy", fields: [updatedById], references: [id])
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  files SocialReportFile[]
+
+  @@unique([clientId, year, month])
+}
+
+/// One uploaded attachment on a monthly report — same base64-in-MySQL shape
+/// as TaskAttachment/ProjectDocument. Multiple files per report; each can be
+/// removed or replaced independently from the report form.
+model SocialReportFile {
+  id           String              @id @default(cuid())
+  reportId     String
+  report       SocialMonthlyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  fileName     String
+  filePath     String
+  data         String              @db.LongText
+  uploadedById String
+  uploadedBy   User                @relation("SocialReportFileUploadedBy", fields: [uploadedById], references: [id])
+  createdAt    DateTime            @default(now())
+
+  @@index([reportId])
+}
+
+model SocialClientActivity {
+  id        String       @id @default(cuid())
+  clientId  String
+  client    SocialClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  actorId   String
+  actor     User         @relation(fields: [actorId], references: [id])
+  action    String
+  meta      Json?
+  createdAt DateTime     @default(now())
+
+  @@index([clientId])
 }

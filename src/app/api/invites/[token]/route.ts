@@ -55,6 +55,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       },
     });
     await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
+    if (invite.socialMediaAdmin) {
+      await tx.socialMediaMember.create({ data: { userId: created.id, isLead: true } });
+    } else if (invite.socialMediaMember) {
+      await tx.socialMediaMember.create({ data: { userId: created.id, isLead: false } });
+    }
     return created;
   });
 

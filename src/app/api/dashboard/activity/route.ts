@@ -17,6 +17,17 @@ function humanize(value: string): string {
   return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * ANDs an extra condition onto a where clause without risking a key clash —
+ * `where` may already carry its own top-level `OR` (from a list-scoping
+ * helper), and the department condition sometimes needs one of its own
+ * (tasks have no departmentId column, so it's "assignee or creator is in
+ * this department"). Wrapping in AND keeps the two independent regardless.
+ */
+function withDepartment<T extends object>(where: T, condition: object | null): T | { AND: [T, object] } {
+  return condition ? { AND: [where, condition] } : where;
+}
+
 interface ActivityUser {
   name: string;
   avatarDataUrl: string | null;
@@ -74,6 +85,12 @@ export async function GET(req: NextRequest) {
   // the param is simply ignored for them and they keep seeing their own data.
   const targetUserId = admin ? req.nextUrl.searchParams.get("userId") : null;
 
+  // Narrows to one department's records instead of everything the caller can
+  // see. Admin-only, same reasoning as targetUserId above — a non-admin
+  // already sees only their own records, so this would otherwise be a way to
+  // peek at a department they don't belong to.
+  const departmentId = admin ? req.nextUrl.searchParams.get("department") : null;
+
   // The interval predicate for whichever date column the module filters on.
   const range: { gte?: Date; lte?: Date } = {};
   if (from && !Number.isNaN(from.getTime())) range.gte = from;
@@ -86,11 +103,14 @@ export async function GET(req: NextRequest) {
 
   if (mod === "leads") {
     const rows = await db.lead.findMany({
-      where: {
-        ...leadListWhere(user),
-        ...(targetUserId && { assignedToId: targetUserId }),
-        ...(hasRange && { createdAt: range }),
-      },
+      where: withDepartment(
+        {
+          ...leadListWhere(user),
+          ...(targetUserId && { assignedToId: targetUserId }),
+          ...(hasRange && { createdAt: range }),
+        },
+        departmentId ? { departmentId } : null
+      ),
       select: { id: true, name: true, company: true, status: true, createdAt: true, assignedTo: userSelect },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -106,11 +126,16 @@ export async function GET(req: NextRequest) {
     }));
   } else if (mod === "tasks") {
     const rows = await db.task.findMany({
-      where: {
-        ...taskListWhere(user),
-        ...(targetUserId && { assignedToId: targetUserId }),
-        ...(hasRange && { dueDate: range }),
-      },
+      // Tasks have no departmentId column — narrow by whichever side (assignee
+      // or creator) belongs to the chosen department instead.
+      where: withDepartment(
+        {
+          ...taskListWhere(user),
+          ...(targetUserId && { assignedToId: targetUserId }),
+          ...(hasRange && { dueDate: range }),
+        },
+        departmentId ? { OR: [{ assignedTo: { departmentId } }, { createdBy: { departmentId } }] } : null
+      ),
       select: { id: true, title: true, status: true, priority: true, dueDate: true, assignedTo: userSelect },
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       take: 100,
@@ -133,7 +158,11 @@ export async function GET(req: NextRequest) {
         ? {}
         : { OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }] };
     const rows = await db.meeting.findMany({
-      where: { ...where, ...(hasRange && { startsAt: range }) },
+      // No departmentId column on meetings either — scoped to the organizer's department.
+      where: withDepartment(
+        { ...where, ...(hasRange && { startsAt: range }) },
+        departmentId ? { organizer: { departmentId } } : null
+      ),
       select: { id: true, title: true, location: true, status: true, startsAt: true, organizer: userSelect },
       orderBy: { startsAt: "asc" },
       take: 100,
@@ -149,17 +178,20 @@ export async function GET(req: NextRequest) {
     }));
   } else if (mod === "projects") {
     const rows = await db.project.findMany({
-      where: {
-        ...projectListWhere(user),
-        ...(targetUserId && {
-          OR: [
-            { assignedToId: targetUserId },
-            { createdById: targetUserId },
-            { members: { some: { userId: targetUserId } } },
-          ],
-        }),
-        ...(hasRange && { createdAt: range }),
-      },
+      where: withDepartment(
+        {
+          ...projectListWhere(user),
+          ...(targetUserId && {
+            OR: [
+              { assignedToId: targetUserId },
+              { createdById: targetUserId },
+              { members: { some: { userId: targetUserId } } },
+            ],
+          }),
+          ...(hasRange && { createdAt: range }),
+        },
+        departmentId ? { departmentId } : null
+      ),
       select: {
         id: true,
         name: true,
@@ -198,7 +230,11 @@ export async function GET(req: NextRequest) {
     if (range.gte) attendanceRange.gte = dateFromKey(istDateKey(range.gte));
     if (range.lte) attendanceRange.lte = dateFromKey(istDateKey(range.lte));
     const rows = await db.attendance.findMany({
-      where: { ...where, ...(hasRange && { date: attendanceRange }) },
+      // No departmentId column on attendance either — scoped via the row's own user.
+      where: withDepartment(
+        { ...where, ...(hasRange && { date: attendanceRange }) },
+        departmentId ? { user: { departmentId } } : null
+      ),
       select: {
         id: true,
         date: true,
@@ -244,10 +280,13 @@ export async function GET(req: NextRequest) {
     // Reachable only by admins (guarded above), so no own-records fallback is
     // needed the way the other modules have one for non-admin callers.
     const rows = await db.quotation.findMany({
-      where: {
-        ...(targetUserId && { createdById: targetUserId }),
-        ...(hasRange && { createdAt: range }),
-      },
+      where: withDepartment(
+        {
+          ...(targetUserId && { createdById: targetUserId }),
+          ...(hasRange && { createdAt: range }),
+        },
+        departmentId ? { departmentId } : null
+      ),
       select: { id: true, quotationNumber: true, clientName: true, status: true, createdAt: true, createdBy: userSelect },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -264,10 +303,13 @@ export async function GET(req: NextRequest) {
   } else if (mod === "invoices") {
     // Reachable only by admins (guarded above).
     const rows = await db.invoice.findMany({
-      where: {
-        ...(targetUserId && { createdById: targetUserId }),
-        ...(hasRange && { createdAt: range }),
-      },
+      where: withDepartment(
+        {
+          ...(targetUserId && { createdById: targetUserId }),
+          ...(hasRange && { createdAt: range }),
+        },
+        departmentId ? { departmentId } : null
+      ),
       select: { id: true, invoiceNumber: true, clientName: true, status: true, createdAt: true, createdBy: userSelect },
       orderBy: { createdAt: "desc" },
       take: 100,

@@ -177,6 +177,15 @@ export function IconChevronRight(props: IconProps) {
   );
 }
 
+export function IconArrowsUpDown(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 21V7M8 7 4 11M8 7l4 4" />
+      <path d="M16 3v14M16 17l4-4M16 17l-4-4" />
+    </svg>
+  );
+}
+
 export function IconCheck(props: IconProps) {
   return (
     <svg {...base(props)}>
@@ -304,6 +313,15 @@ export function IconShare(props: IconProps) {
       <circle cx="6" cy="12" r="2.5" />
       <circle cx="18" cy="19" r="2.5" />
       <path d="M8.2 10.8 15.8 6.4M8.2 13.2l7.6 4.4" />
+    </svg>
+  );
+}
+
+export function IconMegaphone(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m3 11 18-5v12L3 13v-2Z" />
+      <path d="M11.6 16.8a2.5 2.5 0 1 1-4.9-1" />
     </svg>
   );
 }
@@ -474,6 +492,14 @@ export function IconFile(props: IconProps) {
     <svg {...base(props)}>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
+    </svg>
+  );
+}
+
+export function IconFolder(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
     </svg>
   );
 }

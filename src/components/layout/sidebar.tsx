@@ -43,6 +43,7 @@ const mainNav: NavItem[] = [
   { href: "/quotations", label: "Quotations", icon: IconQuotations },
   { href: "/invoices", label: "Invoices", icon: IconInvoices },
   { href: "/attendance", label: "My Attendance", icon: IconClock },
+  { href: "/activity", label: "My Activity", icon: IconHistory },
 ];
 
 const adminNav: NavItem[] = [
@@ -56,11 +57,22 @@ const adminNav: NavItem[] = [
 ];
 
 /**
+ * Social Media is deliberately absent from every sidebar now — not company
+ * admins, not the team's own members or lead. Its pages/API/data are
+ * untouched; this only pulls the navigation entry points. A Social Media
+ * team member still doesn't get the global hidden-modules toggle applied to
+ * them (see restrictToSocialMedia below) since Quotations access for that
+ * team is still enforced server-side, independent of what the sidebar shows.
+ */
+const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
+
+/**
  * Presentational sidebar rail. Its width is driven by the parent grid column
  * (animated via grid-template-columns), so this only fills and clips its column.
  */
 export function Sidebar({
   isAdmin,
+  restrictToSocialMedia,
   collapsed,
   onToggle,
   /** Rendered inside the mobile drawer: always visible, always expanded. */
@@ -68,6 +80,7 @@ export function Sidebar({
   onNavigate,
 }: {
   isAdmin: boolean;
+  restrictToSocialMedia: boolean;
   collapsed: boolean;
   onToggle: () => void;
   mobile?: boolean;
@@ -102,9 +115,21 @@ export function Sidebar({
     };
   }, [isAdmin]);
 
-  const visibleMainNav = isAdmin
-    ? mainNav
-    : mainNav.filter((item) => item.href === "/" || !hiddenModules.includes(item.href.replace(/^\//, "")));
+  let visibleMainNav = isAdmin
+    ? [...mainNav]
+    : mainNav.filter(
+        // "My Activity" is a personal record of one's own actions, not a
+        // toggleable module — an admin hiding it would just be hiding the
+        // one place a regular user can see their own history.
+        (item) => item.href === "/" || item.href === "/activity" || !hiddenModules.includes(item.href.replace(/^\//, ""))
+      );
+
+  // Social Media team members (regular or lead, not a company admin) still
+  // don't get Quotations — that's enforced server-side independent of the
+  // sidebar — but no Social Media entry point is ever added to their nav.
+  if (restrictToSocialMedia) {
+    visibleMainNav = visibleMainNav.filter((item) => !SOCIAL_MEDIA_EXCLUDED_HREFS.includes(item.href));
+  }
 
   // Unread chat messages, for the badge on Messages. Driven by the socket so it
   // reacts the moment something arrives; the poll is a backstop for a dropped

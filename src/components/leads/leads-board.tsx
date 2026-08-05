@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { userOptionLabel } from "@/lib/user-display";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
 import { AnimatePresence, motion } from "framer-motion";
@@ -20,8 +21,9 @@ import { LeadDetailDialog } from "@/components/leads/lead-detail-dialog";
 import { LeadsListView } from "@/components/leads/leads-list-view";
 import { useSearch } from "@/components/providers/search-provider";
 import { useSocket } from "@/components/providers/socket-provider";
+import { useToast } from "@/components/providers/toast-provider";
 import {
-  LEAD_STATUSES,
+  getLeadStatusOptions,
   MEETING_STATUS_OPTIONS,
   PRIORITY_OPTIONS,
   type AssignableUser,
@@ -41,6 +43,7 @@ interface Department {
 interface CurrentUser {
   id: string;
   role: "SUPER_ADMIN" | "ADMIN" | "DEPARTMENT_USER";
+  socialMedia?: { hasAccess: boolean; isLead: boolean };
 }
 
 type ViewMode = "pipeline" | "list";
@@ -58,6 +61,8 @@ const PRIORITY_VARIANT = {
 } as const;
 
 export function LeadsBoard() {
+  const router = useRouter();
+  const toast = useToast();
   const { query } = useSearch();
   const { socket } = useSocket();
   const [leads, setLeads] = useState<LeadSummary[]>([]);
@@ -133,6 +138,10 @@ export function LeadsBoard() {
   }, [socket]);
 
   const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
+  // A Social Media team member (regular or lead) who isn't also a company
+  // admin gets that team's own stage pipeline on this same Leads module.
+  const isSocialMediaOnly = !isAdmin && !!currentUser?.socialMedia?.hasAccess;
+  const statusOptions = useMemo(() => getLeadStatusOptions(isSocialMediaOnly), [isSocialMediaOnly]);
 
   const filteredLeads = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -172,7 +181,7 @@ export function LeadsBoard() {
       label: "Status",
       value: filters.status,
       onChange: (v) => setFilters((f) => ({ ...f, status: v })),
-      options: LEAD_STATUSES,
+      options: statusOptions,
     },
     {
       key: "priority",
@@ -204,6 +213,15 @@ export function LeadsBoard() {
 
     if (!res.ok) {
       setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status: current.status } : l)));
+      return;
+    }
+
+    // Social Media's "Approval" (WON) auto-creates the matching client —
+    // jump straight to its folder instead of leaving the lead card behind.
+    const data = await res.json().catch(() => null);
+    if (data?.convertedClientId) {
+      toast.success("Lead approved", "Converted to a client — opening its folder now.");
+      router.push(`/social-media/${data.convertedClientId}`);
     }
   }
 
@@ -337,6 +355,7 @@ export function LeadsBoard() {
       {!loading && view === "list" && (
         <LeadsListView
           leads={filteredLeads}
+          statusOptions={statusOptions}
           onSelect={handleLeadClick}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelected}
@@ -355,7 +374,7 @@ export function LeadsBoard() {
           className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden focus:outline-none"
           onDragOver={handleBoardDragOver}
         >
-          {LEAD_STATUSES.map((col) => {
+          {statusOptions.map((col) => {
             const columnLeads = filteredLeads.filter((l) => l.status === col.value);
             const isDragOver = dragOverStatus === col.value;
             const allColumnSelected = columnLeads.length > 0 && columnLeads.every((l) => selectedIds.has(l.id));
@@ -479,6 +498,7 @@ export function LeadsBoard() {
         leadId={selectedLead?.id ?? null}
         initialSummary={selectedLead}
         assignableUsers={assignableUsers}
+        statusOptions={statusOptions}
         onClose={() => setSelectedLead(null)}
         onChanged={loadLeads}
         onDeleted={() => {

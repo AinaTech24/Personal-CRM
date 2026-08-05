@@ -5,13 +5,15 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { broadcastLeadChange, canDeleteLead, leadListWhere } from "@/lib/leads";
 import { notifyUser } from "@/lib/notify";
+import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const teamUserIds = await socialMediaTeamScopeFor(user);
   const leads = await db.lead.findMany({
-    where: leadListWhere(user),
+    where: leadListWhere(user, teamUserIds),
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },

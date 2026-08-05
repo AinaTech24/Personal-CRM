@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { HoverCheckbox } from "@/components/ui/checkbox";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
-import { LEAD_STATUSES, MEETING_STATUS_OPTIONS, type LeadSummary } from "@/components/leads/types";
+import { MEETING_STATUS_OPTIONS, type LeadStatus, type LeadSummary } from "@/components/leads/types";
 import { cn } from "@/lib/utils";
 
 const PRIORITY_VARIANT = {
@@ -13,8 +13,8 @@ const PRIORITY_VARIANT = {
   URGENT: "destructive",
 } as const;
 
-function statusLabel(status: string) {
-  return LEAD_STATUSES.find((s) => s.value === status)?.label ?? status;
+function statusLabel(status: string, statusOptions: { value: LeadStatus; label: string }[]) {
+  return statusOptions.find((s) => s.value === status)?.label ?? status;
 }
 
 function meetingStatusLabel(status: string | null) {
@@ -24,12 +24,15 @@ function meetingStatusLabel(status: string | null) {
 
 export function LeadsListView({
   leads,
+  statusOptions,
   onSelect,
   selectedIds,
   onToggleSelect,
   rowActions,
 }: {
   leads: LeadSummary[];
+  /** The viewer's stage list/labels — Social Media's own pipeline, or the default company one. */
+  statusOptions: { value: LeadStatus; label: string }[];
   onSelect: (lead: LeadSummary) => void;
   selectedIds?: Set<string>;
   onToggleSelect: (id: string) => void;
@@ -75,7 +78,7 @@ export function LeadsListView({
                 <td className="px-4 py-2.5 font-medium">{lead.name}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{lead.company ?? "—"}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{lead.product ?? "—"}</td>
-                <td className="px-4 py-2.5 text-muted-foreground">{statusLabel(lead.status)}</td>
+                <td className="px-4 py-2.5 text-muted-foreground">{statusLabel(lead.status, statusOptions)}</td>
                 <td className="px-4 py-2.5">
                   <Badge variant={PRIORITY_VARIANT[lead.priority]}>{lead.priority}</Badge>
                 </td>

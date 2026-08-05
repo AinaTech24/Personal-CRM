@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { IconFilter, IconCheck, IconChevronDown, IconLayoutGrid, IconQuotations, IconInvoices } from "@/components/icons";
+import { IconFilter, IconCheck, IconChevronDown, IconLayoutGrid, IconQuotations, IconInvoices, IconBuilding } from "@/components/icons";
 import { DASHBOARD_MODULES, type DashboardModuleKey } from "@/lib/dashboard-modules";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +39,11 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: "upcoming", label: "Upcoming" },
   { key: "range", label: "Date range" },
 ];
+
+interface DepartmentOption {
+  id: string;
+  name: string;
+}
 
 interface ActivityItem {
   id: string;
@@ -77,10 +82,15 @@ function windowFor(period: Period, from: string, to: string): { from?: string; t
 }
 
 /** Fetches one module's items for a window and tags each with its module. */
-async function fetchModule(key: ModuleKey, win: { from?: string; to?: string }): Promise<FeedItem[]> {
+async function fetchModule(
+  key: ModuleKey,
+  win: { from?: string; to?: string },
+  departmentId?: string | null
+): Promise<FeedItem[]> {
   const params = new URLSearchParams({ module: key });
   if (win.from) params.set("from", win.from);
   if (win.to) params.set("to", win.to);
+  if (departmentId) params.set("department", departmentId);
   const res = await fetch(`/api/dashboard/activity?${params.toString()}`);
   if (!res.ok) return [];
   const data = await res.json();
@@ -106,15 +116,34 @@ export function useDashboardActivity(isAdmin = false) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [departmentMenuOpen, setDepartmentMenuOpen] = useState(false);
   const [view, setView] = useState<ViewKey>("all");
   const [period, setPeriod] = useState<Period>("today");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [department, setDepartment] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchableModules = isAdmin ? MODULES : DASHBOARD_MODULES;
   const views = useMemo(() => [ALL_VIEW, ...fetchableModules], [fetchableModules]);
+
+  // Only an admin can narrow the feed to one department — everyone else
+  // already sees just their own records, so there's nothing to fetch.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    fetch("/api/departments")
+      .then((r) => r.json())
+      .then((d) => {
+        if (active) setDepartments(Array.isArray(d.departments) ? d.departments : []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isAdmin]);
 
   const win = useMemo(() => windowFor(period, from, to), [period, from, to]);
 
@@ -126,7 +155,7 @@ export function useDashboardActivity(isAdmin = false) {
     setLoading(true);
     try {
       if (view === "all") {
-        const perModule = await Promise.all(fetchableModules.map((m) => fetchModule(m.key, win)));
+        const perModule = await Promise.all(fetchableModules.map((m) => fetchModule(m.key, win, department)));
         const merged = perModule.flat().sort((a, b) => {
           if (!a.date && !b.date) return 0;
           if (!a.date) return 1;
@@ -135,7 +164,7 @@ export function useDashboardActivity(isAdmin = false) {
         });
         setItems(merged.slice(0, ALL_VIEW_LIMIT));
       } else {
-        setItems(await fetchModule(view, win));
+        setItems(await fetchModule(view, win, department));
       }
     } finally {
       setLoading(false);
@@ -144,7 +173,7 @@ export function useDashboardActivity(isAdmin = false) {
     // by isAdmin), so it's intentionally left out to avoid refetching on every
     // unrelated render — isAdmin itself is a stable prop from the caller.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, win, isAdmin]);
+  }, [view, win, isAdmin, department]);
 
   useEffect(() => {
     fetchItems();
@@ -152,14 +181,15 @@ export function useDashboardActivity(isAdmin = false) {
 
   const selectedMeta = view === "all" ? ALL_VIEW : MODULES.find((m) => m.key === view)!;
   const periodLabel = PERIODS.find((p) => p.key === period)!.label;
-  const isDefault = view === "all" && period === "today";
+  const departmentLabel = department ? departments.find((d) => d.id === department)?.name : null;
+  const isDefault = view === "all" && period === "today" && !department;
 
   const filterButton = (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button
           type="button"
-          aria-label={`Filter: ${selectedMeta.label}, ${periodLabel}`}
+          aria-label={`Filter: ${selectedMeta.label}, ${periodLabel}${departmentLabel ? `, ${departmentLabel}` : ""}`}
           className={cn(
             "flex h-9 w-9 items-center justify-center rounded-md border border-input transition-colors hover:bg-primary/5",
             !isDefault && "border-primary text-primary"
@@ -235,12 +265,87 @@ export function useDashboardActivity(isAdmin = false) {
     </Popover.Root>
   );
 
+  // A separate icon button, not folded into the funnel filter above — its own
+  // clearly-labeled entry point for narrowing every module in this feed down
+  // to one department. Admin/Super Admin only; a regular user already sees
+  // just their own records everywhere, so there's nothing here for them.
+  const departmentFilterButton = isAdmin ? (
+    <Popover.Root open={departmentMenuOpen} onOpenChange={setDepartmentMenuOpen}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          aria-label={`Department: ${departmentLabel ?? "All departments"}`}
+          className={cn(
+            "flex h-9 w-9 items-center justify-center rounded-md border border-input transition-colors hover:bg-primary/5",
+            department && "border-primary text-primary"
+          )}
+        >
+          <IconBuilding className="h-4 w-4" />
+        </button>
+      </Popover.Trigger>
+      <AnimatePresence>
+        {departmentMenuOpen && (
+          <Popover.Portal forceMount>
+            <Popover.Content asChild align="end" sideOffset={6}>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                className="z-50 w-56 origin-top-right rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-lg"
+              >
+                <p className="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Department</p>
+                <div className="grid grid-cols-1 gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDepartment(null);
+                      setDepartmentMenuOpen(false);
+                    }}
+                    className={cn(
+                      "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary/5",
+                      !department && "bg-accent/60"
+                    )}
+                  >
+                    All departments
+                    {!department && <IconCheck className="h-3.5 w-3.5 text-primary" />}
+                  </button>
+                  {departments.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => {
+                        setDepartment(d.id);
+                        setDepartmentMenuOpen(false);
+                      }}
+                      className={cn(
+                        "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-primary/5",
+                        department === d.id && "bg-accent/60"
+                      )}
+                    >
+                      {d.name}
+                      {department === d.id && <IconCheck className="h-3.5 w-3.5 text-primary" />}
+                    </button>
+                  ))}
+                  {departments.length === 0 && (
+                    <p className="px-2 py-1.5 text-sm text-muted-foreground">No departments yet.</p>
+                  )}
+                </div>
+              </motion.div>
+            </Popover.Content>
+          </Popover.Portal>
+        )}
+      </AnimatePresence>
+    </Popover.Root>
+  ) : null;
+
   const panel = (
     <Card className="overflow-hidden">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <p className="flex items-center gap-2 text-sm font-medium">
           <selectedMeta.icon className="h-4 w-4 text-muted-foreground" />
           {selectedMeta.label} · {periodLabel}
+          {departmentLabel && <> · {departmentLabel}</>}
           {items && <span className="text-xs text-muted-foreground">({items.length})</span>}
         </p>
         <div className="flex items-center gap-3">
@@ -250,6 +355,7 @@ export function useDashboardActivity(isAdmin = false) {
               onClick={() => {
                 setView("all");
                 setPeriod("today");
+                setDepartment(null);
               }}
               className="text-xs text-muted-foreground hover:text-foreground"
             >
@@ -402,5 +508,5 @@ export function useDashboardActivity(isAdmin = false) {
     </Card>
   );
 
-  return { filterButton, panel, active: !isDefault };
+  return { filterButton, departmentFilterButton, panel, active: !isDefault, department };
 }

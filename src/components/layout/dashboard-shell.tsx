@@ -15,12 +15,14 @@ const STORAGE_KEY = "aina-sidebar-collapsed";
  */
 export function DashboardShell({
   isAdmin,
+  restrictToSocialMedia,
   userId,
   name,
   email,
   children,
 }: {
   isAdmin: boolean;
+  restrictToSocialMedia: boolean;
   userId: string;
   name: string;
   email: string;
@@ -68,7 +70,12 @@ export function DashboardShell({
           surfaces while you're somewhere else in the CRM. */}
       <MessageToaster meId={userId} />
 
-      <Sidebar isAdmin={isAdmin} collapsed={collapsed} onToggle={toggle} />
+      <Sidebar
+        isAdmin={isAdmin}
+        restrictToSocialMedia={restrictToSocialMedia}
+        collapsed={collapsed}
+        onToggle={toggle}
+      />
       <div className="flex min-w-0 flex-col overflow-hidden">
         <Topbar name={name} email={email} isAdmin={isAdmin} onOpenMenu={() => setMobileOpen(true)} />
         <main className="flex-1 overflow-y-auto p-4 pb-[calc(1rem+var(--safe-bottom,0px))] sm:p-6 sm:pb-[calc(1.5rem+var(--safe-bottom,0px))]">
@@ -90,6 +97,7 @@ export function DashboardShell({
       >
         <Sidebar
           isAdmin={isAdmin}
+          restrictToSocialMedia={restrictToSocialMedia}
           collapsed={false}
           onToggle={() => setMobileOpen(false)}
           mobile

@@ -1,6 +1,7 @@
 export type LeadStatus =
   | "NEW"
   | "CONTACTED"
+  | "MEETING"
   | "QUALIFIED"
   | "PROPOSAL_SENT"
   | "NEGOTIATION"
@@ -80,6 +81,26 @@ export const LEAD_STATUSES: { value: LeadStatus; label: string }[] = [
   { value: "WON", label: "Won" },
   { value: "LOST", label: "Lost" },
 ];
+
+/**
+ * Social Media's own pipeline for the same shared Leads module — different
+ * labels, no Proposal Sent/Negotiation/Lost steps (those don't apply to
+ * their onboarding process), plus a Meeting stage the default pipeline
+ * doesn't have. Same LeadStatus enum/table underneath; other departments'
+ * leads are unaffected and still use LEAD_STATUSES.
+ */
+export const SOCIAL_MEDIA_LEAD_STATUSES: { value: LeadStatus; label: string }[] = [
+  { value: "NEW", label: "Lead Inquiry" },
+  { value: "CONTACTED", label: "Calling" },
+  { value: "MEETING", label: "Meeting" },
+  { value: "QUALIFIED", label: "Plan Discussion" },
+  { value: "WON", label: "Approval" },
+];
+
+/** Which stage list/labels a viewer should see — Social Media's own pipeline, or the default company one. */
+export function getLeadStatusOptions(isSocialMediaOnly: boolean): { value: LeadStatus; label: string }[] {
+  return isSocialMediaOnly ? SOCIAL_MEDIA_LEAD_STATUSES : LEAD_STATUSES;
+}
 
 export const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
   { value: "LOW", label: "Low" },
