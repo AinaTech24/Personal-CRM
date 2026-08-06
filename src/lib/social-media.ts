@@ -39,6 +39,20 @@ export async function socialMediaTeamScopeFor(user: PermissionUser): Promise<str
 }
 
 /**
+ * Whether `user` may mark/edit/approve another user's attendance: a company
+ * Admin/Super Admin always can (their existing, unrestricted access); a
+ * Social Media lead can, but only for someone on their own team — attendance
+ * has no other per-record ownership concept (no creator/assignee) to widen
+ * from, so this checks team membership directly rather than reusing a
+ * lib/attendance.ts helper the way leads/tasks/projects do.
+ */
+export async function canManageAttendanceFor(user: PermissionUser, targetUserId: string): Promise<boolean> {
+  if (isAdmin(user)) return true;
+  const teamUserIds = await socialMediaTeamScopeFor(user);
+  return !!teamUserIds && teamUserIds.includes(targetUserId);
+}
+
+/**
  * One-call guard for routes a Social Media team member (regular or lead,
  * not a company admin) shouldn't reach at all — e.g. Quotations. Does the
  * membership lookup itself so callers don't need getSocialMembership wired

@@ -4,20 +4,28 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
+import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
   attendees: { select: { id: true, name: true, email: true }, orderBy: { name: "asc" as const } },
 };
 
-/** List meetings the user organizes or attends (admins see all), newest first. */
+/**
+ * List meetings the user organizes or attends (admins see all), newest
+ * first. A Social Media lead additionally sees every meeting organized by,
+ * or attended by, anyone on their team.
+ */
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const where = isAdmin(user)
-    ? {}
-    : { OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }] };
+  const teamUserIds = await socialMediaTeamScopeFor(user);
+  const or: object[] = [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }];
+  if (teamUserIds && teamUserIds.length > 0) {
+    or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
+  }
+  const where = isAdmin(user) ? {} : { OR: or };
 
   const meetings = await db.meeting.findMany({
     where,

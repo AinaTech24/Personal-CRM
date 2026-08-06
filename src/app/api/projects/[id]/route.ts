@@ -131,7 +131,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const access = await getProjectForUser(user, id);
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!canDeleteProject(user, access)) {
+  if (!(await canDeleteProject(user, access))) {
     return NextResponse.json({ error: "Only the creator or an admin can delete this project" }, { status: 403 });
   }
 

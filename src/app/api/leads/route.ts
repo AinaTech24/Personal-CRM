@@ -99,7 +99,8 @@ export async function DELETE(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
   const leads = await db.lead.findMany({ where: { id: { in: parsed.data.ids } } });
-  const deletable = leads.filter((l) => canDeleteLead(user, l));
+  const deletableFlags = await Promise.all(leads.map((l) => canDeleteLead(user, l)));
+  const deletable = leads.filter((_l, i) => deletableFlags[i]);
 
   if (deletable.length > 0) {
     await db.lead.deleteMany({ where: { id: { in: deletable.map((l) => l.id) } } });

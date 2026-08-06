@@ -4,13 +4,15 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { broadcastTaskChange, canDeleteTask, taskListWhere } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
+import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const teamUserIds = await socialMediaTeamScopeFor(user);
   const tasks = await db.task.findMany({
-    where: taskListWhere(user),
+    where: taskListWhere(user, teamUserIds),
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
@@ -80,7 +82,8 @@ export async function DELETE(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
   const tasks = await db.task.findMany({ where: { id: { in: parsed.data.ids } } });
-  const deletable = tasks.filter((t) => canDeleteTask(user, t));
+  const deletableFlags = await Promise.all(tasks.map((t) => canDeleteTask(user, t)));
+  const deletable = tasks.filter((_t, i) => deletableFlags[i]);
 
   if (deletable.length > 0) {
     await db.task.deleteMany({ where: { id: { in: deletable.map((t) => t.id) } } });
