@@ -21,6 +21,7 @@ import {
   IconChevronLeft,
   IconGrid,
   IconHistory,
+  IconFolder,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,13 +58,14 @@ const adminNav: NavItem[] = [
 ];
 
 /**
- * Social Media is deliberately absent from every sidebar now — not company
- * admins, not the team's own members or lead. Its pages/API/data are
- * untouched; this only pulls the navigation entry points. A Social Media
- * team member still doesn't get the global hidden-modules toggle applied to
- * them (see restrictToSocialMedia below) since Quotations access for that
- * team is still enforced server-side, independent of what the sidebar shows.
+ * Social Media has no admin-facing entry point in any sidebar (no company-
+ * admin link, no "Team" console link — that's managed from Users & Invites
+ * instead) — but a team member still needs some way to reach their own
+ * client list day to day, so this one link survives for them specifically.
  */
+const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: IconFolder };
+
+/** Modules a Social Media team member (regular or lead) never sees, even if an admin hasn't globally hidden them. */
 const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
 
 /**
@@ -124,11 +126,15 @@ export function Sidebar({
         (item) => item.href === "/" || item.href === "/activity" || !hiddenModules.includes(item.href.replace(/^\//, ""))
       );
 
-  // Social Media team members (regular or lead, not a company admin) still
-  // don't get Quotations — that's enforced server-side independent of the
-  // sidebar — but no Social Media entry point is ever added to their nav.
+  // Social Media team members (regular or lead, not a company admin) don't
+  // get Quotations — enforced server-side too, independent of the sidebar —
+  // and get "Clients" (their own name for the same SocialClient records)
+  // right after Leads, so they have a way back into their own work. No
+  // other Social Media entry point is added to their nav.
   if (restrictToSocialMedia) {
     visibleMainNav = visibleMainNav.filter((item) => !SOCIAL_MEDIA_EXCLUDED_HREFS.includes(item.href));
+    const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
+    visibleMainNav.splice(leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1, 0, clientsNavItem);
   }
 
   // Unread chat messages, for the badge on Messages. Driven by the socket so it
