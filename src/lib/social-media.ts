@@ -39,6 +39,27 @@ export async function socialMediaTeamScopeFor(user: PermissionUser): Promise<str
 }
 
 /**
+ * The Social Media team's user ids, when the caller may legitimately narrow
+ * a list down to just this team — an Admin/Super Admin, or a Social Media
+ * lead (isSocialMediaLead already treats any company admin as a lead, so
+ * this covers both in one check). Returns null for anyone else.
+ *
+ * This is the inverse of socialMediaTeamScopeFor: that one *widens* a lead's
+ * own-record visibility without touching an Admin's already-unrestricted
+ * {} where-clause. This one *narrows* — it's for the Social Media Team
+ * console's Leads/Tasks/Meetings/Projects tabs, which explicitly ask for the
+ * team-only view via a `scope=social-media` query param. Without it, an
+ * Admin opening those tabs would see every record in the company (their
+ * normal, correct behavior everywhere else) instead of just this team's,
+ * because their {} bypass has no team concept built in.
+ */
+export async function socialMediaTeamOnlyScopeFor(user: PermissionUser): Promise<string[] | null> {
+  const membership = await getSocialMembership(user.id);
+  if (!isSocialMediaLead(user, membership)) return null;
+  return getSocialMediaTeamUserIds();
+}
+
+/**
  * Whether `user` may mark/edit/approve another user's attendance: a company
  * Admin/Super Admin always can (their existing, unrestricted access); a
  * Social Media lead can, but only for someone on their own team — attendance

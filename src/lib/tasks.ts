@@ -43,8 +43,15 @@ export async function canDeleteTask(user: PermissionUser, task: { createdById: s
  * assignee. `teamUserIds`, when given (a Social Media lead's own team, from
  * socialMediaTeamScopeFor), additionally widens this to every task created
  * or assigned to anyone on that team.
+ *
+ * `teamOnly` forces the team-scoped clause even for an Admin, bypassing
+ * their usual `{}` — for the Social Media Team console's Tasks tab, a
+ * narrower, team-only view regardless of who's looking.
  */
-export function taskListWhere(user: PermissionUser, teamUserIds?: string[] | null) {
+export function taskListWhere(user: PermissionUser, teamUserIds?: string[] | null, teamOnly?: boolean) {
+  if (teamOnly && teamUserIds) {
+    return { OR: [{ createdById: { in: teamUserIds } }, { assignedToId: { in: teamUserIds } }] };
+  }
   if (isAdmin(user)) return {};
   const or: object[] = [{ createdById: user.id }, { assignedToId: user.id }];
   if (teamUserIds && teamUserIds.length > 0) {

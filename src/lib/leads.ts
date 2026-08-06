@@ -42,8 +42,15 @@ export async function canDeleteLead(user: PermissionUser, lead: { createdById: s
  * or assigned by anyone on that team — so a Social Media lead sees their
  * team's leads regardless of department, without gaining the company-wide
  * `{}` an Admin gets.
+ *
+ * `teamOnly` does the opposite: it *forces* the team-scoped clause even for
+ * an Admin, bypassing their usual `{}` — for the Social Media Team console's
+ * Leads tab, which is a narrower, team-only view regardless of who's looking.
  */
-export function leadListWhere(user: PermissionUser, teamUserIds?: string[] | null) {
+export function leadListWhere(user: PermissionUser, teamUserIds?: string[] | null, teamOnly?: boolean) {
+  if (teamOnly && teamUserIds) {
+    return { OR: [{ assignedToId: { in: teamUserIds } }, { createdById: { in: teamUserIds } }] };
+  }
   if (isSuperAdmin(user) || isAdmin(user)) return {};
   const or: object[] = [
     { departmentId: user.departmentId },
@@ -79,17 +86,28 @@ export function broadcastLeadChange(
  * department-scoped, so any dropdown can offer anyone. `role` rides along so the
  * UI can badge admins and super admins; the caller decides how to show it.
  *
- * The `opts` argument is kept for call-site compatibility but no longer changes
- * the result — the list is always the full active roster.
+ * The `allActive` half of `opts` is kept for call-site compatibility but no
+ * longer changes the result — the list is always the full active roster.
+ * `minimal` does still matter: it drops `avatarDataUrl`, a base64 image that
+ * can run tens to hundreds of KB per user, for callers (a plain name/role
+ * picker like the Clients "Assigned to" dropdown) that never render it —
+ * fetching it there was pure wasted bandwidth on every page load.
  */
-export async function assignableUsersFor(user: PermissionUser, opts?: { allActive?: boolean }) {
-  // Kept in the signature so existing call sites (which pass a user and a scope)
-  // still type-check, but the result no longer depends on either.
+export async function assignableUsersFor(user: PermissionUser, opts?: { allActive?: boolean; minimal?: boolean }) {
+  // allActive kept in the signature so existing call sites still type-check.
   void user;
-  void opts;
+  void opts?.allActive;
   return db.user.findMany({
     where: { isActive: true },
-    select: { id: true, name: true, surname: true, email: true, departmentId: true, avatarDataUrl: true, role: true },
+    select: {
+      id: true,
+      name: true,
+      surname: true,
+      email: true,
+      departmentId: true,
+      role: true,
+      ...(opts?.minimal ? {} : { avatarDataUrl: true }),
+    },
     orderBy: { name: "asc" },
   });
 }

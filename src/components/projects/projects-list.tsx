@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { userOptionLabel } from "@/lib/user-display";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -45,7 +45,8 @@ function statusLabel(status: string) {
   return status.replace("_", " ");
 }
 
-export function ProjectsList() {
+export function ProjectsList({ scope }: { scope?: "social-media" } = {}) {
+  const projectsUrl = scope === "social-media" ? "/api/projects?scope=social-media" : "/api/projects";
   const router = useRouter();
   const { query } = useSearch();
   const { socket } = useSocket();
@@ -66,17 +67,17 @@ export function ProjectsList() {
     availability: string | null;
   }>({ assignee: null, status: null, department: null, availability: null });
 
-  async function loadProjects() {
-    const res = await fetch("/api/projects");
+  const loadProjects = useCallback(async () => {
+    const res = await fetch(projectsUrl);
     const data = await res.json();
     if (res.ok) setProjects(data.projects);
-  }
+  }, [projectsUrl]);
 
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     try {
       const [projectsRes, usersRes, meRes] = await Promise.all([
-        fetch("/api/projects"),
+        fetch(projectsUrl),
         fetch("/api/users/assignable"),
         fetch("/api/auth/me"),
       ]);
@@ -98,11 +99,11 @@ export function ProjectsList() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [projectsUrl]);
 
   useEffect(() => {
     loadAll();
-  }, []);
+  }, [loadAll]);
 
   useEffect(() => {
     if (!socket) return;
@@ -115,7 +116,7 @@ export function ProjectsList() {
       socket.off("project_updated", onProjectChange);
       socket.off("project_deleted", onProjectChange);
     };
-  }, [socket]);
+  }, [socket, loadProjects]);
 
   const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
 

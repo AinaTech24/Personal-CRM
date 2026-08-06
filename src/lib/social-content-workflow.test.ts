@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { stagesFor, stageLabel, nextStage, isValidTransition } from "./social-content-workflow";
 
 describe("stagesFor", () => {
-  it("static post and carousel share the same 5-stage design-and-approval sequence", () => {
-    const expected = ["SHARED_IN_GROUP", "APPROVED_TO_PROCEED", "IN_PRODUCTION", "APPROVED_FINAL", "PUBLISHED"];
+  it("static post and carousel share the same 6-stage content-and-approval sequence", () => {
+    const expected = ["DRAFT", "SHARED_IN_GROUP", "APPROVED_TO_PROCEED", "IN_PRODUCTION", "APPROVED_FINAL", "PUBLISHED"];
     expect(stagesFor("STATIC_POST")).toEqual(expected);
     expect(stagesFor("CAROUSEL")).toEqual(expected);
   });
@@ -27,6 +27,13 @@ describe("stagesFor", () => {
 });
 
 describe("stageLabel", () => {
+  it("labels DRAFT as Content for posts/carousels (the workflow's own first step), Draft otherwise", () => {
+    expect(stageLabel("STATIC_POST", "DRAFT")).toBe("Content");
+    expect(stageLabel("CAROUSEL", "DRAFT")).toBe("Content");
+    expect(stageLabel("AI_REEL", "DRAFT")).toBe("Draft");
+    expect(stageLabel("REAL_PERSON_REEL", "DRAFT")).toBe("Draft");
+  });
+
   it("labels the shared IN_PRODUCTION stage differently per type", () => {
     expect(stageLabel("STATIC_POST", "IN_PRODUCTION")).toBe("Creative design");
     expect(stageLabel("CAROUSEL", "IN_PRODUCTION")).toBe("Carousel design");
@@ -44,6 +51,7 @@ describe("stageLabel", () => {
 
 describe("nextStage", () => {
   it("walks a static post through its whole sequence", () => {
+    expect(nextStage("STATIC_POST", "DRAFT")).toBe("SHARED_IN_GROUP");
     expect(nextStage("STATIC_POST", "SHARED_IN_GROUP")).toBe("APPROVED_TO_PROCEED");
     expect(nextStage("STATIC_POST", "APPROVED_TO_PROCEED")).toBe("IN_PRODUCTION");
     expect(nextStage("STATIC_POST", "IN_PRODUCTION")).toBe("APPROVED_FINAL");

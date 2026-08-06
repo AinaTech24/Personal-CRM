@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { userOptionLabel } from "@/lib/user-display";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
@@ -60,7 +60,8 @@ const PRIORITY_VARIANT = {
   URGENT: "destructive",
 } as const;
 
-export function LeadsBoard() {
+export function LeadsBoard({ scope }: { scope?: "social-media" } = {}) {
+  const leadsUrl = scope === "social-media" ? "/api/leads?scope=social-media" : "/api/leads";
   const router = useRouter();
   const toast = useToast();
   const { query } = useSearch();
@@ -86,17 +87,17 @@ export function LeadsBoard() {
   const { containerRef: scrollContainerRef, onDragOver: handleBoardDragOver, stop: stopAutoScroll } =
     useDragAutoScroll<HTMLDivElement>();
 
-  async function loadLeads() {
-    const res = await fetch("/api/leads");
+  const loadLeads = useCallback(async () => {
+    const res = await fetch(leadsUrl);
     const data = await res.json();
     if (res.ok) setLeads(data.leads);
-  }
+  }, [leadsUrl]);
 
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     try {
       const [leadsRes, usersRes, meRes] = await Promise.all([
-        fetch("/api/leads"),
+        fetch(leadsUrl),
         fetch("/api/users/assignable"),
         fetch("/api/auth/me"),
       ]);
@@ -118,11 +119,11 @@ export function LeadsBoard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [leadsUrl]);
 
   useEffect(() => {
     loadAll();
-  }, []);
+  }, [loadAll]);
 
   useEffect(() => {
     if (!socket) return;
@@ -135,12 +136,14 @@ export function LeadsBoard() {
       socket.off("lead_updated", onLeadChange);
       socket.off("lead_deleted", onLeadChange);
     };
-  }, [socket]);
+  }, [socket, loadLeads]);
 
   const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
   // A Social Media team member (regular or lead) who isn't also a company
-  // admin gets that team's own stage pipeline on this same Leads module.
-  const isSocialMediaOnly = !isAdmin && !!currentUser?.socialMedia?.hasAccess;
+  // admin gets that team's own stage pipeline on this same Leads module —
+  // and so does an admin viewing it here specifically via the Team console
+  // (scope="social-media"), since every lead in view uses that pipeline.
+  const isSocialMediaOnly = scope === "social-media" || (!isAdmin && !!currentUser?.socialMedia?.hasAccess);
   const statusOptions = useMemo(() => getLeadStatusOptions(isSocialMediaOnly), [isSocialMediaOnly]);
 
   const filteredLeads = useMemo(() => {

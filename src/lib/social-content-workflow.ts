@@ -10,8 +10,8 @@ import type { SocialContentType, SocialContentStage } from "@/generated/prisma/e
  * shape of decision).
  */
 const SEQUENCES: Record<SocialContentType, SocialContentStage[]> = {
-  STATIC_POST: ["SHARED_IN_GROUP", "APPROVED_TO_PROCEED", "IN_PRODUCTION", "APPROVED_FINAL", "PUBLISHED"],
-  CAROUSEL: ["SHARED_IN_GROUP", "APPROVED_TO_PROCEED", "IN_PRODUCTION", "APPROVED_FINAL", "PUBLISHED"],
+  STATIC_POST: ["DRAFT", "SHARED_IN_GROUP", "APPROVED_TO_PROCEED", "IN_PRODUCTION", "APPROVED_FINAL", "PUBLISHED"],
+  CAROUSEL: ["DRAFT", "SHARED_IN_GROUP", "APPROVED_TO_PROCEED", "IN_PRODUCTION", "APPROVED_FINAL", "PUBLISHED"],
   AI_REEL: ["SCRIPT", "SCRIPT_APPROVED", "IN_PRODUCTION", "SHARED_FOR_REVIEW", "APPROVED_FINAL", "PUBLISHED"],
   REAL_PERSON_REEL: [
     "SCRIPT",
@@ -39,7 +39,11 @@ export function stagesFor(type: SocialContentType): SocialContentStage[] {
 export function stageLabel(type: SocialContentType, stage: SocialContentStage): string {
   switch (stage) {
     case "DRAFT":
-      return "Draft";
+      // The static post/carousel workflow's own first step — the content
+      // (caption/creative brief) gets written here before it's shared in the
+      // group for approval. Not used by either reel workflow, which starts
+      // at a script instead.
+      return type === "STATIC_POST" || type === "CAROUSEL" ? "Content" : "Draft";
     case "SCRIPT":
       return "Script";
     case "SCRIPT_APPROVED":

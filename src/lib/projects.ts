@@ -39,8 +39,15 @@ export async function getProjectForUser(user: PermissionUser, projectId: string)
  * they're a member. `teamUserIds`, when given (a Social Media lead's own
  * team, from socialMediaTeamScopeFor), additionally widens this to every
  * project created by, or with a member from, that team.
+ *
+ * `teamOnly` forces the team-scoped clause even for an Admin, bypassing
+ * their usual `{}` — for the Social Media Team console's Projects tab, a
+ * narrower, team-only view regardless of who's looking.
  */
-export function projectListWhere(user: PermissionUser, teamUserIds?: string[] | null) {
+export function projectListWhere(user: PermissionUser, teamUserIds?: string[] | null, teamOnly?: boolean) {
+  if (teamOnly && teamUserIds) {
+    return { OR: [{ createdById: { in: teamUserIds } }, { members: { some: { userId: { in: teamUserIds } } } }] };
+  }
   if (isAdmin(user)) return {};
   const or: object[] = [
     { departmentId: user.departmentId ?? "__none__" },

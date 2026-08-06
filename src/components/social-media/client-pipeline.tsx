@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IconChevronDown, IconExternalLink } from "@/components/icons";
 import { stageLabel } from "@/lib/social-content-workflow";
-import type { SocialContentStage, SocialContentType } from "@/generated/prisma/enums";
+import { adStageLabel } from "@/lib/social-ad-workflow";
+import type { SocialAdStage, SocialContentStage, SocialContentType } from "@/generated/prisma/enums";
 import { cn } from "@/lib/utils";
 
 interface PipelineContentItem {
@@ -19,11 +20,29 @@ interface PipelineContentItem {
   updatedAt: string;
 }
 
+interface PipelineAdCampaign {
+  id: string;
+  name: string;
+  stage: SocialAdStage;
+  updatedAt: string;
+}
+
+interface PipelineReport {
+  id: string;
+  year: number;
+  month: number;
+  title: string | null;
+  reviewedAt: string | null;
+  updatedAt: string;
+}
+
 interface PipelineClient {
   id: string;
   name: string;
   companyName: string | null;
   contentItems: PipelineContentItem[];
+  adCampaigns: PipelineAdCampaign[];
+  monthlyReports: PipelineReport[];
 }
 
 const TYPE_LABEL: Record<SocialContentType, string> = {
@@ -33,20 +52,24 @@ const TYPE_LABEL: Record<SocialContentType, string> = {
   REAL_PERSON_REEL: "Real Person Reel",
 };
 
-/** Everything published/uploaded reads as a settled "done" green; everything still moving reads neutral — the summary line is meant to answer "what's still in flight", not distinguish every stage by color. */
-function stageVariant(stage: SocialContentStage): "success" | "outline" {
-  return stage === "PUBLISHED" ? "success" : "outline";
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Everything published/uploaded/completed reads as a settled "done" green; everything still moving reads neutral — the summary line is meant to answer "what's still in flight", not distinguish every stage by color. */
+function stageVariant(stage: SocialContentStage | SocialAdStage): "success" | "outline" {
+  return stage === "PUBLISHED" || stage === "COMPLETED" ? "success" : "outline";
 }
 
 /**
- * Per-client breakdown of where every content item (reel, post, carousel)
- * currently sits in its workflow — backed by GET /api/social/pipeline,
- * which is lead-only (a company Admin/Super Admin always qualifies too, see
+ * Per-client breakdown of every content item (reel, post, carousel), ad
+ * campaign, and monthly report, each with its current stage — a collapsed
+ * summary badge row per client, expanding to the full Content/Ads/Reports
+ * breakdown on click. Backed by GET /api/social/pipeline, which is lead-only
+ * (a company Admin/Super Admin always qualifies too, see
  * social-media-permissions.ts) since it aggregates across every client
- * regardless of who owns it. Shared as-is between the Social Media Team
- * console (its own tab) and the company admin dashboard (its own section)
- * — same component, same data, two different places someone with the
- * right access might look for it.
+ * regardless of who owns it. Shared as-is across three places someone with
+ * the right access might look for it: the Social Media Team console's own
+ * tab, the company admin dashboard, and a non-admin Social Media lead's own
+ * dashboard.
  */
 export function ClientPipeline() {
   const [clients, setClients] = useState<PipelineClient[] | null>(null);
@@ -142,21 +165,57 @@ export function ClientPipeline() {
             </button>
 
             {isOpen && (
-              <CardContent className="flex flex-col gap-2 border-t border-border pt-3">
-                {client.contentItems.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">{TYPE_LABEL[item.type]}</p>
-                    </div>
-                    <Badge variant={stageVariant(item.stage)} className="shrink-0">
-                      {stageLabel(item.type, item.stage)}
-                    </Badge>
+              <CardContent className="flex flex-col gap-4 border-t border-border pt-3">
+                {client.contentItems.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Content</p>
+                    {client.contentItems.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{item.title}</p>
+                          <p className="text-xs text-muted-foreground">{TYPE_LABEL[item.type]}</p>
+                        </div>
+                        <Badge variant={stageVariant(item.stage)} className="shrink-0">
+                          {stageLabel(item.type, item.stage)}
+                        </Badge>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {client.adCampaigns.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ads</p>
+                    {client.adCampaigns.map((ad) => (
+                      <div key={ad.id} className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
+                        <p className="min-w-0 truncate font-medium">{ad.name}</p>
+                        <Badge variant={stageVariant(ad.stage)} className="shrink-0">
+                          {adStageLabel(ad.stage)}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {client.monthlyReports.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reports</p>
+                    {client.monthlyReports.map((report) => (
+                      <div key={report.id} className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
+                        <p className="min-w-0 truncate font-medium">
+                          {report.title || `${MONTH_ABBR[report.month - 1]} ${report.year}`}
+                        </p>
+                        <Badge variant={report.reviewedAt ? "success" : "outline"} className="shrink-0">
+                          {report.reviewedAt ? "Reviewed" : "Pending review"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <Link
                   href={`/social-media/${client.id}`}
-                  className="mt-1 flex items-center gap-1 self-start text-xs font-medium text-primary hover:underline"
+                  className="flex items-center gap-1 self-start text-xs font-medium text-primary hover:underline"
                 >
                   Open {client.name}
                   <IconExternalLink className="h-3 w-3" />
