@@ -88,12 +88,89 @@ function floorScalarValue(k: unknown, floor: number) {
  * Stroke width, relative to canvas size, used as a floor so every Lottie
  * icon reads at roughly the same visual weight instead of whatever the
  * source file happened to ship with (this pack ranges from 5 to 22.5 on an
- * identical 576-unit canvas). Originally matched the static Icon* set's own
- * ratio (1.75/24) exactly, but multi-curve icons like the notification bell
- * looked heavy-handed/blobby at that weight once every curve doubled or
- * tripled in thickness — this is deliberately lighter than a literal match.
+ * identical 576-unit canvas). Tuned by bracketing: a literal match of the
+ * static Icon* set's own ratio (1.75/24, ~42 here) made multi-curve icons
+ * like the notification bell look heavy-handed/blobby; dropping to ~20 to
+ * fix that then read as too thin on simpler icons (Search, the theme
+ * toggle). This sits at the midpoint of that feedback.
  */
-const REFERENCE_STROKE_RATIO = 20 / 576;
+const REFERENCE_STROKE_RATIO = 30 / 576;
+
+function collectVertices(shapes: unknown, out: [number, number][]) {
+  if (!Array.isArray(shapes)) return;
+  for (const shape of shapes as Record<string, unknown>[]) {
+    if (shape.ty === "sh" && shape.ks) {
+      const k = (shape.ks as LottieScalar).k;
+      const frames = Array.isArray(k) ? k : [k];
+      for (const frame of frames as Record<string, unknown>[]) {
+        const v = (frame.v as [number, number][] | undefined) ?? (frame.s as { v?: [number, number][] } | undefined)?.v;
+        if (Array.isArray(v)) for (const pt of v) out.push(pt);
+      }
+    }
+    if (shape.ty === "el" && shape.p && shape.s) {
+      const p = (shape.p as LottieScalar).k as number[] | undefined;
+      const sz = (shape.s as LottieScalar).k as number[] | undefined;
+      if (Array.isArray(p) && Array.isArray(sz)) {
+        out.push([p[0] - sz[0] / 2, p[1] - sz[1] / 2]);
+        out.push([p[0] + sz[0] / 2, p[1] + sz[1] / 2]);
+      }
+    }
+    if (Array.isArray(shape.it)) collectVertices(shape.it, out);
+  }
+}
+
+const TARGET_FILL_RATIO = 0.72;
+const MAX_CONTENT_ZOOM = 2.2;
+
+/**
+ * How much to crop the SVG's viewBox in toward canvas center to bring this
+ * icon's own drawn content up to a consistent fraction of the frame.
+ * Some icons in this pack draw their glyph across a fifth of their own
+ * 576-unit canvas (the bell in Notifications.json: ~19%) while others use
+ * nearly all of it (Meetings.json: ~91%) — at an identical container size
+ * the sparser ones read visibly smaller even though nothing about the
+ * container changed. Deliberately centers on the CANVAS's own center, not
+ * the shape's bounding-box center — several icons' individual layers have
+ * off-center anchors (this pack composites each icon from many small
+ * independently-anchored shape layers), so a bbox built from each layer's
+ * absolute position came out nonsensical, in one case exceeding the canvas
+ * entirely. Every icon observed in this pack is roughly canvas-centered
+ * overall even where individual pieces aren't, so this simpler, sturdier
+ * measure — width/height span of every vertex, position-independent, so it
+ * can't produce the same nonsense — is used instead. Returns 1 (no crop)
+ * for anything already at or above the target, and for anything with no
+ * directly-readable shape data to measure.
+ */
+function contentZoom(data: Record<string, unknown>): number {
+  const canvasSize = typeof data.w === "number" ? data.w : 576;
+  const points: [number, number][] = [];
+  for (const layer of (data.layers as Record<string, unknown>[] | undefined) ?? []) {
+    collectVertices(layer.shapes, points);
+  }
+  for (const asset of (data.assets as Record<string, unknown>[] | undefined) ?? []) {
+    for (const layer of (asset.layers as Record<string, unknown>[] | undefined) ?? []) {
+      collectVertices(layer.shapes, points);
+    }
+  }
+  if (points.length === 0) return 1;
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+  const ratio = Math.max(width, height) / canvasSize;
+  if (!Number.isFinite(ratio) || ratio <= 0) return 1;
+  return Math.min(Math.max(TARGET_FILL_RATIO / ratio, 1), MAX_CONTENT_ZOOM);
+}
+
+/** SVG viewBox string cropped in toward canvas center by `zoom`; undefined (native, uncropped) when zoom is 1. */
+function viewBoxForZoom(data: Record<string, unknown>, zoom: number): string | undefined {
+  if (zoom <= 1) return undefined;
+  const w = typeof data.w === "number" ? data.w : 576;
+  const h = typeof data.h === "number" ? data.h : 576;
+  const croppedW = w / zoom;
+  const croppedH = h / zoom;
+  return `${(w - croppedW) / 2} ${(h - croppedH) / 2} ${croppedW} ${croppedH}`;
+}
 
 function restyleShapes(shapes: unknown, targetColor: [number, number, number], strokeFloor: number) {
   if (!Array.isArray(shapes)) return;
@@ -178,12 +255,18 @@ export function LottieIcon({
   const { resolvedTheme } = useTheme();
   const [rawData, setRawData] = useState<Record<string, unknown> | null>(null);
   const [coloredData, setColoredData] = useState<Record<string, unknown> | null>(null);
+  const [viewBoxSize, setViewBoxSize] = useState<string | undefined>(undefined);
   const lottieRef = useRef<LottieRefCurrentProps>(null);
 
   useEffect(() => {
     let cancelled = false;
     loadAnimation(src).then((json) => {
-      if (!cancelled) setRawData(json);
+      if (!cancelled) {
+        setRawData(json);
+        // Pure geometry — doesn't depend on theme/highlight, computed once
+        // per source file rather than alongside the recolor effect below.
+        setViewBoxSize(viewBoxForZoom(json, contentZoom(json)));
+      }
     });
     return () => {
       cancelled = true;
@@ -231,7 +314,7 @@ export function LottieIcon({
         animationData={coloredData}
         autoplay={false}
         loop={playing}
-        rendererSettings={{ viewBoxOnly: true, preserveAspectRatio: "xMidYMid meet" }}
+        rendererSettings={{ viewBoxOnly: true, preserveAspectRatio: "xMidYMid meet", viewBoxSize }}
         style={{ width: "100%", height: "100%" }}
       />
     </span>

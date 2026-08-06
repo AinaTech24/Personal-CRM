@@ -15,6 +15,8 @@ interface ToastItem {
   onClick?: () => void;
   /** Leading visual — a sender's photo, say, in place of the variant icon. */
   avatarDataUrl?: string | null;
+  /** Pops `avatarDataUrl` in with a bouncier spring instead of riding in flat with the rest of the card — for a small one-off celebratory icon (check-in/out), not a routine avatar photo. */
+  iconAnimate?: boolean;
 }
 
 interface ToastInput {
@@ -24,6 +26,7 @@ interface ToastInput {
   /** Makes the toast clickable; runs, then dismisses it. */
   onClick?: () => void;
   avatarDataUrl?: string | null;
+  iconAnimate?: boolean;
 }
 
 interface ToastContextValue {
@@ -133,11 +136,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   )}
                 >
                   {t.avatarDataUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <motion.img
                       src={t.avatarDataUrl}
                       alt=""
                       className={cn("h-6 w-6 shrink-0 rounded-full object-cover", t.description && "mt-0.5")}
+                      initial={t.iconAnimate ? { scale: 0, rotate: -25 } : false}
+                      animate={t.iconAnimate ? { scale: 1, rotate: 0 } : undefined}
+                      transition={t.iconAnimate ? { type: "spring", stiffness: 500, damping: 15, delay: 0.08 } : undefined}
                     />
                   ) : (
                     <span
