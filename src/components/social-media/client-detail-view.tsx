@@ -22,7 +22,7 @@ import {
   DialogFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { SkeletonForm } from "@/components/ui/skeleton";
+import { Skeleton, SkeletonForm } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -333,6 +333,58 @@ function StageEditToggle({
   );
 }
 
+/**
+ * Shaped like the real page below it (back-link, header card, tab bar, a
+ * handful of record cards) rather than a generic centered form — the
+ * previous skeleton (SkeletonForm) bore no resemblance to this layout at
+ * all, so the page visibly jumped the moment the real data arrived.
+ */
+function ClientDetailSkeleton() {
+  return (
+    <div className="flex flex-col gap-5" aria-hidden>
+      <Skeleton className="h-4 w-28" />
+
+      <Card>
+        <CardContent className="flex flex-wrap items-start justify-between gap-4 p-5">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-6 w-40" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+            <Skeleton className="h-3.5 w-32" />
+            <Skeleton className="h-3 w-56" />
+            <Skeleton className="h-3 w-48" />
+          </div>
+          <Skeleton className="h-8 w-16" />
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-4">
+          {["Platforms", "Content", "Ads", "Monthly Reports", "Content Calendar", "Activity"].map((label) => (
+            <Skeleton key={label} className="h-5 w-20" />
+          ))}
+        </div>
+        <Skeleton className="mb-1.5 h-9 w-9 shrink-0 rounded-md" />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {Array.from({ length: 3 }, (_, i) => (
+          <Card key={i}>
+            <CardContent className="flex items-center justify-between gap-4 p-3.5">
+              <div className="flex flex-col gap-1.5">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-3 w-48" />
+              </div>
+              <Skeleton className="h-4 w-4 shrink-0" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function SocialClientDetailView({ clientId }: { clientId: string }) {
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
@@ -371,11 +423,7 @@ export function SocialClientDetailView({ clientId }: { clientId: string }) {
   }, [clientId]);
 
   if (loading) {
-    return (
-      <div className="flex min-h-[55vh] flex-1 items-center justify-center">
-        <SkeletonForm fields={6} />
-      </div>
-    );
+    return <ClientDetailSkeleton />;
   }
   if (notFound || !client) {
     return (
