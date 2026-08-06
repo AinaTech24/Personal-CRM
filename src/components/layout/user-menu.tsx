@@ -66,7 +66,12 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={avatar} alt="Profile" className="h-full w-full rounded-full object-contain" />
               ) : (
-                <LottieIcon src="/icons/Profile.json" size={16} playing={hovering} />
+                <LottieIcon
+                  src="/icons/Profile.json"
+                  size={20}
+                  playing={hovering}
+                  colorClassName="text-primary-foreground"
+                />
               )}
             </button>
           </DropdownMenu.Trigger>

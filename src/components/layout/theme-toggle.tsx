@@ -20,13 +20,13 @@ export function ThemeToggle() {
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
-        className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-primary/5"
+        className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
         aria-label="Toggle theme"
       >
         {theme === "dark" ? (
-          <LottieIcon src="/icons/Sun.json" size={16} playing={hovering} />
+          <LottieIcon src="/icons/Sun.json" size={20} playing={hovering} highlighted={hovering} />
         ) : (
-          <LottieIcon src="/icons/Moon.json" size={16} playing={hovering} />
+          <LottieIcon src="/icons/Moon.json" size={20} playing={hovering} highlighted={hovering} />
         )}
       </button>
     </Tooltip>

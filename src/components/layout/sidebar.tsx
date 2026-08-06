@@ -25,25 +25,37 @@ import { cn } from "@/lib/utils";
 interface NavItem {
   href: string;
   label: string;
-  // `hovering` is only ever set (and only ever read) by a Lottie-backed
-  // icon — a static Icon* simply ignores the prop it doesn't declare.
-  icon: React.ComponentType<{ className?: string; hovering?: boolean }>;
+  // `hovering`/`highlighted` are only ever set (and only ever read) by a
+  // Lottie-backed icon — a static Icon* simply ignores props it doesn't
+  // declare; it gets both effects for free via `stroke="currentColor"`.
+  icon: React.ComponentType<{ className?: string; hovering?: boolean; highlighted?: boolean }>;
 }
 
 /**
  * Wraps a Lottie animation (see lottie-icon.tsx) so it can slot into
  * NavItem.icon exactly like a static SVG component — static at rest, plays
- * for as long as the row it's part of is hovered. `hovering` is threaded in
- * from the row itself (NavLinkItem below), not tracked here, so hovering
- * anywhere on the row — not just the 16px icon — triggers the animation.
+ * for as long as the row it's part of is hovered, and recolors to match
+ * whatever shade the row's own label text is currently in (muted at rest,
+ * full foreground once hovered or on the active route) so it "highlights"
+ * the same way a static icon's `currentColor` stroke already does. Both are
+ * threaded in from the row itself (NavLinkItem below), not tracked here, so
+ * hovering anywhere on the row — not just the icon glyph — triggers it.
  * Only the icons an animated replacement has actually been provided for use
  * this; everything else still uses its static Icon*.
  */
 function lottieNavIcon(src: string) {
-  return function NavIcon({ className, hovering }: { className?: string; hovering?: boolean }) {
-    // Matches the h-4 w-4 (16px) every static Icon* renders at here — Lottie
+  return function NavIcon({
+    className,
+    hovering,
+    highlighted,
+  }: {
+    className?: string;
+    hovering?: boolean;
+    highlighted?: boolean;
+  }) {
+    // Matches the h-5 w-5 (20px) every static Icon* renders at here — Lottie
     // needs an explicit pixel size rather than relying on the className alone.
-    return <LottieIcon src={src} size={16} className={className} playing={hovering} />;
+    return <LottieIcon src={src} size={20} className={className} playing={hovering} highlighted={highlighted} />;
   };
 }
 
@@ -51,12 +63,12 @@ function lottieNavIcon(src: string) {
  * Every static Icon* spreads its full props object onto the underlying
  * `<svg>` (see icons/index.tsx's `base()`) so its caller can pass through
  * arbitrary SVG attributes — which means an unwrapped static icon would leak
- * `hovering` straight onto the DOM as an invalid boolean attribute. This
- * strips it before the icon ever sees it, so every NavItem.icon can be
- * called identically regardless of which kind it is.
+ * `hovering`/`highlighted` straight onto the DOM as invalid boolean
+ * attributes. This strips them before the icon ever sees them, so every
+ * NavItem.icon can be called identically regardless of which kind it is.
  */
 function staticNavIcon(Icon: React.ComponentType<{ className?: string }>) {
-  return function NavIcon({ className }: { className?: string; hovering?: boolean }) {
+  return function NavIcon({ className }: { className?: string; hovering?: boolean; highlighted?: boolean }) {
     return <Icon className={className} />;
   };
 }
@@ -109,7 +121,10 @@ const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
  * would remount here, losing the very hover state this exists to hold.
  * Hover is tracked on the whole row and forwarded to item.icon as
  * `hovering`, so a Lottie-backed icon animates the moment the pointer
- * enters anywhere on the link, not just its own 16px glyph.
+ * enters anywhere on the link, not just its own glyph. `highlighted`
+ * (hovering or the active route) is forwarded alongside it, matching
+ * exactly when the row's own label text switches from muted to foreground,
+ * so the icon "lights up" the same way the text does.
  */
 function NavLinkItem({
   item,
@@ -149,7 +164,7 @@ function NavLinkItem({
         )}
       >
         <span className="relative shrink-0">
-          <item.icon className="h-4 w-4" hovering={hovering} />
+          <item.icon className="h-5 w-5" hovering={hovering} highlighted={hovering || active} />
           {badgeCount > 0 &&
             (isCount ? (
               // Collapsed, the rail is too narrow for a number, so the icon

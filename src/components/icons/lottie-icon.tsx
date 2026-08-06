@@ -20,15 +20,17 @@ function loadAnimation(src: string): Promise<Record<string, unknown>> {
 }
 
 /**
- * The actual color the app is currently rendering `text-muted-foreground`
+ * The actual color the app is currently rendering a given `text-*` utility
  * as — read off a throwaway probe element rather than the raw CSS variable,
  * so this works regardless of what color space the theme defines it in
  * (oklch/hsl/hex/…): the browser always normalizes a computed `color` to
- * `rgb(...)`. Re-read whenever the theme changes.
+ * `rgb(...)`. Pass "text-muted-foreground" for the icon's resting shade,
+ * "text-foreground" for its hovered/active one — the same two classes every
+ * surrounding nav label already switches between.
  */
-function readMutedForegroundRgb(): [number, number, number] {
+function readColorRgb(className: string): [number, number, number] {
   const probe = document.createElement("span");
-  probe.className = "text-muted-foreground";
+  probe.className = className;
   probe.style.position = "absolute";
   probe.style.opacity = "0";
   probe.style.pointerEvents = "none";
@@ -40,7 +42,7 @@ function readMutedForegroundRgb(): [number, number, number] {
   return [Number(nums[0]), Number(nums[1]), Number(nums[2])];
 }
 
-type LottieColor = { k: unknown };
+type LottieScalar = { k: unknown };
 
 function setColorValue(k: unknown, target: [number, number, number]) {
   if (Array.isArray(k) && typeof k[0] === "number") {
@@ -68,31 +70,64 @@ function setColorValue(k: unknown, target: [number, number, number]) {
   }
 }
 
-function walkShapes(shapes: unknown, target: [number, number, number]) {
+/** Raises a possibly-animated scalar (Lottie wraps even single numbers in a 1-element array for keyframes) to at least `floor`, in place. */
+function floorScalarValue(k: unknown, floor: number) {
+  if (typeof k === "number") return Math.max(k, floor);
+  if (Array.isArray(k)) {
+    for (const frame of k as Record<string, unknown>[]) {
+      const s = frame.s;
+      const e = frame.e;
+      if (Array.isArray(s) && typeof s[0] === "number") s[0] = Math.max(s[0], floor);
+      if (Array.isArray(e) && typeof e[0] === "number") e[0] = Math.max(e[0], floor);
+    }
+  }
+  return k;
+}
+
+/**
+ * Stroke width, relative to canvas size, this app's static Icon* set draws
+ * at (1.75 on a 24-unit viewBox) — used as a floor so every Lottie icon
+ * reads at roughly the same visual weight as its static neighbors instead
+ * of whatever the source file happened to ship with.
+ */
+const REFERENCE_STROKE_RATIO = 1.75 / 24;
+
+function restyleShapes(shapes: unknown, targetColor: [number, number, number], strokeFloor: number) {
   if (!Array.isArray(shapes)) return;
   for (const shape of shapes as Record<string, unknown>[]) {
     if ((shape.ty === "fl" || shape.ty === "st") && shape.c) {
-      setColorValue((shape.c as LottieColor).k, target);
+      setColorValue((shape.c as LottieScalar).k, targetColor);
     }
-    if (Array.isArray(shape.it)) walkShapes(shape.it, target);
+    if (shape.ty === "st" && shape.w && typeof shape.w === "object") {
+      const w = shape.w as LottieScalar;
+      w.k = floorScalarValue(w.k, strokeFloor);
+    }
+    if (Array.isArray(shape.it)) restyleShapes(shape.it, targetColor, strokeFloor);
   }
 }
 
 /**
- * Deep-clones the animation and overwrites every fill/stroke color with
- * `rgb` — these icons ship black by default; the app wants them the same
- * grayish tone as sidebar link text, in both themes. Alpha is left alone.
+ * Deep-clones the animation, overwrites every fill/stroke color with `rgb`,
+ * and normalizes every stroke to at least the app's own reference weight.
+ * These icons ship black, at whatever stroke width each individually
+ * happened to be exported with (this pack ranges from 5 to 22.5 units on an
+ * identical 576-unit canvas) — fine at whatever size the source file was
+ * designed for, but at the ~20px this app renders icons at, the thinner
+ * ones are close to invisible and the set looks inconsistent next to itself.
+ * Alpha is left alone; an icon already at or above the floor is untouched.
  */
-function recolor(data: Record<string, unknown>, rgb: [number, number, number]): Record<string, unknown> {
-  const target: [number, number, number] = [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255];
+function restyle(data: Record<string, unknown>, rgb: [number, number, number]): Record<string, unknown> {
+  const targetColor: [number, number, number] = [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255];
   const clone = JSON.parse(JSON.stringify(data));
+  const canvasSize = typeof clone.w === "number" ? clone.w : 576;
+  const strokeFloor = canvasSize * REFERENCE_STROKE_RATIO;
   for (const layer of (clone.layers as Record<string, unknown>[] | undefined) ?? []) {
-    walkShapes(layer.shapes, target);
+    restyleShapes(layer.shapes, targetColor, strokeFloor);
   }
   // Precomps (referenced by id from a layer) keep their own shapes under assets.
   for (const asset of (clone.assets as Record<string, unknown>[] | undefined) ?? []) {
     for (const layer of (asset.layers as Record<string, unknown>[] | undefined) ?? []) {
-      walkShapes(layer.shapes, target);
+      restyleShapes(layer.shapes, targetColor, strokeFloor);
     }
   }
   return clone;
@@ -103,23 +138,39 @@ function recolor(data: Record<string, unknown>, rgb: [number, number, number]): 
  * at rest, and plays — looping for as long as `playing` stays true — the
  * instant it doesn't. The caller decides what "playing" means: hover for a
  * plain nav icon, hover-or-unread for the notification bell, hover-or-
- * filter-applied for a filter icon, etc. Recolored to match the app's own
- * muted-foreground tone (re-derived on theme change) instead of shipping
- * whatever color the source file happened to be exported in, and rendered
- * viewBox-only so every icon — regardless of its own canvas size — fills
- * exactly `size`×`size` px, no bigger or smaller than its neighbors.
+ * filter-applied for a filter icon, etc.
+ *
+ * Recolored to match the app's own muted-foreground tone at rest, or its
+ * foreground tone when `highlighted` — the same two shades every
+ * surrounding nav label already switches between on hover/active, which a
+ * static Icon* gets for free via `stroke="currentColor"` but a Lottie
+ * export with baked-in color values does not. Re-derived on theme change,
+ * and rendered viewBox-only so every icon — regardless of its own canvas
+ * size — fills exactly `size`×`size` px, no bigger or smaller than its
+ * neighbors.
  */
 export function LottieIcon({
   src,
   size = 20,
   className,
   playing = false,
+  highlighted = false,
+  colorClassName,
 }: {
   /** Path under /public, e.g. "/icons/Dashboard.json". */
   src: string;
   size?: number;
   className?: string;
   playing?: boolean;
+  highlighted?: boolean;
+  /**
+   * Overrides the default muted-foreground/foreground pair with a single
+   * fixed `text-*` shade, used regardless of `highlighted` — for an icon
+   * that never sits on the sidebar's own muted-foreground text color to
+   * begin with, e.g. one drawn on a solid `bg-primary` circle, where it
+   * needs `text-primary-foreground` instead.
+   */
+  colorClassName?: string;
 }) {
   const { resolvedTheme } = useTheme();
   const [rawData, setRawData] = useState<Record<string, unknown> | null>(null);
@@ -136,27 +187,28 @@ export function LottieIcon({
     };
   }, [src]);
 
-  // Re-tint whenever the source data arrives or the theme flips — the
-  // resolved muted-foreground color is different in each. Deferred by a
-  // macrotask: next-themes applies its `data-theme` attribute change from
-  // its OWN effect on the provider, an ancestor of every icon here — React
-  // fires passive effects bottom-up (children before parents), so reading
-  // computed style synchronously in this effect would run before that
-  // attribute update lands, sampling the outgoing theme's color instead of
-  // the new one. All effects from a single commit — ours and the
-  // provider's — run synchronously before any timer callback gets a turn,
-  // so by the time this fires the attribute is guaranteed to be current.
-  // A plain setTimeout is used over requestAnimationFrame because rAF is
-  // throttled to a crawl (or stops firing) on a backgrounded/non-visible
-  // tab, which would leave a backgrounded tab's icons stuck on stale colors
-  // far longer than this needs to be delayed.
+  // Re-tint whenever the source data arrives, the theme flips, or the
+  // highlighted state changes. Deferred by a macrotask: next-themes applies
+  // its `data-theme` attribute change from its OWN effect on the provider,
+  // an ancestor of every icon here — React fires passive effects bottom-up
+  // (children before parents), so reading computed style synchronously in
+  // this effect would run before that attribute update lands, sampling the
+  // outgoing theme's color instead of the new one. All effects from a
+  // single commit — ours and the provider's — run synchronously before any
+  // timer callback gets a turn, so by the time this fires the attribute is
+  // guaranteed to be current. A plain setTimeout is used over
+  // requestAnimationFrame because rAF is throttled to a crawl (or stops
+  // firing) on a backgrounded/non-visible tab, which would leave a
+  // backgrounded tab's icons stuck on stale colors far longer than this
+  // needs to be delayed.
   useEffect(() => {
     if (!rawData) return;
     const timer = setTimeout(() => {
-      setColoredData(recolor(rawData, readMutedForegroundRgb()));
+      const rgb = readColorRgb(colorClassName ?? (highlighted ? "text-foreground" : "text-muted-foreground"));
+      setColoredData(restyle(rawData, rgb));
     }, 0);
     return () => clearTimeout(timer);
-  }, [rawData, resolvedTheme]);
+  }, [rawData, resolvedTheme, highlighted, colorClassName]);
 
   useEffect(() => {
     const instance = lottieRef.current;

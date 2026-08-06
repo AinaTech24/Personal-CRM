@@ -98,12 +98,17 @@ export function NotificationBell() {
       <Tooltip label="Notifications" side="bottom">
         <Popover.Trigger asChild>
           <button
-            className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-primary/5"
+            className="relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
             aria-label="Notifications"
             onMouseEnter={() => setHovering(true)}
             onMouseLeave={() => setHovering(false)}
           >
-            <LottieIcon src="/icons/Notifications.json" size={16} playing={hovering || unreadCount > 0} />
+            <LottieIcon
+              src="/icons/Notifications.json"
+              size={20}
+              playing={hovering || unreadCount > 0}
+              highlighted={hovering || unreadCount > 0}
+            />
             <AnimatePresence>
               {unreadCount > 0 && (
                 <motion.span

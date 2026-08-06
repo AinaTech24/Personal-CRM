@@ -170,7 +170,7 @@ export function CommandPalette() {
           aria-label="Search"
           className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
         >
-          <LottieIcon src="/icons/Search.json" size={16} playing={hovering} />
+          <LottieIcon src="/icons/Search.json" size={20} playing={hovering} highlighted={hovering} />
         </button>
       </Tooltip>
 
