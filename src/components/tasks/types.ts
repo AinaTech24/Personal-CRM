@@ -9,6 +9,7 @@ export interface TaskSummary {
   status: TaskStatus;
   priority: Priority;
   dueDate: string | null;
+  remindAt: string | null;
   assignedTo: { id: string; name: string } | null;
   createdBy: { id: string; name: string };
   createdAt: string;

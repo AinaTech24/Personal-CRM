@@ -29,6 +29,7 @@ const bodySchema = z.object({
   status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELLED"]).default("TODO"),
   dueDate: z.string().optional().nullable(),
   assignedToId: z.string().optional().nullable(),
+  remindAt: z.string().optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
       dueDate: data.dueDate ? new Date(data.dueDate) : null,
       assignedToId: data.assignedToId || null,
       createdById: user.id,
+      remindAt: data.remindAt ? new Date(data.remindAt) : null,
     },
   });
 

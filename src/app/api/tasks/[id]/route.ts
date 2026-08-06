@@ -38,6 +38,7 @@ const patchSchema = z.object({
   status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELLED"]).optional(),
   dueDate: z.string().nullable().optional(),
   assignedToId: z.string().nullable().optional(),
+  remindAt: z.string().nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -66,6 +67,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.status !== undefined && { status: data.status }),
       ...(data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
       ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId }),
+      // A changed (or cleared) reminder time is a fresh reminder — reset the
+      // sent flag too, so moving it doesn't just silently skip firing.
+      ...(data.remindAt !== undefined && {
+        remindAt: data.remindAt ? new Date(data.remindAt) : null,
+        reminderSentAt: null,
+      }),
     },
   });
 

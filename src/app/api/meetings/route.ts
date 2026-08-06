@@ -35,6 +35,7 @@ const bodySchema = z.object({
   endsAt: z.string().optional().nullable(),
   status: z.enum(["SCHEDULED", "COMPLETED", "CANCELLED"]).optional().default("SCHEDULED"),
   attendeeIds: z.array(z.string()).optional().default([]),
+  remindAt: z.string().optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -51,6 +52,11 @@ export async function POST(req: NextRequest) {
   if (endsAt && (Number.isNaN(endsAt.getTime()) || endsAt < startsAt)) {
     return NextResponse.json({ error: "End time must be after the start time" }, { status: 400 });
   }
+  let remindAt: Date | null = null;
+  if (d.remindAt) {
+    remindAt = new Date(d.remindAt);
+    if (Number.isNaN(remindAt.getTime())) return NextResponse.json({ error: "Invalid reminder time" }, { status: 400 });
+  }
 
   const meeting = await db.meeting.create({
     data: {
@@ -62,6 +68,7 @@ export async function POST(req: NextRequest) {
       status: d.status,
       organizerId: user.id,
       attendees: { connect: d.attendeeIds.map((id) => ({ id })) },
+      remindAt,
     },
     include: meetingInclude,
   });

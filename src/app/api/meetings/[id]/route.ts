@@ -18,6 +18,7 @@ const patchSchema = z.object({
   endsAt: z.string().nullable().optional(),
   status: z.enum(["SCHEDULED", "COMPLETED", "CANCELLED"]).optional(),
   attendeeIds: z.array(z.string()).optional(),
+  remindAt: z.string().nullable().optional(),
 });
 
 /** Only the organizer or an admin may change or remove a meeting. */
@@ -78,6 +79,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (d.attendeeIds !== undefined) {
     data.attendees = { set: d.attendeeIds.map((aid) => ({ id: aid })) };
+  }
+  if (d.remindAt !== undefined) {
+    if (d.remindAt) {
+      const r = new Date(d.remindAt);
+      if (Number.isNaN(r.getTime())) return NextResponse.json({ error: "Invalid reminder time" }, { status: 400 });
+      data.remindAt = r;
+    } else {
+      data.remindAt = null;
+    }
+    // A changed (or cleared) reminder time is a fresh reminder — reset the
+    // sent flag so moving it doesn't just silently skip firing at all.
+    data.reminderSentAt = null;
   }
 
   const meeting = await db.meeting.update({ where: { id }, data, include: meetingInclude });

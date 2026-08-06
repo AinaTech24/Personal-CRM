@@ -423,20 +423,28 @@ restore one somewhere at least once. An untested backup is a guess.
 
 ---
 
-## 9. Attendance reminders & monthly reports (cron)
+## 9. Attendance, meeting & task reminders, and monthly reports (cron)
 
-Two routes exist purely to be hit on a schedule — nothing in the app calls
-them on its own, because a single Node process has no built-in scheduler:
+Several routes exist purely to be hit on a schedule — nothing in the app
+calls them on its own, because a single Node process has no built-in
+scheduler:
 
 - **`/api/attendance/send-reminders`** — nudges anyone within 30 minutes of
   a shift's check-in/check-out window closing who hasn't acted yet (toast,
   bell, and OS push). Needs to run every **~15 minutes**, comfortably under
   that 30-minute window.
+- **`/api/meetings/send-reminders`** — fires every meeting whose "Remind me
+  at" time has passed, to the organizer and every attendee (toast, bell,
+  and OS push). Needs to run every **~5 minutes** — a reminder is a specific
+  instant someone picked, not a 30-minute window, so this wants a tighter
+  cadence than the attendance one.
+- **`/api/tasks/send-reminders`** — same idea, for a task's own "Remind me
+  at" time, to whoever it's assigned to. Also every **~5 minutes**.
 - **`/api/attendance/send-monthly-reports`** — emails everyone their
   attendance snapshot for the month that just ended. Needs to run **once a
   month**, just after midnight on the 1st.
 
-Both authenticate a scheduler via the `x-cron-secret` header matching
+All four authenticate a scheduler via the `x-cron-secret` header matching
 `CRON_SECRET` from `.env` (§3) — **without that env var set, these routes
 just 403 every request and silently never fire.** Skipping this step is the
 most likely reason reminders "don't work": the feature is fully built and
@@ -448,18 +456,20 @@ crontab -e
 
 ```
 */15 * * * * curl -s -o /dev/null -X POST -H "x-cron-secret: PUT_THE_SAME_CRON_SECRET_FROM_ENV" https://crm.ainatech.in/api/attendance/send-reminders
+*/5 * * * * curl -s -o /dev/null -X POST -H "x-cron-secret: PUT_THE_SAME_CRON_SECRET_FROM_ENV" https://crm.ainatech.in/api/meetings/send-reminders
+*/5 * * * * curl -s -o /dev/null -X POST -H "x-cron-secret: PUT_THE_SAME_CRON_SECRET_FROM_ENV" https://crm.ainatech.in/api/tasks/send-reminders
 1 0 1 * * curl -s -o /dev/null -X POST -H "x-cron-secret: PUT_THE_SAME_CRON_SECRET_FROM_ENV" https://crm.ainatech.in/api/attendance/send-monthly-reports
 ```
 
-The OS-push half of `send-reminders` (the part that reaches a phone with the
-tab closed or the PWA backgrounded) additionally needs `VAPID_PUBLIC_KEY` /
-`VAPID_PRIVATE_KEY` set (§3) — without them `sendPushToUsers` quietly no-ops,
-so the in-app toast/bell would still fire but nothing would ever reach a
-closed app. Confirm both pieces landed by checking `pm2 logs aina-crm` right
-after a manual test hit (`curl` the same command above) — a 200 with
-`"sent": 0` means it ran but nobody was due; a 403 means `CRON_SECRET`
-doesn't match; no line at all means the cron itself never fired (check
-`grep CRON /var/log/syslog` or `journalctl -u cron`).
+The OS-push half of all three reminder routes (the part that reaches a phone
+with the tab closed or the PWA backgrounded) additionally needs
+`VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` set (§3) — without them
+`sendPushToUsers` quietly no-ops, so the in-app toast/bell would still fire
+but nothing would ever reach a closed app. Confirm both pieces landed by
+checking `pm2 logs aina-crm` right after a manual test hit (`curl` the same
+command above) — a 200 with `"sent": 0` means it ran but nobody was due; a
+403 means `CRON_SECRET` doesn't match; no line at all means the cron itself
+never fired (check `grep CRON /var/log/syslog` or `journalctl -u cron`).
 
 ---
 
