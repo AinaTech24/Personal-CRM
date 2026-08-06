@@ -18,10 +18,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { SkeletonCards } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
   IconPlus,
-  IconFolder,
   IconTrash,
   IconPencil,
   IconSearch,
@@ -30,6 +30,7 @@ import {
   IconLayoutGrid,
   IconCheck,
 } from "@/components/icons";
+import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Dropdown } from "@/components/ui/dropdown";
 import { useToast } from "@/components/providers/toast-provider";
 import { useSocket } from "@/components/providers/socket-provider";
@@ -217,6 +218,9 @@ export function ClientsPageClient() {
   const [deleteTarget, setDeleteTarget] = useState<ClientRow | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  // Which folder card's Lottie icon is currently animating — hover-to-play,
+  // same convention as the sidebar's own nav icons.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   // Personal display preferences — remembered per browser, not shared with the team.
   useEffect(() => {
@@ -254,7 +258,9 @@ export function ClientsPageClient() {
     try {
       const [clientsRes, usersRes, meRes] = await Promise.all([
         fetch("/api/social/clients"),
-        fetch("/api/users/assignable?scope=all"),
+        // minimal=1: this page only shows names in the "Assigned to" dropdown,
+        // never avatar thumbnails — see assignableUsersFor's comment.
+        fetch("/api/users/assignable?scope=all&minimal=1"),
         fetch("/api/auth/me"),
       ]);
       const [clientsData, usersData, meData] = await Promise.all([clientsRes.json(), usersRes.json(), meRes.json()]);
@@ -467,93 +473,106 @@ export function ClientsPageClient() {
         </div>
       </div>
 
-      {!loading && filteredClients.length === 0 && (
-        <Card>
-          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-            {clients.length === 0 ? "No clients yet. Add the first one to start the onboarding flow." : "No clients match your search."}
-          </div>
-        </Card>
-      )}
-
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardPx}px, 1fr))` }}
-      >
-        {sortedClients.map((client) => (
-          <Card
-            key={client.id}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData("text/plain", client.id);
-              e.dataTransfer.effectAllowed = "move";
-              setDraggingId(client.id);
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOverId(client.id);
-            }}
-            onDragLeave={() => setDragOverId((id) => (id === client.id ? null : id))}
-            onDrop={(e) => {
-              e.preventDefault();
-              handleDrop(client.id);
-            }}
-            onDragEnd={() => {
-              setDraggingId(null);
-              setDragOverId(null);
-            }}
-            onClick={() => router.push(`/social-media/${client.id}`)}
-            className={cn(
-              "group relative cursor-grab select-none p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md active:cursor-grabbing",
-              draggingId === client.id && "opacity-30",
-              dragOverId === client.id && draggingId !== client.id && "border-primary/60 bg-accent/40"
-            )}
-          >
-            <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-              <Tooltip label="Edit">
-                <button
-                  type="button"
-                  aria-label={`Edit ${client.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openEdit(client);
-                  }}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
-                >
-                  <IconPencil className="h-3.5 w-3.5" />
-                </button>
-              </Tooltip>
-              {isLead && (
-                <Tooltip label="Delete">
-                  <button
-                    type="button"
-                    aria-label={`Delete ${client.name}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteTarget(client);
-                    }}
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive"
-                  >
-                    <IconTrash className="h-3.5 w-3.5" />
-                  </button>
-                </Tooltip>
-              )}
-            </div>
-            <div className="flex flex-col items-center gap-2 text-center">
-              <IconFolder
-                className="shrink-0 text-primary/70"
-                style={{ width: iconPx, height: iconPx }}
-              />
-              <div className="min-w-0 w-full">
-                <p className="truncate text-sm font-medium">{client.name}</p>
-                {client.companyName && (
-                  <p className="truncate text-xs text-muted-foreground">{client.companyName}</p>
-                )}
+      {loading ? (
+        // Without this, the grid was just empty during the fetch — reading as
+        // a stall rather than a page that's actively loading.
+        <SkeletonCards count={8} />
+      ) : (
+        <>
+          {filteredClients.length === 0 && (
+            <Card>
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                {clients.length === 0 ? "No clients yet. Add the first one to start the onboarding flow." : "No clients match your search."}
               </div>
-              <Badge variant="secondary">{STAGE_LABELS[client.stage] ?? client.stage}</Badge>
-            </div>
-          </Card>
-        ))}
-      </div>
+            </Card>
+          )}
+
+          <div
+            className="grid gap-4"
+            style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardPx}px, 1fr))` }}
+          >
+            {sortedClients.map((client) => (
+              <Card
+                key={client.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("text/plain", client.id);
+                  e.dataTransfer.effectAllowed = "move";
+                  setDraggingId(client.id);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOverId(client.id);
+                }}
+                onDragLeave={() => setDragOverId((id) => (id === client.id ? null : id))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  handleDrop(client.id);
+                }}
+                onDragEnd={() => {
+                  setDraggingId(null);
+                  setDragOverId(null);
+                }}
+                onMouseEnter={() => setHoveredId(client.id)}
+                onMouseLeave={() => setHoveredId((id) => (id === client.id ? null : id))}
+                onClick={() => router.push(`/social-media/${client.id}`)}
+                className={cn(
+                  "group relative cursor-grab select-none p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md active:cursor-grabbing",
+                  draggingId === client.id && "opacity-30",
+                  dragOverId === client.id && draggingId !== client.id && "border-primary/60 bg-accent/40"
+                )}
+              >
+                <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                  <Tooltip label="Edit">
+                    <button
+                      type="button"
+                      aria-label={`Edit ${client.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(client);
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
+                    >
+                      <IconPencil className="h-3.5 w-3.5" />
+                    </button>
+                  </Tooltip>
+                  {isLead && (
+                    <Tooltip label="Delete">
+                      <button
+                        type="button"
+                        aria-label={`Delete ${client.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget(client);
+                        }}
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive"
+                      >
+                        <IconTrash className="h-3.5 w-3.5" />
+                      </button>
+                    </Tooltip>
+                  )}
+                </div>
+                <div className="flex flex-col items-center gap-2 text-center">
+                  <LottieIcon
+                    src="/icons/Folder.json"
+                    size={iconPx}
+                    className="shrink-0"
+                    colorClassName="text-primary/70"
+                    playing={hoveredId === client.id}
+                  />
+                  <div className="min-w-0 w-full">
+                    <p className="truncate text-sm font-medium">{client.name}</p>
+                    {client.companyName && (
+                      <p className="truncate text-xs text-muted-foreground">{client.companyName}</p>
+                    )}
+                  </div>
+                  <Badge variant="secondary">{STAGE_LABELS[client.stage] ?? client.stage}</Badge>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>

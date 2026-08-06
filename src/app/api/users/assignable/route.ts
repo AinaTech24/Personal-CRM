@@ -9,6 +9,9 @@ export async function GET(req: NextRequest) {
   // ?scope=all returns every active user (used by task assignment, where anyone
   // may be assigned regardless of department). Default stays department-scoped.
   const allActive = req.nextUrl.searchParams.get("scope") === "all";
-  const users = await assignableUsersFor(user, { allActive });
+  // ?minimal=1 skips avatarDataUrl for callers that only render a name/role
+  // picker (no avatar thumbnails) — see assignableUsersFor's comment.
+  const minimal = req.nextUrl.searchParams.get("minimal") === "1";
+  const users = await assignableUsersFor(user, { allActive, minimal });
   return NextResponse.json({ users });
 }

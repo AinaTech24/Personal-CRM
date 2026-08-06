@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { userOptionLabel } from "@/lib/user-display";
 import { AnimatePresence, motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
@@ -46,7 +46,8 @@ const PRIORITY_VARIANT = {
   URGENT: "destructive",
 } as const;
 
-export function TasksBoard() {
+export function TasksBoard({ scope }: { scope?: "social-media" } = {}) {
+  const tasksUrl = scope === "social-media" ? "/api/tasks?scope=social-media" : "/api/tasks";
   const { query } = useSearch();
   const { socket } = useSocket();
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
@@ -71,17 +72,17 @@ export function TasksBoard() {
   const { containerRef: scrollContainerRef, onDragOver: handleBoardDragOver, stop: stopAutoScroll } =
     useDragAutoScroll<HTMLDivElement>();
 
-  async function loadTasks() {
-    const res = await fetch("/api/tasks");
+  const loadTasks = useCallback(async () => {
+    const res = await fetch(tasksUrl);
     const data = await res.json();
     if (res.ok) setTasks(data.tasks);
-  }
+  }, [tasksUrl]);
 
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     try {
       const [tasksRes, usersRes, meRes] = await Promise.all([
-        fetch("/api/tasks"),
+        fetch(tasksUrl),
         fetch("/api/users/assignable?scope=all"),
         fetch("/api/auth/me"),
       ]);
@@ -101,11 +102,11 @@ export function TasksBoard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [tasksUrl]);
 
   useEffect(() => {
     loadAll();
-  }, []);
+  }, [loadAll]);
 
   useEffect(() => {
     if (!socket) return;
@@ -118,7 +119,7 @@ export function TasksBoard() {
       socket.off("task_updated", onTaskChange);
       socket.off("task_deleted", onTaskChange);
     };
-  }, [socket]);
+  }, [socket, loadTasks]);
 
   const filteredTasks = useMemo(() => {
     const q = query.trim().toLowerCase();

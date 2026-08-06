@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
-import { socialMediaTeamScopeFor } from "@/lib/social-media";
+import { socialMediaTeamOnlyScopeFor, socialMediaTeamScopeFor } from "@/lib/social-media";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -15,17 +15,29 @@ const meetingInclude = {
  * List meetings the user organizes or attends (admins see all), newest
  * first. A Social Media lead additionally sees every meeting organized by,
  * or attended by, anyone on their team.
+ *
+ * The Social Media Team console's Meetings tab passes `scope=social-media`
+ * to explicitly ask for the team-only view — narrower than an Admin's usual
+ * `{}` company-wide list, which has no team concept built in.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const teamUserIds = await socialMediaTeamScopeFor(user);
-  const or: object[] = [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }];
-  if (teamUserIds && teamUserIds.length > 0) {
-    or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
+  const teamOnly = req.nextUrl.searchParams.get("scope") === "social-media";
+  const teamUserIds = teamOnly ? await socialMediaTeamOnlyScopeFor(user) : await socialMediaTeamScopeFor(user);
+  if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  let where: object;
+  if (teamOnly && teamUserIds) {
+    where = { OR: [{ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } }] };
+  } else {
+    const or: object[] = [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }];
+    if (teamUserIds && teamUserIds.length > 0) {
+      or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
+    }
+    where = isAdmin(user) ? {} : { OR: or };
   }
-  const where = isAdmin(user) ? {} : { OR: or };
 
   const meetings = await db.meeting.findMany({
     where,

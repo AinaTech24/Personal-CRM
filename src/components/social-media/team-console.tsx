@@ -112,10 +112,10 @@ export function SocialMediaTeamConsole() {
         <>
           {tab === "members" && <MembersTab onForbidden={() => setForbidden(true)} />}
           {tab === "pipeline" && <ClientPipeline />}
-          {tab === "leads" && <LeadsBoard />}
-          {tab === "tasks" && <TasksBoard />}
-          {tab === "meetings" && <MeetingsView />}
-          {tab === "projects" && <ProjectsList />}
+          {tab === "leads" && <LeadsBoard scope="social-media" />}
+          {tab === "tasks" && <TasksBoard scope="social-media" />}
+          {tab === "meetings" && <MeetingsView scope="social-media" />}
+          {tab === "projects" && <ProjectsList scope="social-media" />}
           {tab === "attendance" && <AttendanceTab />}
           {tab === "activity" && <ActivityTab />}
         </>

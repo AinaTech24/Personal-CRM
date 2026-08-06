@@ -3,7 +3,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import * as Popover from "@radix-ui/react-popover";
-import { format, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
+import { AnimatePresence, motion } from "framer-motion";
+import { addDays, format, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1401,21 +1402,12 @@ function ReportFiles({ report, onChanged }: { report: MonthlyReport; onChanged: 
 
 const ReportsTab = forwardRef<TabCreateHandle, { clientId: string; onChanged: () => void }>(function ReportsTab({ clientId, onChanged }, ref) {
   const toast = useToast();
-  const now = new Date();
   const [reports, setReports] = useState<MonthlyReport[] | null>(null);
   const [open, setOpen] = useState(false);
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [reach, setReach] = useState("");
-  const [engagement, setEngagement] = useState("");
-  const [followersGained, setFollowersGained] = useState("");
-  const [bestPosts, setBestPosts] = useState("");
-  const [adLeads, setAdLeads] = useState("");
-  const [insights, setInsights] = useState("");
-  const [retargetingSuggestions, setRetargetingSuggestions] = useState("");
-  const [nextMonthPlan, setNextMonthPlan] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MonthlyReport | null>(null);
 
@@ -1430,18 +1422,10 @@ const ReportsTab = forwardRef<TabCreateHandle, { clientId: string; onChanged: ()
   }, [clientId]);
 
   function openCreate() {
-    setYear(now.getFullYear());
-    setMonth(now.getMonth() + 1);
     setTitle("");
     setDescription("");
-    setReach("");
-    setEngagement("");
-    setFollowersGained("");
-    setBestPosts("");
-    setAdLeads("");
-    setInsights("");
-    setRetargetingSuggestions("");
-    setNextMonthPlan("");
+    setPendingFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setOpen(true);
   }
 
@@ -1451,26 +1435,31 @@ const ReportsTab = forwardRef<TabCreateHandle, { clientId: string; onChanged: ()
     e.preventDefault();
     setSaving(true);
     try {
+      // One report per client+month (see the API's upsert) — this always
+      // targets the current month, matching "add this month's report"; the
+      // detailed metrics fields still exist on the record for later editing,
+      // just not surfaced in this stripped-down add form.
+      const now = new Date();
       const res = await fetch(`/api/social/clients/${clientId}/reports`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          year,
-          month,
+          year: now.getFullYear(),
+          month: now.getMonth() + 1,
           title: title || null,
           description: description || null,
-          reach: reach ? Number(reach) : null,
-          engagement: engagement ? Number(engagement) : null,
-          followersGained: followersGained ? Number(followersGained) : null,
-          bestPosts: bestPosts || null,
-          adLeads: adLeads ? Number(adLeads) : null,
-          insights: insights || null,
-          retargetingSuggestions: retargetingSuggestions || null,
-          nextMonthPlan: nextMonthPlan || null,
         }),
       });
       const data = await res.json();
       if (!res.ok) return toast.error("Couldn't save report", data.error);
+
+      for (const file of pendingFiles) {
+        const body = new FormData();
+        body.set("file", file);
+        const fileRes = await fetch(`/api/social/reports/${data.report.id}/files`, { method: "POST", body });
+        if (!fileRes.ok) toast.error(`Couldn't upload ${file.name}`);
+      }
+
       setOpen(false);
       toast.success("Monthly report saved");
       load();
@@ -1516,9 +1505,15 @@ const ReportsTab = forwardRef<TabCreateHandle, { clientId: string; onChanged: ()
                   </button>
                 </div>
                 {r.description && <p className="text-sm">{r.description}</p>}
-                <p className="text-xs text-muted-foreground">
-                  Reach {r.reach ?? "—"} · Engagement {r.engagement ?? "—"} · Followers gained {r.followersGained ?? "—"} · Ad leads {r.adLeads ?? "—"}
-                </p>
+                {/* The add form no longer collects these metrics, so a freshly
+                    created report has all four null — showing four dashes
+                    every time would just be noise. Still shown once any one
+                    of them is actually set (e.g. an older report). */}
+                {(r.reach != null || r.engagement != null || r.followersGained != null || r.adLeads != null) && (
+                  <p className="text-xs text-muted-foreground">
+                    Reach {r.reach ?? "—"} · Engagement {r.engagement ?? "—"} · Followers gained {r.followersGained ?? "—"} · Ad leads {r.adLeads ?? "—"}
+                  </p>
+                )}
                 {r.insights && <p className="mt-1 text-sm">{r.insights}</p>}
                 {r.nextMonthPlan && <p className="text-sm text-muted-foreground">Next month: {r.nextMonthPlan}</p>}
                 <ReportFiles report={r} onChanged={load} />
@@ -1536,64 +1531,49 @@ const ReportsTab = forwardRef<TabCreateHandle, { clientId: string; onChanged: ()
           </DialogHeader>
           <DialogBody>
             <form id="report-form" onSubmit={save} className="flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="report-month">Month</Label>
-                  <Dropdown
-                    id="report-month"
-                    value={String(month)}
-                    onChange={(v) => setMonth(Number(v))}
-                    options={MONTH_NAMES.map((m, i) => ({ value: String(i + 1), label: m }))}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="report-year">Year</Label>
-                  <Input id="report-year" type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
-                </div>
-              </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="report-title">Title</Label>
-                <Input id="report-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`${MONTH_NAMES[month - 1]} ${year}`} />
+                <Input
+                  id="report-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={`${MONTH_NAMES[new Date().getMonth()]} ${new Date().getFullYear()}`}
+                />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="report-description">Description</Label>
-                <Textarea id="report-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="report-reach">Reach</Label>
-                  <Input id="report-reach" type="number" min="0" value={reach} onChange={(e) => setReach(e.target.value)} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="report-engagement">Engagement</Label>
-                  <Input id="report-engagement" type="number" min="0" value={engagement} onChange={(e) => setEngagement(e.target.value)} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="report-followers">Followers gained</Label>
-                  <Input id="report-followers" type="number" value={followersGained} onChange={(e) => setFollowersGained(e.target.value)} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="report-adleads">Ad leads</Label>
-                  <Input id="report-adleads" type="number" min="0" value={adLeads} onChange={(e) => setAdLeads(e.target.value)} />
-                </div>
+                <Textarea id="report-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="report-bestposts">Best posts</Label>
-                <Textarea id="report-bestposts" value={bestPosts} onChange={(e) => setBestPosts(e.target.value)} rows={2} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="report-insights">Insights & learnings</Label>
-                <Textarea id="report-insights" value={insights} onChange={(e) => setInsights(e.target.value)} rows={2} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="report-retargeting">Retargeting suggestions</Label>
-                <Textarea id="report-retargeting" value={retargetingSuggestions} onChange={(e) => setRetargetingSuggestions(e.target.value)} rows={2} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="report-nextmonth">Next month&apos;s content strategy &amp; campaign plan</Label>
-                <Textarea id="report-nextmonth" value={nextMonthPlan} onChange={(e) => setNextMonthPlan(e.target.value)} rows={2} />
+                <Label htmlFor="report-files">Files</Label>
+                {pendingFiles.length > 0 && (
+                  <ul className="flex flex-col gap-1">
+                    {pendingFiles.map((f, i) => (
+                      <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1 text-xs">
+                        <span className="truncate">{f.name}</span>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${f.name}`}
+                          onClick={() => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="shrink-0 text-muted-foreground hover:text-destructive"
+                        >
+                          <IconTrash className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <input
+                  id="report-files"
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => setPendingFiles((prev) => [...prev, ...Array.from(e.target.files ?? [])])}
+                />
+                <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  {pendingFiles.length > 0 ? "Add more files" : "Upload files"}
+                </Button>
               </div>
             </form>
           </DialogBody>
@@ -1692,6 +1672,24 @@ const CALENDAR_DELIVERABLES = { STATIC_POST: 8, CAROUSEL: 2, REEL: 4 } as const;
 
 function calendarSlotKey(week: number, weekday: string) {
   return `${week}-${weekday}`;
+}
+
+/**
+ * Real calendar dates for the fixed 4-week × 6-day (Mon–Sat, no Sunday) grid
+ * a client's content plan always uses — that shape is a deliverable quota,
+ * not a literal Gregorian month, so it doesn't change here. This only maps
+ * each existing (week, weekday) cell onto the actual date it falls on, for
+ * display: Week 1's Monday is the Monday on/before the 1st, so a month
+ * starting mid-week shows a few real dates from the tail of the previous
+ * month at the top, and — since 4×7 rarely divides a month evenly — the grid
+ * commonly runs a few days into next month by Week 4. Cells outside the
+ * viewed month are still fully editable; only their date reads dimmed.
+ */
+function monthGridDates(year: number, month: number): Date[][] {
+  const anchor = startOfWeek(new Date(year, month - 1, 1), { weekStartsOn: 1 });
+  return CALENDAR_WEEKS.map((week) =>
+    CALENDAR_WEEKDAYS.map((_, weekdayIndex) => addDays(anchor, (week - 1) * 7 + weekdayIndex))
+  );
 }
 
 /**
@@ -1937,6 +1935,14 @@ function CalendarTab({ clientId }: { clientId: string }) {
   const [rangeTo, setRangeTo] = useState("");
   const [slots, setSlots] = useState<CalendarSlot[] | null>(null);
 
+  // A live day/date/time readout in the header — ticks on its own timer
+  // rather than once at render, so it doesn't go stale on a tab left open.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
   const [editing, setEditing] = useState<{ week: number; weekday: CalendarWeekday } | null>(null);
   const [editType, setEditType] = useState("");
   const [editNote, setEditNote] = useState("");
@@ -1976,6 +1982,7 @@ function CalendarTab({ clientId }: { clientId: string }) {
   }, [slots]);
 
   const labels = useMemo(() => calendarLabelsFor(slots ?? []), [slots]);
+  const weekDates = useMemo(() => monthGridDates(year, month), [year, month]);
 
   function applyDateFilter(preset: string) {
     setDateFilter(preset);
@@ -2076,12 +2083,22 @@ function CalendarTab({ clientId }: { clientId: string }) {
         <SkeletonForm fields={4} />
       ) : (
         <Card className="overflow-hidden">
-          <div className="flex items-center justify-between gap-3 bg-primary px-5 py-3 text-sm font-medium text-primary-foreground">
-            <span>
-              {MONTH_NAMES[month - 1]} {year} · Deliverables: {CALENDAR_DELIVERABLES.STATIC_POST} Static Posts &bull;{" "}
-              {CALENDAR_DELIVERABLES.CAROUSEL} Carousels &bull; {CALENDAR_DELIVERABLES.REEL} Reels
-            </span>
-            <span className="flex items-center gap-1">{dateFilterDropdown}</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-primary px-5 py-3 text-primary-foreground">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-semibold">
+                {MONTH_NAMES[month - 1]} {year}
+              </span>
+              <span className="text-xs text-primary-foreground/80">
+                {format(now, "EEEE, d MMMM yyyy")} · {format(now, "h:mm a")}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="hidden text-xs text-primary-foreground/80 sm:inline">
+                Deliverables: {CALENDAR_DELIVERABLES.STATIC_POST} Static Posts &bull; {CALENDAR_DELIVERABLES.CAROUSEL}{" "}
+                Carousels &bull; {CALENDAR_DELIVERABLES.REEL} Reels
+              </span>
+              {dateFilterDropdown}
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -2093,31 +2110,43 @@ function CalendarTab({ clientId }: { clientId: string }) {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {CALENDAR_WEEKS.map((week) => (
-                  <tr key={week} className="border-b border-border last:border-b-0 odd:bg-muted/30">
-                    <td className="px-4 py-3 font-medium">Week {week}</td>
-                    {CALENDAR_WEEKDAYS.map((weekday) => {
-                      const slot = byKey.get(calendarSlotKey(week, weekday));
-                      const label = slot ? labels.get(slot.id) : undefined;
-                      return (
-                        <td key={weekday} className="px-2 py-2">
-                          <button
-                            type="button"
-                            onClick={() => openCell(week, weekday)}
-                            className={cn(
-                              "flex w-full min-w-[7rem] items-center justify-center rounded-md border border-dashed border-border px-3 py-2 text-sm transition-colors hover:border-primary hover:bg-primary/5",
-                              label ? cn("border-solid bg-card font-medium", CALENDAR_STATUS_TEXT_CLASS[slot!.status]) : "text-muted-foreground"
-                            )}
-                          >
-                            {label ?? "—"}
-                          </button>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
+              <AnimatePresence mode="wait">
+                <motion.tbody
+                  key={`${year}-${month}`}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                >
+                  {CALENDAR_WEEKS.map((week) => (
+                    <tr key={week} className="border-b border-border last:border-b-0 odd:bg-muted/30">
+                      <td className="px-4 py-3 font-medium">Week {week}</td>
+                      {CALENDAR_WEEKDAYS.map((weekday, weekdayIndex) => {
+                        const slot = byKey.get(calendarSlotKey(week, weekday));
+                        const label = slot ? labels.get(slot.id) : undefined;
+                        const date = weekDates[week - 1][weekdayIndex];
+                        const inMonth = date.getMonth() === month - 1;
+                        return (
+                          <td key={weekday} className="px-2 py-2">
+                            <button
+                              type="button"
+                              onClick={() => openCell(week, weekday)}
+                              className={cn(
+                                "flex w-full min-w-[7rem] flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-border px-3 py-2 text-sm transition-all hover:scale-[1.02] hover:border-primary hover:bg-primary/5 hover:opacity-100 active:scale-95",
+                                label ? cn("border-solid bg-card font-medium", CALENDAR_STATUS_TEXT_CLASS[slot!.status]) : "text-muted-foreground",
+                                !inMonth && "opacity-50"
+                              )}
+                            >
+                              <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">{date.getDate()}</span>
+                              <span>{label ?? "—"}</span>
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </motion.tbody>
+              </AnimatePresence>
             </table>
           </div>
         </Card>

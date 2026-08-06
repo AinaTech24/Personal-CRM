@@ -57,7 +57,8 @@ const STATUS_STYLE: Record<MeetingStatus, string> = {
 
 const isLink = (s: string) => /^https?:\/\//i.test(s.trim());
 
-export function MeetingsView() {
+export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
+  const meetingsUrl = scope === "social-media" ? "/api/meetings?scope=social-media" : "/api/meetings";
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [users, setUsers] = useState<MeetingUser[]>([]);
   const [meId, setMeId] = useState<string>("");
@@ -80,7 +81,7 @@ export function MeetingsView() {
     setLoading(true);
     try {
       const [mRes, uRes, meRes] = await Promise.all([
-        fetch("/api/meetings"),
+        fetch(meetingsUrl),
         fetch("/api/users/assignable?scope=all"),
         fetch("/api/auth/me"),
       ]);
@@ -94,7 +95,7 @@ export function MeetingsView() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [meetingsUrl]);
 
   useEffect(() => {
     load();

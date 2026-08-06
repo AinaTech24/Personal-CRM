@@ -4,15 +4,20 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { broadcastTaskChange, canDeleteTask, taskListWhere } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
-import { socialMediaTeamScopeFor } from "@/lib/social-media";
+import { socialMediaTeamOnlyScopeFor, socialMediaTeamScopeFor } from "@/lib/social-media";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const teamUserIds = await socialMediaTeamScopeFor(user);
+  // The Social Media Team console's Tasks tab explicitly asks for the
+  // team-only view — narrower than an Admin's normal company-wide list.
+  const teamOnly = req.nextUrl.searchParams.get("scope") === "social-media";
+  const teamUserIds = teamOnly ? await socialMediaTeamOnlyScopeFor(user) : await socialMediaTeamScopeFor(user);
+  if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const tasks = await db.task.findMany({
-    where: taskListWhere(user, teamUserIds),
+    where: taskListWhere(user, teamUserIds, teamOnly),
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
