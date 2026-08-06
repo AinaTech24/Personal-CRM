@@ -15,6 +15,7 @@ import {
   IconChevronLeft,
   IconGrid,
   IconHistory,
+  IconUsers,
 } from "@/components/icons";
 import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -99,18 +100,26 @@ const adminNav: NavItem[] = [
   { href: "/admin/logs", label: "View logs", icon: staticNavIcon(IconHistory) },
   { href: "/admin/departments", label: "Departments", icon: staticNavIcon(IconBuilding) },
   { href: "/admin/users", label: "Users & Invites", icon: LottieUsersInvites },
+  { href: "/social-media/team", label: "Social Media Team", icon: staticNavIcon(IconUsers) },
   { href: "/admin/attendance", label: "Attendance", icon: staticNavIcon(IconClock) },
   { href: "/admin/email", label: "Email (SMTP)", icon: staticNavIcon(IconMail) },
   { href: "/admin/settings", label: "Application", icon: staticNavIcon(IconSettings) },
 ];
 
 /**
- * Social Media has no admin-facing entry point in any sidebar (no company-
- * admin link, no "Team" console link — that's managed from Users & Invites
- * instead) — but a team member still needs some way to reach their own
- * client list day to day, so this one link survives for them specifically.
+ * A team member (regular or lead, not a company admin) still needs some way
+ * to reach their own client list day to day even without the admin nav's
+ * "Social Media Team" link above, so this one link survives for them
+ * specifically.
  */
 const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: LottieClients };
+
+/**
+ * A non-admin lead's own way into the same Team console an Admin/Super Admin
+ * reaches via adminNav's "Social Media Team" entry above — a regular
+ * (non-lead) team member doesn't manage the team, so they don't get this.
+ */
+const teamNavItem: NavItem = { href: "/social-media/team", label: "Social Media Team", icon: staticNavIcon(IconUsers) };
 
 /** Modules a Social Media team member (regular or lead) never sees, even if an admin hasn't globally hidden them. */
 const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
@@ -204,6 +213,7 @@ function NavLinkItem({
 export function Sidebar({
   isAdmin,
   restrictToSocialMedia,
+  isSocialMediaLead,
   collapsed,
   onToggle,
   /** Rendered inside the mobile drawer: always visible, always expanded. */
@@ -212,6 +222,7 @@ export function Sidebar({
 }: {
   isAdmin: boolean;
   restrictToSocialMedia: boolean;
+  isSocialMediaLead: boolean;
   collapsed: boolean;
   onToggle: () => void;
   mobile?: boolean;
@@ -258,12 +269,13 @@ export function Sidebar({
   // Social Media team members (regular or lead, not a company admin) don't
   // get Quotations — enforced server-side too, independent of the sidebar —
   // and get "Clients" (their own name for the same SocialClient records)
-  // right after Leads, so they have a way back into their own work. No
-  // other Social Media entry point is added to their nav.
+  // right after Leads, so they have a way back into their own work. A lead
+  // additionally gets the Team console link itself, right after Clients.
   if (restrictToSocialMedia) {
     visibleMainNav = visibleMainNav.filter((item) => !SOCIAL_MEDIA_EXCLUDED_HREFS.includes(item.href));
     const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
-    visibleMainNav.splice(leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1, 0, clientsNavItem);
+    const insertAt = leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1;
+    visibleMainNav.splice(insertAt, 0, ...(isSocialMediaLead ? [clientsNavItem, teamNavItem] : [clientsNavItem]));
   }
 
   // Unread chat messages, for the badge on Messages. Driven by the socket so it
