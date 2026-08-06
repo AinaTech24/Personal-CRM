@@ -85,12 +85,15 @@ function floorScalarValue(k: unknown, floor: number) {
 }
 
 /**
- * Stroke width, relative to canvas size, this app's static Icon* set draws
- * at (1.75 on a 24-unit viewBox) — used as a floor so every Lottie icon
- * reads at roughly the same visual weight as its static neighbors instead
- * of whatever the source file happened to ship with.
+ * Stroke width, relative to canvas size, used as a floor so every Lottie
+ * icon reads at roughly the same visual weight instead of whatever the
+ * source file happened to ship with (this pack ranges from 5 to 22.5 on an
+ * identical 576-unit canvas). Originally matched the static Icon* set's own
+ * ratio (1.75/24) exactly, but multi-curve icons like the notification bell
+ * looked heavy-handed/blobby at that weight once every curve doubled or
+ * tripled in thickness — this is deliberately lighter than a literal match.
  */
-const REFERENCE_STROKE_RATIO = 1.75 / 24;
+const REFERENCE_STROKE_RATIO = 20 / 576;
 
 function restyleShapes(shapes: unknown, targetColor: [number, number, number], strokeFloor: number) {
   if (!Array.isArray(shapes)) return;

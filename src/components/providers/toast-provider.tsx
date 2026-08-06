@@ -92,8 +92,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      {/* Stacked deck, top-center. Newest in front; older ones peek behind. */}
-      <div className="pointer-events-none fixed left-1/2 top-4 z-[200] flex w-[380px] max-w-[92vw] -translate-x-1/2 justify-center">
+      {/*
+        Stacked deck, top-center. Newest in front; older ones peek behind.
+        Offset by --safe-top (see globals.css), not a bare `top-4` — in a
+        PWA running standalone with an edge-to-edge status bar, a bare
+        offset from the viewport's true top lands the toast right under the
+        clock/signal/wifi icons instead of below them.
+      */}
+      <div className="pointer-events-none fixed left-1/2 top-[calc(1rem+var(--safe-top,0px))] z-[200] flex w-[380px] max-w-[92vw] -translate-x-1/2 justify-center">
         <div className="relative w-full">
           <AnimatePresence initial={false}>
             {toasts.map((t, index) => {

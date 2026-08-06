@@ -67,8 +67,11 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
                 <img src={avatar} alt="Profile" className="h-full w-full rounded-full object-contain" />
               ) : (
                 <LottieIcon
+                  // Fills the whole h-9 w-9 (36px) button, same as the avatar
+                  // photo does with h-full w-full — a fallback icon rendered
+                  // small and centered inside a filled circle looked stranded.
                   src="/icons/Profile.json"
-                  size={20}
+                  size={36}
                   playing={hovering}
                   colorClassName="text-primary-foreground"
                 />

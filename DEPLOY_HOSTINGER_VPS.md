@@ -171,6 +171,20 @@ JWT_SECRET="PASTE_A_LONG_RANDOM_SECRET"
 
 APP_URL="https://crm.ainatech.in"
 
+# OS-level push notifications (attendance reminders, unread messages, etc.
+# reaching a closed app or background tab). Generate once with:
+#   npx web-push generate-vapid-keys
+# Without these, push quietly does nothing — no error, notifications just
+# never arrive — everything else in the app works the same either way.
+VAPID_PUBLIC_KEY="PASTE_THE_GENERATED_PUBLIC_KEY"
+VAPID_PRIVATE_KEY="PASTE_THE_GENERATED_PRIVATE_KEY"
+VAPID_SUBJECT="mailto:admin@ainatech.in"
+
+# Lets the two cron-only routes (attendance reminders, monthly reports —
+# see §9 below) authenticate as a scheduler instead of a logged-in admin.
+# Generate with: openssl rand -base64 32
+CRON_SECRET="PASTE_A_LONG_RANDOM_SECRET"
+
 # Only read by `npm run db:seed`, once. Delete these three lines afterwards.
 SEED_ADMIN_EMAIL="you@ainatech.in"
 SEED_ADMIN_PASSWORD="a-strong-password"
@@ -409,7 +423,47 @@ restore one somewhere at least once. An untested backup is a guess.
 
 ---
 
-## 9. Moving from Render
+## 9. Attendance reminders & monthly reports (cron)
+
+Two routes exist purely to be hit on a schedule — nothing in the app calls
+them on its own, because a single Node process has no built-in scheduler:
+
+- **`/api/attendance/send-reminders`** — nudges anyone within 30 minutes of
+  a shift's check-in/check-out window closing who hasn't acted yet (toast,
+  bell, and OS push). Needs to run every **~15 minutes**, comfortably under
+  that 30-minute window.
+- **`/api/attendance/send-monthly-reports`** — emails everyone their
+  attendance snapshot for the month that just ended. Needs to run **once a
+  month**, just after midnight on the 1st.
+
+Both authenticate a scheduler via the `x-cron-secret` header matching
+`CRON_SECRET` from `.env` (§3) — **without that env var set, these routes
+just 403 every request and silently never fire.** Skipping this step is the
+most likely reason reminders "don't work": the feature is fully built and
+does nothing until something is actually configured to call it.
+
+```bash
+crontab -e
+```
+
+```
+*/15 * * * * curl -s -o /dev/null -X POST -H "x-cron-secret: PUT_THE_SAME_CRON_SECRET_FROM_ENV" https://crm.ainatech.in/api/attendance/send-reminders
+1 0 1 * * curl -s -o /dev/null -X POST -H "x-cron-secret: PUT_THE_SAME_CRON_SECRET_FROM_ENV" https://crm.ainatech.in/api/attendance/send-monthly-reports
+```
+
+The OS-push half of `send-reminders` (the part that reaches a phone with the
+tab closed or the PWA backgrounded) additionally needs `VAPID_PUBLIC_KEY` /
+`VAPID_PRIVATE_KEY` set (§3) — without them `sendPushToUsers` quietly no-ops,
+so the in-app toast/bell would still fire but nothing would ever reach a
+closed app. Confirm both pieces landed by checking `pm2 logs aina-crm` right
+after a manual test hit (`curl` the same command above) — a 200 with
+`"sent": 0` means it ran but nobody was due; a 403 means `CRON_SECRET`
+doesn't match; no line at all means the cron itself never fired (check
+`grep CRON /var/log/syslog` or `journalctl -u cron`).
+
+---
+
+## 10. Moving from Render
 
 1. Dump Aiven and load it in: `mysqldump ... | mysql -u aina -p aina_crm`
 2. Keep the **same `JWT_SECRET`** to avoid signing everyone out — or accept it
