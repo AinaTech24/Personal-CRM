@@ -27,6 +27,7 @@ export function NotificationBell() {
   const toast = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
+  const [hovering, setHovering] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.readAt).length;
 
@@ -99,8 +100,10 @@ export function NotificationBell() {
           <button
             className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-primary/5"
             aria-label="Notifications"
+            onMouseEnter={() => setHovering(true)}
+            onMouseLeave={() => setHovering(false)}
           >
-            <LottieIcon src="/icons/Reminder.json" size={16} active={unreadCount > 0} />
+            <LottieIcon src="/icons/Notifications.json" size={16} playing={hovering || unreadCount > 0} />
             <AnimatePresence>
               {unreadCount > 0 && (
                 <motion.span

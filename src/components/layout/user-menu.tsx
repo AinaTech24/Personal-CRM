@@ -17,6 +17,7 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
+  const [hovering, setHovering] = useState(false);
 
   // Load the current user's avatar for the menu button.
   useEffect(() => {
@@ -54,6 +55,8 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
           <DropdownMenu.Trigger asChild>
             <button
               aria-label="Account menu"
+              onMouseEnter={() => setHovering(true)}
+              onMouseLeave={() => setHovering(false)}
               className={cn(
                 "flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border",
                 avatar ? "bg-transparent" : "bg-primary text-primary-foreground"
@@ -63,7 +66,7 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={avatar} alt="Profile" className="h-full w-full rounded-full object-contain" />
               ) : (
-                <LottieIcon src="/icons/Profile.json" size={16} />
+                <LottieIcon src="/icons/Profile.json" size={16} playing={hovering} />
               )}
             </button>
           </DropdownMenu.Trigger>

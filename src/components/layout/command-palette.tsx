@@ -80,6 +80,7 @@ export function CommandPalette() {
   const [loading, setLoading] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [recentPages, setRecentPages] = useState<SearchResult[]>([]);
+  const [hovering, setHovering] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Global ⌘K / Ctrl+K to open.
@@ -164,10 +165,12 @@ export function CommandPalette() {
         <button
           type="button"
           onClick={() => setOpen(true)}
+          onMouseEnter={() => setHovering(true)}
+          onMouseLeave={() => setHovering(false)}
           aria-label="Search"
           className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
         >
-          <LottieIcon src="/icons/Search.json" size={16} />
+          <LottieIcon src="/icons/Search.json" size={16} playing={hovering} />
         </button>
       </Tooltip>
 
