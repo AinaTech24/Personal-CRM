@@ -23,11 +23,13 @@ import { IconPencil, IconTrash, IconSend } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { userOptionLabel } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
+import { ClientPipeline } from "@/components/social-media/client-pipeline";
 
-type TabKey = "members" | "attendance" | "activity";
+type TabKey = "members" | "pipeline" | "attendance" | "activity";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "members", label: "Members" },
+  { key: "pipeline", label: "Pipeline" },
   { key: "attendance", label: "Attendance" },
   { key: "activity", label: "Activity" },
 ];
@@ -98,6 +100,7 @@ export function SocialMediaTeamConsole() {
       ) : (
         <>
           {tab === "members" && <MembersTab onForbidden={() => setForbidden(true)} />}
+          {tab === "pipeline" && <ClientPipeline />}
           {tab === "attendance" && <AttendanceTab />}
           {tab === "activity" && <ActivityTab />}
         </>
