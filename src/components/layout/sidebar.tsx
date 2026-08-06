@@ -5,24 +5,18 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  IconDashboard,
   IconLeads,
-  IconTasks,
-  IconProjects,
   IconQuotations,
   IconInvoices,
   IconBuilding,
-  IconUsers,
   IconMail,
   IconSettings,
   IconClock,
-  IconCalendar,
-  IconMessage,
   IconChevronLeft,
   IconGrid,
   IconHistory,
-  IconFolder,
 } from "@/components/icons";
+import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSocket } from "@/components/providers/socket-provider";
@@ -34,13 +28,35 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
+/**
+ * Wraps a Lottie animation (see lottie-icon.tsx) so it can slot into
+ * NavItem.icon exactly like a static SVG component — static at rest, plays
+ * on hover. Only the icons an animated replacement has actually been
+ * provided for use this; everything else still uses its static Icon*.
+ */
+function lottieNavIcon(src: string) {
+  return function NavIcon({ className }: { className?: string }) {
+    // Matches the h-4 w-4 (16px) every static Icon* renders at here — Lottie
+    // needs an explicit pixel size rather than relying on the className alone.
+    return <LottieIcon src={src} size={16} className={className} />;
+  };
+}
+
+const LottieDashboard = lottieNavIcon("/icons/Dashboard.json");
+const LottieTasks = lottieNavIcon("/icons/Tasks.json");
+const LottieProjects = lottieNavIcon("/icons/Projects.json");
+const LottieMeetings = lottieNavIcon("/icons/Meetings.json");
+const LottieMessages = lottieNavIcon("/icons/Messages.json");
+const LottieClients = lottieNavIcon("/icons/Clients.json");
+const LottieUsersInvites = lottieNavIcon("/icons/users and invites.json");
+
 const mainNav: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: IconDashboard },
+  { href: "/", label: "Dashboard", icon: LottieDashboard },
   { href: "/leads", label: "Leads", icon: IconLeads },
-  { href: "/tasks", label: "Tasks", icon: IconTasks },
-  { href: "/projects", label: "Projects", icon: IconProjects },
-  { href: "/meetings", label: "Meetings", icon: IconCalendar },
-  { href: "/messages", label: "Messages", icon: IconMessage },
+  { href: "/tasks", label: "Tasks", icon: LottieTasks },
+  { href: "/projects", label: "Projects", icon: LottieProjects },
+  { href: "/meetings", label: "Meetings", icon: LottieMeetings },
+  { href: "/messages", label: "Messages", icon: LottieMessages },
   { href: "/quotations", label: "Quotations", icon: IconQuotations },
   { href: "/invoices", label: "Invoices", icon: IconInvoices },
   { href: "/attendance", label: "My Attendance", icon: IconClock },
@@ -51,7 +67,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/modules", label: "Modules", icon: IconGrid },
   { href: "/admin/logs", label: "View logs", icon: IconHistory },
   { href: "/admin/departments", label: "Departments", icon: IconBuilding },
-  { href: "/admin/users", label: "Users & Invites", icon: IconUsers },
+  { href: "/admin/users", label: "Users & Invites", icon: LottieUsersInvites },
   { href: "/admin/attendance", label: "Attendance", icon: IconClock },
   { href: "/admin/email", label: "Email (SMTP)", icon: IconMail },
   { href: "/admin/settings", label: "Application", icon: IconSettings },
@@ -63,7 +79,7 @@ const adminNav: NavItem[] = [
  * instead) — but a team member still needs some way to reach their own
  * client list day to day, so this one link survives for them specifically.
  */
-const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: IconFolder };
+const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: LottieClients };
 
 /** Modules a Social Media team member (regular or lead) never sees, even if an admin hasn't globally hidden them. */
 const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import { IconMoon, IconSun } from "@/components/icons";
+import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
 
 export function ThemeToggle() {
@@ -20,7 +20,7 @@ export function ThemeToggle() {
         className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-primary/5"
         aria-label="Toggle theme"
       >
-        {theme === "dark" ? <IconSun className="h-4 w-4" /> : <IconMoon className="h-4 w-4" />}
+        {theme === "dark" ? <LottieIcon src="/icons/Sun.json" size={16} /> : <LottieIcon src="/icons/Moon.json" size={16} />}
       </button>
     </Tooltip>
   );

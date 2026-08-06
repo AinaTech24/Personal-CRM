@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { IconBell, IconCheck, IconTrash } from "@/components/icons";
+import { LottieIcon } from "@/components/icons/lottie-icon";
 import { AnimatePresence, motion } from "framer-motion";
 import * as Popover from "@radix-ui/react-popover";
 import { useSocket } from "@/components/providers/socket-provider";
@@ -99,7 +100,7 @@ export function NotificationBell() {
             className="relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-primary/5"
             aria-label="Notifications"
           >
-            <IconBell className="h-4 w-4" />
+            <LottieIcon src="/icons/Reminder.json" size={16} active={unreadCount > 0} />
             <AnimatePresence>
               {unreadCount > 0 && (
                 <motion.span

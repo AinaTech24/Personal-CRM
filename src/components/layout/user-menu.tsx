@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { IconLogOut, IconSettings, IconUser } from "@/components/icons";
+import { IconLogOut, IconSettings } from "@/components/icons";
+import { LottieIcon } from "@/components/icons/lottie-icon";
 import { SettingsDialog } from "@/components/layout/settings-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -62,7 +63,7 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={avatar} alt="Profile" className="h-full w-full rounded-full object-contain" />
               ) : (
-                <IconUser className="h-4 w-4" />
+                <LottieIcon src="/icons/Profile.json" size={16} />
               )}
             </button>
           </DropdownMenu.Trigger>

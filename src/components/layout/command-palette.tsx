@@ -15,6 +15,7 @@ import {
   IconUsers,
   IconX,
 } from "@/components/icons";
+import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -166,7 +167,7 @@ export function CommandPalette() {
           aria-label="Search"
           className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
         >
-          <IconSearch className="h-4 w-4" />
+          <LottieIcon src="/icons/Search.json" size={16} />
         </button>
       </Tooltip>
 
