@@ -20,6 +20,8 @@ export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?:
   project_task_assigned: IconProjects,
   quotation_decided: IconQuotations,
   meeting_invited: IconCalendar,
+  meeting_reminder: IconCalendar,
+  task_reminder: IconTasks,
   check_in_reminder: IconClock,
   check_out_reminder: IconClock,
   social_client_assigned: IconMegaphone,
@@ -65,6 +67,14 @@ export function notificationMessage(n: NotificationLike): string {
       const meetingTitle = typeof n.payload.meetingTitle === "string" ? n.payload.meetingTitle : "a meeting";
       return `${actor} invited you to the meeting "${meetingTitle}"`;
     }
+    case "meeting_reminder": {
+      const meetingTitle = typeof n.payload.meetingTitle === "string" ? n.payload.meetingTitle : "a meeting";
+      return `Reminder: "${meetingTitle}" is coming up`;
+    }
+    case "task_reminder": {
+      const taskTitle = typeof n.payload.taskTitle === "string" ? n.payload.taskTitle : "a task";
+      return `Reminder: "${taskTitle}" is due for your attention`;
+    }
     case "check_in_reminder": {
       const shiftName = typeof n.payload.shiftName === "string" ? n.payload.shiftName : "your shift";
       return `Don't forget to check in for ${shiftName} — the window closes soon`;
@@ -94,7 +104,8 @@ export function notificationHref(n: NotificationLike): string | null {
     return typeof n.payload.projectId === "string" ? `/projects/${n.payload.projectId}` : "/projects";
   }
   if (n.type === "quotation_decided") return "/quotations";
-  if (n.type === "meeting_invited") return "/meetings";
+  if (n.type === "meeting_invited" || n.type === "meeting_reminder") return "/meetings";
+  if (n.type === "task_reminder") return "/tasks";
   if (n.type === "check_in_reminder" || n.type === "check_out_reminder") return "/attendance";
   if (n.type === "social_client_assigned") {
     return typeof n.payload.clientId === "string" ? `/social-media/${n.payload.clientId}` : "/social-media";

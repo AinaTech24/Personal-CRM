@@ -1,6 +1,7 @@
 import type { InputJsonObject } from "@/generated/prisma/internal/prismaNamespace";
 import { db } from "@/lib/db";
 import { emitToUser } from "@/lib/socket-emit";
+import { sendPushToUsers, type PushPayload } from "@/lib/push";
 
 export type NotificationCategory = "leads" | "tasks" | "projects" | "quotations" | "meetings" | "attendance" | "social";
 
@@ -15,6 +16,8 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   project_task_assigned: "projects",
   quotation_decided: "quotations",
   meeting_invited: "meetings",
+  meeting_reminder: "meetings",
+  task_reminder: "tasks",
   check_in_reminder: "attendance",
   check_out_reminder: "attendance",
   social_client_assigned: "social",
@@ -22,9 +25,9 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
 
 export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: string; description: string }[] = [
   { value: "leads", label: "Leads", description: "When a lead is assigned to you" },
-  { value: "tasks", label: "Tasks", description: "When a task is assigned to you or gets a new comment" },
+  { value: "tasks", label: "Tasks", description: "When a task is assigned to you, gets a new comment, or a reminder you set on it comes due" },
   { value: "projects", label: "Projects", description: "When you're assigned a project, added as a member or supporter, or assigned a project task" },
-  { value: "meetings", label: "Meetings", description: "When you're invited to a meeting" },
+  { value: "meetings", label: "Meetings", description: "When you're invited to a meeting, or a reminder you set on one comes due" },
   { value: "quotations", label: "Quotations", description: "When a quotation you created is approved or rejected" },
   { value: "attendance", label: "Attendance", description: "Reminders to check in or check out before your shift window closes" },
   { value: "social", label: "Social Media", description: "When a social media client is assigned to you" },
@@ -46,5 +49,25 @@ export async function notifyUser(userId: string, type: string, payload: InputJso
 
   const notification = await db.notification.create({ data: { userId, type, payload } });
   emitToUser(userId, "notification", notification);
+  return notification;
+}
+
+/**
+ * notifyUser, plus a real OS-level push if it actually created one — so a
+ * closed app or backgrounded tab still hears about it, not just an in-app
+ * toast/bell. Skipped automatically when notifyUser itself returns null
+ * (the recipient has this category turned off in Settings), so muting a
+ * category mutes both channels together rather than just the in-app one —
+ * the same rule the reminder routes already apply by hand. Those routes
+ * build their own push payload inline instead of using this: a reminder
+ * fans the exact same content out to several recipients (a meeting's
+ * attendees) with nothing per-recipient in it, where every other call site
+ * here is a single targeted "you" notification.
+ */
+export async function notifyAndPush(userId: string, type: string, payload: InputJsonObject, push: PushPayload) {
+  const notification = await notifyUser(userId, type, payload);
+  if (notification) {
+    await sendPushToUsers([userId], push);
+  }
   return notification;
 }

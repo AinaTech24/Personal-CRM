@@ -20,9 +20,15 @@ export async function getLeadForUser(user: PermissionUser, leadId: string) {
   return "forbidden" as const;
 }
 
-/** Deletion is more sensitive than editing — restrict it to Admins and the lead's creator. */
-export function canDeleteLead(user: PermissionUser, lead: { createdById: string }) {
-  return isAdmin(user) || lead.createdById === user.id;
+/**
+ * Deletion is more sensitive than editing — restrict it to Admins, the
+ * lead's creator, and (matching the same widening getLeadForUser applies to
+ * editing) a Social Media lead deleting a lead that belongs to their team.
+ */
+export async function canDeleteLead(user: PermissionUser, lead: { createdById: string; assignedToId: string | null }) {
+  if (isAdmin(user) || lead.createdById === user.id) return true;
+  const teamUserIds = await socialMediaTeamScopeFor(user);
+  return !!teamUserIds && isSocialMediaTeamLead(lead, teamUserIds);
 }
 
 /**

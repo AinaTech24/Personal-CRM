@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { DashboardStats } from "@/components/dashboard/dashboard-stats";
 import { UserDashboard } from "@/components/dashboard/user-dashboard";
+import { ClientPipeline } from "@/components/social-media/client-pipeline";
 
 const modules = [
   { name: "Leads", href: "/leads", description: "Track incoming business opportunities" },
@@ -25,6 +26,11 @@ export default async function DashboardHomePage() {
     return (
       <div className="flex min-h-full flex-col gap-6">
         <DashboardStats greetingName={user?.name.split(" ")[0] ?? ""} />
+        <div>
+          <h2 className="text-lg font-semibold">Social Media pipeline</h2>
+          <p className="mb-3 text-sm text-muted-foreground">Every client with content in flight, and where each piece stands.</p>
+          <ClientPipeline />
+        </div>
       </div>
     );
   }

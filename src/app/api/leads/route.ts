@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { broadcastLeadChange, canDeleteLead, leadListWhere } from "@/lib/leads";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
 export async function GET() {
@@ -76,7 +76,12 @@ export async function POST(req: NextRequest) {
   });
 
   if (data.assignedToId && data.assignedToId !== user.id) {
-    await notifyUser(data.assignedToId, "lead_assigned", { leadId: lead.id, leadName: lead.name, actorName: user.name });
+    await notifyAndPush(
+      data.assignedToId,
+      "lead_assigned",
+      { leadId: lead.id, leadName: lead.name, actorName: user.name },
+      { title: "Lead assigned", body: `${user.name} assigned you the lead "${lead.name}"`, url: "/leads", tag: "lead-assigned" }
+    );
   }
 
   broadcastLeadChange("lead_created", lead);
@@ -94,7 +99,8 @@ export async function DELETE(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
   const leads = await db.lead.findMany({ where: { id: { in: parsed.data.ids } } });
-  const deletable = leads.filter((l) => canDeleteLead(user, l));
+  const deletableFlags = await Promise.all(leads.map((l) => canDeleteLead(user, l)));
+  const deletable = leads.filter((_l, i) => deletableFlags[i]);
 
   if (deletable.length > 0) {
     await db.lead.deleteMany({ where: { id: { in: deletable.map((l) => l.id) } } });

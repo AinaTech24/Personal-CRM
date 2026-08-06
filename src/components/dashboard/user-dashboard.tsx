@@ -77,7 +77,12 @@ export function UserDashboard({ firstName }: { firstName: string }) {
       const res = await fetch(`/api/attendance/${kind}`, { method: "POST" });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) return toast.error(kind === "check-in" ? "Couldn't check in" : "Couldn't check out", json.error);
-      toast.success(kind === "check-in" ? "Checked in" : "Checked out");
+      toast.toast({
+        title: kind === "check-in" ? "Checked in" : "Checked out",
+        variant: "success",
+        avatarDataUrl: kind === "check-in" ? "/icons/Check-in.svg" : "/icons/Check-out.svg",
+        iconAnimate: true,
+      });
       await load();
     } finally {
       setActing(false);

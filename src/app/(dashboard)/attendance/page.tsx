@@ -59,7 +59,12 @@ export default function AttendancePage() {
       const res = await fetch(`/api/attendance/${kind}`, { method: "POST" });
       const json = await res.json();
       if (!res.ok) return toast.error(kind === "check-in" ? "Couldn't check in" : "Couldn't check out", json.error);
-      toast.success(kind === "check-in" ? "Checked in" : "Checked out");
+      toast.toast({
+        title: kind === "check-in" ? "Checked in" : "Checked out",
+        variant: "success",
+        avatarDataUrl: kind === "check-in" ? "/icons/Check-in.svg" : "/icons/Check-out.svg",
+        iconAnimate: true,
+      });
       // Viewing the current year is required to see today; jump there if needed.
       if (year !== CURRENT_YEAR) setYear(CURRENT_YEAR);
       else await load(CURRENT_YEAR);

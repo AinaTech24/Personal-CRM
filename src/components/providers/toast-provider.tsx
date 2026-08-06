@@ -15,6 +15,8 @@ interface ToastItem {
   onClick?: () => void;
   /** Leading visual — a sender's photo, say, in place of the variant icon. */
   avatarDataUrl?: string | null;
+  /** Pops `avatarDataUrl` in with a bouncier spring instead of riding in flat with the rest of the card — for a small one-off celebratory icon (check-in/out), not a routine avatar photo. */
+  iconAnimate?: boolean;
 }
 
 interface ToastInput {
@@ -24,6 +26,7 @@ interface ToastInput {
   /** Makes the toast clickable; runs, then dismisses it. */
   onClick?: () => void;
   avatarDataUrl?: string | null;
+  iconAnimate?: boolean;
 }
 
 interface ToastContextValue {
@@ -92,8 +95,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      {/* Stacked deck, top-center. Newest in front; older ones peek behind. */}
-      <div className="pointer-events-none fixed left-1/2 top-4 z-[200] flex w-[380px] max-w-[92vw] -translate-x-1/2 justify-center">
+      {/*
+        Stacked deck, top-center. Newest in front; older ones peek behind.
+        Offset by --safe-top (see globals.css), not a bare `top-4` — in a
+        PWA running standalone with an edge-to-edge status bar, a bare
+        offset from the viewport's true top lands the toast right under the
+        clock/signal/wifi icons instead of below them.
+      */}
+      <div className="pointer-events-none fixed left-1/2 top-[calc(1rem+var(--safe-top,0px))] z-[200] flex w-[380px] max-w-[92vw] -translate-x-1/2 justify-center">
         <div className="relative w-full">
           <AnimatePresence initial={false}>
             {toasts.map((t, index) => {
@@ -127,11 +136,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   )}
                 >
                   {t.avatarDataUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <motion.img
                       src={t.avatarDataUrl}
                       alt=""
                       className={cn("h-6 w-6 shrink-0 rounded-full object-cover", t.description && "mt-0.5")}
+                      initial={t.iconAnimate ? { scale: 0, rotate: -25 } : false}
+                      animate={t.iconAnimate ? { scale: 1, rotate: 0 } : undefined}
+                      transition={t.iconAnimate ? { type: "spring", stiffness: 500, damping: 15, delay: 0.08 } : undefined}
                     />
                   ) : (
                     <span

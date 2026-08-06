@@ -3,14 +3,16 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { broadcastTaskChange, canDeleteTask, taskListWhere } from "@/lib/tasks";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
+import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const teamUserIds = await socialMediaTeamScopeFor(user);
   const tasks = await db.task.findMany({
-    where: taskListWhere(user),
+    where: taskListWhere(user, teamUserIds),
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
@@ -29,6 +31,7 @@ const bodySchema = z.object({
   status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELLED"]).default("TODO"),
   dueDate: z.string().optional().nullable(),
   assignedToId: z.string().optional().nullable(),
+  remindAt: z.string().optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -51,11 +54,17 @@ export async function POST(req: NextRequest) {
       dueDate: data.dueDate ? new Date(data.dueDate) : null,
       assignedToId: data.assignedToId || null,
       createdById: user.id,
+      remindAt: data.remindAt ? new Date(data.remindAt) : null,
     },
   });
 
   if (data.assignedToId && data.assignedToId !== user.id) {
-    await notifyUser(data.assignedToId, "task_assigned", { taskId: task.id, taskTitle: task.title, actorName: user.name });
+    await notifyAndPush(
+      data.assignedToId,
+      "task_assigned",
+      { taskId: task.id, taskTitle: task.title, actorName: user.name },
+      { title: "Task assigned", body: `${user.name} assigned you the task "${task.title}"`, url: "/tasks", tag: "task-assigned" }
+    );
   }
 
   broadcastTaskChange("task_created", task);
@@ -73,7 +82,8 @@ export async function DELETE(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
   const tasks = await db.task.findMany({ where: { id: { in: parsed.data.ids } } });
-  const deletable = tasks.filter((t) => canDeleteTask(user, t));
+  const deletableFlags = await Promise.all(tasks.map((t) => canDeleteTask(user, t)));
+  const deletable = tasks.filter((_t, i) => deletableFlags[i]);
 
   if (deletable.length > 0) {
     await db.task.deleteMany({ where: { id: { in: deletable.map((t) => t.id) } } });

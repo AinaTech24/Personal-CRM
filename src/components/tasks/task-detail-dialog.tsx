@@ -262,6 +262,18 @@ export function TaskDetailDialog({
               </div>
 
               <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">Remind me at</span>
+                <DateTimePicker
+                  className="w-56"
+                  value={task.remindAt ? new Date(task.remindAt) : null}
+                  onChange={(d) => patchTask({ remindAt: d.toISOString() })}
+                  placeholder="No reminder"
+                  clearable
+                  onClear={() => patchTask({ remindAt: null })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
                 <span className="text-xs text-muted-foreground">Description</span>
                 <Textarea
                   value={description}

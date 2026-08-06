@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getProjectForUser, logProjectActivity } from "@/lib/projects";
 import { broadcastTaskChange } from "@/lib/tasks";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 const patchSchema = z.object({
   title: z.string().min(1).optional(),
@@ -73,7 +73,12 @@ export async function PATCH(
 
   if (data.assignedToId !== undefined && data.assignedToId !== before.assignedToId) {
     if (data.assignedToId && data.assignedToId !== user.id) {
-      await notifyUser(data.assignedToId, "project_task_assigned", { projectId: id, taskTitle: task.title, actorName: user.name });
+      await notifyAndPush(
+        data.assignedToId,
+        "project_task_assigned",
+        { projectId: id, taskTitle: task.title, actorName: user.name },
+        { title: "Project task assigned", body: `${user.name} assigned you the project task "${task.title}"`, url: `/projects/${id}`, tag: "project-task-assigned" }
+      );
     }
   }
 

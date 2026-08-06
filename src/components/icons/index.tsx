@@ -179,17 +179,16 @@ export function IconChevronRight(props: IconProps) {
 
 export function IconArrowsUpDown(props: IconProps) {
   return (
-    <svg {...base(props)}>
-      <path d="M8 21V7M8 7 4 11M8 7l4 4" />
-      <path d="M16 3v14M16 17l4-4M16 17l-4-4" />
+    <svg {...base(props)} viewBox="0 0 430 430" strokeWidth={22} strokeMiterlimit={10}>
+      <path d="M132.6 42.9v344.2M79.2 96.3l53.4-53.4L186 96.3m111.4 290.8V42.9M244 333.7l53.4 53.4 53.4-53.4" />
     </svg>
   );
 }
 
 export function IconCheck(props: IconProps) {
   return (
-    <svg {...base(props)}>
-      <path d="M5 12.5l4.5 4.5L19 7" />
+    <svg {...base(props)} viewBox="0 0 430 430" strokeWidth={22} strokeMiterlimit={17.02}>
+      <path d="M57.3 226.6c42.4 42.3 97.501 97.3 97.501 97.3s147.9-147.8 217.9-217.8" />
     </svg>
   );
 }
@@ -242,9 +241,9 @@ export function IconListView(props: IconProps) {
 
 export function IconTrash(props: IconProps) {
   return (
-    <svg {...base(props)}>
-      <path d="M4.5 7h15M9.5 7V4.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V7M18 7l-.7 12.1a1.5 1.5 0 0 1-1.5 1.4H8.2a1.5 1.5 0 0 1-1.5-1.4L6 7" />
-      <path d="M10 11v6M14 11v6" />
+    <svg {...base(props)} viewBox="0 0 430 430" strokeWidth={22} strokeMiterlimit={18}>
+      <path d="M171.4 77.7C174.5 55.9 193.3 39 216 39c21.2 0 43.7 17.6 43.7 41.8M98.4 89.7c0 4.9.1 14.4.1 21.7l-.2 251.9c0 14.9 12.1 27 27 27h181c14.9 0 27-12.1 26.9-27l-.5-250.2c0-9.2 0-17.5-.1-22.6" />
+      <path d="M157.3 156.8v155.9m58.6-155.9v155.9m58.5-155.9v155.9M76 83.6l278.8.8" />
     </svg>
   );
 }
@@ -299,20 +298,18 @@ export function IconEyeOff(props: IconProps) {
 
 export function IconPencil(props: IconProps) {
   return (
-    <svg {...base(props)}>
-      <path d="M4 20h4L18.5 9.5a2 2 0 0 0 0-2.8l-1.2-1.2a2 2 0 0 0-2.8 0L4 16v4Z" />
-      <path d="M13.5 6.5l4 4" />
+    <svg {...base(props)} viewBox="0 0 430 430" strokeWidth={22} strokeMiterlimit={14}>
+      <path d="m344.35 142.219 35.355-35.356-56.568-56.568-35.356 35.355m-134.35 247.487-84.81 28.328 28.241-84.897" />
+      <path d="m153.431 333.138-56.569-56.569L287.781 85.65l56.569 56.569zm67.175-123.744 67.175-67.175" />
     </svg>
   );
 }
 
 export function IconShare(props: IconProps) {
   return (
-    <svg {...base(props)}>
-      <circle cx="18" cy="5" r="2.5" />
-      <circle cx="6" cy="12" r="2.5" />
-      <circle cx="18" cy="19" r="2.5" />
-      <path d="M8.2 10.8 15.8 6.4M8.2 13.2l7.6 4.4" />
+    <svg {...base(props)} viewBox="0 0 430 430" strokeWidth={22} strokeMiterlimit={10}>
+      <path d="M365 225v130c0 11.046-8.954 20-20 20H75c-11.046 0-20-8.954-20-20V85c0-11.046 8.954-20 20-20h130" />
+      <path d="M375 55H250m125 0v125m0-125L215 215" />
     </svg>
   );
 }
@@ -498,8 +495,9 @@ export function IconFile(props: IconProps) {
 
 export function IconFolder(props: IconProps) {
   return (
-    <svg {...base(props)}>
-      <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+    <svg {...base(props)} viewBox="0 0 430 430" strokeWidth={22} strokeMiterlimit={14.8}>
+      <path d="M369.896 166.763c-.105-25.726 0-47.124 0-47.124l-200.475-.311-25.007-31.224L61.369 88l.521 255.378s287.062.518 308.11.622" />
+      <path d="m61.786 339.378-.312-172.615h308.422V340" />
     </svg>
   );
 }

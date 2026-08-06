@@ -40,6 +40,7 @@ interface Meeting {
   status: MeetingStatus;
   organizer: MeetingUser;
   attendees: MeetingUser[];
+  remindAt: string | null;
 }
 
 const STATUS_OPTIONS = [
@@ -369,6 +370,7 @@ function MeetingDialog({
   const [location, setLocation] = useState(meeting?.location ?? "");
   const [startsAt, setStartsAt] = useState<Date | null>(meeting ? parseISO(meeting.startsAt) : defaultStart());
   const [endsAt, setEndsAt] = useState<Date | null>(meeting?.endsAt ? parseISO(meeting.endsAt) : null);
+  const [remindAt, setRemindAt] = useState<Date | null>(meeting?.remindAt ? parseISO(meeting.remindAt) : null);
   const [status, setStatus] = useState<MeetingStatus>(meeting?.status ?? "SCHEDULED");
   const [attendeeIds, setAttendeeIds] = useState<Set<string>>(new Set(meeting?.attendees.map((a) => a.id) ?? []));
   const [saving, setSaving] = useState(false);
@@ -397,6 +399,7 @@ function MeetingDialog({
         endsAt: endsAt ? endsAt.toISOString() : null,
         attendeeIds: [...attendeeIds],
         status,
+        remindAt: remindAt ? remindAt.toISOString() : null,
       };
       const res = await fetch(editingId ? `/api/meetings/${editingId}` : "/api/meetings", {
         method: editingId ? "PATCH" : "POST",
@@ -459,6 +462,14 @@ function MeetingDialog({
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="m-loc">Location or link</Label>
               <Input id="m-loc" value={location} disabled={readOnly} onChange={(e) => setLocation(e.target.value)} placeholder="Meeting room 2, or https://meet.…" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label>Remind me at</Label>
+              <DateTimePicker value={remindAt} onChange={setRemindAt} placeholder="No reminder" clearable onClear={() => setRemindAt(null)} />
+              <p className="text-xs text-muted-foreground">
+                Notifies the organizer and every attendee — toast, bell, and a push notification if the app is closed.
+              </p>
             </div>
 
             <div className="flex flex-col gap-1.5">

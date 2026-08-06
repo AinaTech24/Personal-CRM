@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
-import { notifyUser } from "@/lib/notify";
+import { isAdmin, type PermissionUser } from "@/lib/permissions";
+import { notifyAndPush } from "@/lib/notify";
+import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -18,13 +19,26 @@ const patchSchema = z.object({
   endsAt: z.string().nullable().optional(),
   status: z.enum(["SCHEDULED", "COMPLETED", "CANCELLED"]).optional(),
   attendeeIds: z.array(z.string()).optional(),
+  remindAt: z.string().nullable().optional(),
 });
 
-/** Only the organizer or an admin may change or remove a meeting. */
-async function canManage(userId: string, isAdminUser: boolean, meetingId: string) {
-  if (isAdminUser) return true;
-  const m = await db.meeting.findUnique({ where: { id: meetingId }, select: { organizerId: true } });
-  return !!m && m.organizerId === userId;
+/**
+ * Only the organizer, an admin, or a Social Media lead managing a meeting
+ * organized by (or attended by) someone on their team may change or remove
+ * a meeting.
+ */
+async function canManage(user: PermissionUser, meetingId: string) {
+  if (isAdmin(user)) return true;
+  const m = await db.meeting.findUnique({
+    where: { id: meetingId },
+    select: { organizerId: true, attendees: { select: { id: true } } },
+  });
+  if (!m) return false;
+  if (m.organizerId === user.id) return true;
+
+  const teamUserIds = await socialMediaTeamScopeFor(user);
+  if (!teamUserIds) return false;
+  return teamUserIds.includes(m.organizerId) || m.attendees.some((a) => teamUserIds.includes(a.id));
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -35,7 +49,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const meeting = await db.meeting.findUnique({ where: { id }, include: meetingInclude });
   if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const visible = isAdmin(user) || meeting.organizer.id === user.id || meeting.attendees.some((a) => a.id === user.id);
+  let visible = isAdmin(user) || meeting.organizer.id === user.id || meeting.attendees.some((a) => a.id === user.id);
+  if (!visible) {
+    const teamUserIds = await socialMediaTeamScopeFor(user);
+    visible =
+      !!teamUserIds &&
+      (teamUserIds.includes(meeting.organizer.id) || meeting.attendees.some((a) => teamUserIds.includes(a.id)));
+  }
   if (!visible) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   return NextResponse.json({ meeting });
@@ -46,7 +66,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  if (!(await canManage(user.id, isAdmin(user), id))) {
+  if (!(await canManage(user, id))) {
     return NextResponse.json({ error: "Only the organizer can edit this meeting" }, { status: 403 });
   }
 
@@ -79,13 +99,30 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.attendeeIds !== undefined) {
     data.attendees = { set: d.attendeeIds.map((aid) => ({ id: aid })) };
   }
+  if (d.remindAt !== undefined) {
+    if (d.remindAt) {
+      const r = new Date(d.remindAt);
+      if (Number.isNaN(r.getTime())) return NextResponse.json({ error: "Invalid reminder time" }, { status: 400 });
+      data.remindAt = r;
+    } else {
+      data.remindAt = null;
+    }
+    // A changed (or cleared) reminder time is a fresh reminder — reset the
+    // sent flag so moving it doesn't just silently skip firing at all.
+    data.reminderSentAt = null;
+  }
 
   const meeting = await db.meeting.update({ where: { id }, data, include: meetingInclude });
 
   if (previousAttendeeIds && d.attendeeIds) {
     const newAttendeeIds = d.attendeeIds.filter((aid) => aid !== user.id && !previousAttendeeIds!.includes(aid));
     for (const aid of newAttendeeIds) {
-      await notifyUser(aid, "meeting_invited", { meetingId: id, meetingTitle: meeting.title, actorName: user.name });
+      await notifyAndPush(
+        aid,
+        "meeting_invited",
+        { meetingId: id, meetingTitle: meeting.title, actorName: user.name },
+        { title: "Meeting invite", body: `${user.name} invited you to "${meeting.title}"`, url: "/meetings", tag: "meeting-invited" }
+      );
     }
   }
 
@@ -97,7 +134,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  if (!(await canManage(user.id, isAdmin(user), id))) {
+  if (!(await canManage(user, id))) {
     return NextResponse.json({ error: "Only the organizer can delete this meeting" }, { status: 403 });
   }
 

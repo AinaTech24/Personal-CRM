@@ -4,14 +4,16 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { broadcastProjectChange, canDeleteProject, logProjectActivity, projectListWhere } from "@/lib/projects";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
+import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const teamUserIds = await socialMediaTeamScopeFor(user);
   const projects = await db.project.findMany({
-    where: projectListWhere(user),
+    where: projectListWhere(user, teamUserIds),
     include: {
       department: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
@@ -74,7 +76,12 @@ export async function POST(req: NextRequest) {
   broadcastProjectChange("project_created", project, memberIds);
 
   if (data.assignedToId && data.assignedToId !== user.id) {
-    await notifyUser(data.assignedToId, "project_assigned", { projectId: project.id, projectName: project.name, actorName: user.name });
+    await notifyAndPush(
+      data.assignedToId,
+      "project_assigned",
+      { projectId: project.id, projectName: project.name, actorName: user.name },
+      { title: "Project assigned", body: `${user.name} assigned you the project "${project.name}"`, url: `/projects/${project.id}`, tag: "project-assigned" }
+    );
   }
 
   return NextResponse.json({ project }, { status: 201 });
@@ -93,7 +100,8 @@ export async function DELETE(req: NextRequest) {
     where: { id: { in: parsed.data.ids } },
     include: { members: { select: { userId: true } } },
   });
-  const deletable = projects.filter((p) => canDeleteProject(user, p));
+  const deletableFlags = await Promise.all(projects.map((p) => canDeleteProject(user, p)));
+  const deletable = projects.filter((_p, i) => deletableFlags[i]);
 
   if (deletable.length > 0) {
     await db.project.deleteMany({ where: { id: { in: deletable.map((p) => p.id) } } });

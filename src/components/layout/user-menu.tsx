@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { IconLogOut, IconSettings, IconUser } from "@/components/icons";
+import { IconLogOut, IconSettings } from "@/components/icons";
+import { LottieIcon } from "@/components/icons/lottie-icon";
 import { SettingsDialog } from "@/components/layout/settings-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -16,6 +17,7 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
+  const [hovering, setHovering] = useState(false);
 
   // Load the current user's avatar for the menu button.
   useEffect(() => {
@@ -53,6 +55,8 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
           <DropdownMenu.Trigger asChild>
             <button
               aria-label="Account menu"
+              onMouseEnter={() => setHovering(true)}
+              onMouseLeave={() => setHovering(false)}
               className={cn(
                 "flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border",
                 avatar ? "bg-transparent" : "bg-primary text-primary-foreground"
@@ -62,7 +66,15 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={avatar} alt="Profile" className="h-full w-full rounded-full object-contain" />
               ) : (
-                <IconUser className="h-4 w-4" />
+                <LottieIcon
+                  // Fills the whole h-9 w-9 (36px) button, same as the avatar
+                  // photo does with h-full w-full — a fallback icon rendered
+                  // small and centered inside a filled circle looked stranded.
+                  src="/icons/Profile.json"
+                  size={36}
+                  playing={hovering}
+                  colorClassName="text-primary-foreground"
+                />
               )}
             </button>
           </DropdownMenu.Trigger>

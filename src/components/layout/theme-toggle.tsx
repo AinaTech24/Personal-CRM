@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import { IconMoon, IconSun } from "@/components/icons";
+import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [hovering, setHovering] = useState(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -17,10 +18,16 @@ export function ThemeToggle() {
     <Tooltip label={theme === "dark" ? "Light mode" : "Dark mode"} side="bottom">
       <button
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-primary/5"
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+        className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
         aria-label="Toggle theme"
       >
-        {theme === "dark" ? <IconSun className="h-4 w-4" /> : <IconMoon className="h-4 w-4" />}
+        {theme === "dark" ? (
+          <LottieIcon src="/icons/Sun.json" size={20} playing={hovering} highlighted={hovering} />
+        ) : (
+          <LottieIcon src="/icons/Moon.json" size={20} playing={hovering} highlighted={hovering} />
+        )}
       </button>
     </Tooltip>
   );

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { broadcastTaskChange, canDeleteTask, getTaskForUser } from "@/lib/tasks";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -38,6 +38,7 @@ const patchSchema = z.object({
   status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELLED"]).optional(),
   dueDate: z.string().nullable().optional(),
   assignedToId: z.string().nullable().optional(),
+  remindAt: z.string().nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -66,6 +67,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.status !== undefined && { status: data.status }),
       ...(data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
       ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId }),
+      // A changed (or cleared) reminder time is a fresh reminder — reset the
+      // sent flag too, so moving it doesn't just silently skip firing.
+      ...(data.remindAt !== undefined && {
+        remindAt: data.remindAt ? new Date(data.remindAt) : null,
+        reminderSentAt: null,
+      }),
     },
   });
 
@@ -75,7 +82,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data.assignedToId &&
     data.assignedToId !== user.id
   ) {
-    await notifyUser(data.assignedToId, "task_assigned", { taskId: id, taskTitle: task.title, actorName: user.name });
+    await notifyAndPush(
+      data.assignedToId,
+      "task_assigned",
+      { taskId: id, taskTitle: task.title, actorName: user.name },
+      { title: "Task assigned", body: `${user.name} assigned you the task "${task.title}"`, url: "/tasks", tag: "task-assigned" }
+    );
   }
 
   broadcastTaskChange("task_updated", task);
@@ -94,7 +106,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const access = await getTaskForUser(user, id);
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!canDeleteTask(user, access)) {
+  if (!(await canDeleteTask(user, access))) {
     return NextResponse.json({ error: "Only the creator or an admin can delete this task" }, { status: 403 });
   }
 

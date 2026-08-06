@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { AttendanceStatus } from "@/generated/prisma/enums";
 import {
   Dialog,
   DialogContent,
@@ -19,15 +20,27 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SkeletonForm } from "@/components/ui/skeleton";
-import { IconPencil, IconTrash, IconSend } from "@/components/icons";
+import { IconPencil, IconTrash, IconSend, IconCheck, IconX } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { userOptionLabel } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
+import { ClientPipeline } from "@/components/social-media/client-pipeline";
+import { StatusBadge } from "@/components/attendance/status-badge";
+import { HALF_DAY_REASON_LABEL, STATUS_LABEL } from "@/lib/attendance-ui";
+import { LeadsBoard } from "@/components/leads/leads-board";
+import { TasksBoard } from "@/components/tasks/tasks-board";
+import { MeetingsView } from "@/components/meetings/meetings-view";
+import { ProjectsList } from "@/components/projects/projects-list";
 
-type TabKey = "members" | "attendance" | "activity";
+type TabKey = "members" | "pipeline" | "leads" | "tasks" | "meetings" | "projects" | "attendance" | "activity";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "members", label: "Members" },
+  { key: "pipeline", label: "Pipeline" },
+  { key: "leads", label: "Leads" },
+  { key: "tasks", label: "Tasks" },
+  { key: "meetings", label: "Meetings" },
+  { key: "projects", label: "Projects" },
   { key: "attendance", label: "Attendance" },
   { key: "activity", label: "Activity" },
 ];
@@ -98,6 +111,11 @@ export function SocialMediaTeamConsole() {
       ) : (
         <>
           {tab === "members" && <MembersTab onForbidden={() => setForbidden(true)} />}
+          {tab === "pipeline" && <ClientPipeline />}
+          {tab === "leads" && <LeadsBoard />}
+          {tab === "tasks" && <TasksBoard />}
+          {tab === "meetings" && <MeetingsView />}
+          {tab === "projects" && <ProjectsList />}
           {tab === "attendance" && <AttendanceTab />}
           {tab === "activity" && <ActivityTab />}
         </>
@@ -376,7 +394,12 @@ interface AttendanceRow {
   checkIn: string | null;
   checkOut: string | null;
   workedMinutes: number | null;
-  calculatedStatus: string;
+  status: string | null;
+  calculatedStatus: string | null;
+  statusOverride: boolean;
+  overrideReason: string | null;
+  halfDayReason: string | null;
+  adminNote: string | null;
   approvalStatus: string;
 }
 
@@ -386,11 +409,27 @@ const APPROVAL_BADGE: Record<string, "success" | "default" | "destructive" | "se
   REJECTED: "destructive",
 };
 
+const ATTENDANCE_STATUS_OPTIONS = [
+  { value: "PRESENT", label: "Present" },
+  { value: "HALF_DAY", label: "Half Day" },
+  { value: "ABSENT", label: "Absent" },
+];
+const HALF_DAY_REASON_OPTIONS = Object.entries(HALF_DAY_REASON_LABEL).map(([value, label]) => ({ value, label }));
+
+/**
+ * Same mark/approve/reject/override actions a company Admin has in
+ * /admin/attendance, scoped here to the lead's own team — the backing
+ * routes (PATCH /api/attendance/[id], POST .../approve) already enforce
+ * that scoping server-side (see canManageAttendanceFor in
+ * src/lib/social-media.ts), this is just the matching UI.
+ */
 function AttendanceTab() {
   const toast = useToast();
   const [rows, setRows] = useState<AttendanceRow[] | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<AttendanceRow | null>(null);
 
   const load = useCallback(async () => {
     const params = new URLSearchParams();
@@ -406,6 +445,23 @@ function AttendanceTab() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function decide(row: AttendanceRow, decision: "APPROVED" | "REJECTED") {
+    setBusyId(row.id);
+    try {
+      const res = await fetch(`/api/attendance/${row.id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't update approval", data.error);
+      toast.success(decision === "APPROVED" ? "Approved" : "Rejected");
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   if (rows === null) return <SkeletonForm fields={3} />;
 
@@ -431,12 +487,13 @@ function AttendanceTab() {
                 <th className="px-4 py-2.5 font-medium">Check-out</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
                 <th className="px-4 py-2.5 font-medium">Approval</th>
+                <th className="px-4 py-2.5 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No attendance records for this range.
                   </td>
                 </tr>
@@ -449,9 +506,44 @@ function AttendanceTab() {
                     <td className="px-4 py-2.5 text-muted-foreground">{r.date}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{r.checkIn ? new Date(r.checkIn).toLocaleTimeString() : "—"}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{r.checkOut ? new Date(r.checkOut).toLocaleTimeString() : "—"}</td>
-                    <td className="px-4 py-2.5">{r.calculatedStatus.replace(/_/g, " ")}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge status={r.status as AttendanceStatus | null} working={!!r.checkIn && !r.checkOut} />
+                        {r.statusOverride && (
+                          <span
+                            className="text-[10px] text-muted-foreground"
+                            title={`System calculated ${r.calculatedStatus ? STATUS_LABEL[r.calculatedStatus as AttendanceStatus] : "—"}${r.overrideReason ? ` · ${r.overrideReason}` : ""}`}
+                          >
+                            (override)
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-2.5">
                       <Badge variant={APPROVAL_BADGE[r.approvalStatus] ?? "secondary"}>{r.approvalStatus}</Badge>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center justify-end gap-1">
+                        {r.approvalStatus !== "APPROVED" && r.status && (
+                          <Tooltip label="Approve">
+                            <Button type="button" size="sm" variant="ghost" disabled={busyId === r.id} onClick={() => decide(r, "APPROVED")}>
+                              <IconCheck className="h-4 w-4 text-emerald-500" />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        {r.approvalStatus !== "REJECTED" && r.status && (
+                          <Tooltip label="Reject">
+                            <Button type="button" size="sm" variant="ghost" disabled={busyId === r.id} onClick={() => decide(r, "REJECTED")}>
+                              <IconX className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        <Tooltip label="Override / edit">
+                          <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(r)}>
+                            <IconPencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </Tooltip>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -460,7 +552,118 @@ function AttendanceTab() {
           </table>
         </div>
       </Card>
+
+      {editing && (
+        <AttendanceOverrideDialog
+          key={editing.id}
+          open
+          record={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            load();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function AttendanceOverrideDialog({
+  open,
+  record,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  record: AttendanceRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [status, setStatus] = useState<string>(record.status ?? "PRESENT");
+  const [halfDayReason, setHalfDayReason] = useState<string>(record.halfDayReason ?? "MANUAL_ADJUSTMENT");
+  const [overrideReason, setOverrideReason] = useState(record.overrideReason ?? "");
+  const [adminNote, setAdminNote] = useState(record.adminNote ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/attendance/${record.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status,
+          halfDayReason: status === "HALF_DAY" ? halfDayReason : null,
+          overrideReason: overrideReason.trim() || null,
+          adminNote: adminNote.trim() || null,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't save", json.error);
+      toast.success("Attendance updated");
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Override attendance</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              {[record.user.name, record.user.surname].filter(Boolean).join(" ")} · {record.date}
+              {record.calculatedStatus && (
+                <>
+                  {" "}
+                  · System calculated{" "}
+                  <span className="font-medium text-foreground">
+                    {STATUS_LABEL[record.calculatedStatus as AttendanceStatus]}
+                  </span>
+                </>
+              )}
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <Label>Status</Label>
+              <Dropdown value={status} onChange={setStatus} options={ATTENDANCE_STATUS_OPTIONS} />
+            </div>
+            {status === "HALF_DAY" && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Half day reason</Label>
+                <Dropdown value={halfDayReason} onChange={setHalfDayReason} options={HALF_DAY_REASON_OPTIONS} />
+              </div>
+            )}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="sm-ov-reason">Override reason</Label>
+              <Input
+                id="sm-ov-reason"
+                placeholder="Why is this being changed?"
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="sm-ov-note">Note</Label>
+              <Input id="sm-ov-note" placeholder="Optional" value={adminNote} onChange={(e) => setAdminNote(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" disabled={saving} onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="button" disabled={saving} onClick={save}>
+                {saving ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </div>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }
 

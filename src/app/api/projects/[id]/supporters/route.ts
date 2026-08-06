@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getProjectForUser, logProjectActivity } from "@/lib/projects";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 const bodySchema = z.object({
   userId: z.string().min(1),
@@ -44,11 +44,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     role: supporter.role,
   });
   if (parsed.data.userId !== user.id) {
-    await notifyUser(parsed.data.userId, "project_supporter_added", {
-      projectId: id,
-      projectName: access.name,
-      actorName: user.name,
-    });
+    await notifyAndPush(
+      parsed.data.userId,
+      "project_supporter_added",
+      { projectId: id, projectName: access.name, actorName: user.name },
+      { title: "Added as a supporter", body: `${user.name} added you as a supporter on "${access.name}"`, url: `/projects/${id}`, tag: "project-supporter-added" }
+    );
   }
 
   return NextResponse.json({ supporter }, { status: 201 });

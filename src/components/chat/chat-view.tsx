@@ -237,6 +237,7 @@ export function ChatView() {
   activeIdRef.current = activeId;
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const draftRef = useRef<HTMLTextAreaElement>(null);
   const emojiPanelRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -524,6 +525,18 @@ export function ChatView() {
     if (stopTypingTimer.current) clearTimeout(stopTypingTimer.current);
     stopTypingTimer.current = setTimeout(() => socket.emit("stop_typing", { conversationId: activeId, userId: me.id }), 2500);
   }
+
+  // Grows the composer with its content — reset to "auto" first so deleting
+  // text (or sending, which clears the draft) shrinks it back down instead
+  // of only ever growing, then re-measure against the actual content height.
+  // Capped by the textarea's own max-h class; overflow-y-auto on it takes
+  // over with a normal scrollbar past that point.
+  useEffect(() => {
+    const el = draftRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
 
   function onDraftChange(value: string) {
     setDraft(value);
@@ -1221,7 +1234,7 @@ export function ChatView() {
             </AnimatePresence>
 
             {/* Composer */}
-            <div className="relative flex items-center gap-1.5 border-t border-border p-3 pb-[calc(0.75rem+var(--safe-bottom,0px))]">
+            <div className="relative flex items-end gap-1.5 border-t border-border p-3 pb-[calc(0.75rem+var(--safe-bottom,0px))]">
               <AnimatePresence>
                 {mention && mentionMatches.length > 0 && (
                   <motion.div
@@ -1338,16 +1351,22 @@ export function ChatView() {
                 </span>
               )}
               {!recording && (
-                <Input
+                <textarea
+                  ref={draftRef}
                   value={draft}
                   onChange={(e) => onDraftChange(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
+                    // Enter sends; Shift+Enter (or Ctrl/Cmd+Enter) inserts a
+                    // newline like every other chat app — left to the
+                    // textarea's own default handling, not intercepted here.
+                    if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
                       e.preventDefault();
                       send();
                     }
                   }}
                   placeholder={pending.length ? "Add a description…" : "Type a message… use @ to mention"}
+                  rows={1}
+                  className="flex max-h-32 min-h-9 w-full resize-none overflow-y-auto rounded-md border border-input bg-transparent px-3 py-1.5 text-sm leading-snug transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
               )}
               {!recording && (

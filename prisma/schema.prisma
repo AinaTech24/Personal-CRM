@@ -348,6 +348,13 @@ model Task {
   createdBy           User         @relation("TaskCreatedBy", fields: [createdById], references: [id])
   projectTaskParentId String?      @unique
   projectTaskParent   ProjectTask? @relation(fields: [projectTaskParentId], references: [id])
+  /// When set, a cron-driven route notifies whoever this task is assigned to
+  /// (toast/bell + OS push) once this time passes — see send-reminders/route.ts.
+  /// Independent of dueDate — a reminder isn't required to line up with it.
+  remindAt            DateTime?
+  /// Set once the reminder actually fires, so the cron never re-sends the
+  /// same one. Cleared automatically if remindAt is changed to a new value.
+  reminderSentAt      DateTime?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -356,6 +363,7 @@ model Task {
 
   @@index([status])
   @@index([assignedToId])
+  @@index([remindAt])
 }
 
 model TaskComment {
@@ -955,22 +963,29 @@ enum MeetingState {
 }
 
 model Meeting {
-  id          String       @id @default(cuid())
-  title       String
-  description String?      @db.Text
+  id             String       @id @default(cuid())
+  title          String
+  description    String?      @db.Text
   /// Physical location or a video-call link.
-  location    String?
-  startsAt    DateTime
-  endsAt      DateTime?
-  status      MeetingState @default(SCHEDULED)
-  organizerId String
-  organizer   User         @relation("MeetingOrganizer", fields: [organizerId], references: [id])
-  attendees   User[]       @relation("MeetingAttendees")
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  location       String?
+  startsAt       DateTime
+  endsAt         DateTime?
+  status         MeetingState @default(SCHEDULED)
+  organizerId    String
+  organizer      User         @relation("MeetingOrganizer", fields: [organizerId], references: [id])
+  attendees      User[]       @relation("MeetingAttendees")
+  /// When set, a cron-driven route notifies the organizer + every attendee
+  /// (toast/bell + OS push) once this time passes — see send-reminders/route.ts.
+  remindAt       DateTime?
+  /// Set once the reminder actually fires, so the cron never re-sends the
+  /// same one. Cleared automatically if remindAt is changed to a new value.
+  reminderSentAt DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([startsAt])
   @@index([organizerId])
+  @@index([remindAt])
 }
 
 // ---------- Chat / Messaging ----------

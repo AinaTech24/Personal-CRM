@@ -3,21 +3,29 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
+import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
   attendees: { select: { id: true, name: true, email: true }, orderBy: { name: "asc" as const } },
 };
 
-/** List meetings the user organizes or attends (admins see all), newest first. */
+/**
+ * List meetings the user organizes or attends (admins see all), newest
+ * first. A Social Media lead additionally sees every meeting organized by,
+ * or attended by, anyone on their team.
+ */
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const where = isAdmin(user)
-    ? {}
-    : { OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }] };
+  const teamUserIds = await socialMediaTeamScopeFor(user);
+  const or: object[] = [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }];
+  if (teamUserIds && teamUserIds.length > 0) {
+    or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
+  }
+  const where = isAdmin(user) ? {} : { OR: or };
 
   const meetings = await db.meeting.findMany({
     where,
@@ -35,6 +43,7 @@ const bodySchema = z.object({
   endsAt: z.string().optional().nullable(),
   status: z.enum(["SCHEDULED", "COMPLETED", "CANCELLED"]).optional().default("SCHEDULED"),
   attendeeIds: z.array(z.string()).optional().default([]),
+  remindAt: z.string().optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -51,6 +60,11 @@ export async function POST(req: NextRequest) {
   if (endsAt && (Number.isNaN(endsAt.getTime()) || endsAt < startsAt)) {
     return NextResponse.json({ error: "End time must be after the start time" }, { status: 400 });
   }
+  let remindAt: Date | null = null;
+  if (d.remindAt) {
+    remindAt = new Date(d.remindAt);
+    if (Number.isNaN(remindAt.getTime())) return NextResponse.json({ error: "Invalid reminder time" }, { status: 400 });
+  }
 
   const meeting = await db.meeting.create({
     data: {
@@ -62,13 +76,19 @@ export async function POST(req: NextRequest) {
       status: d.status,
       organizerId: user.id,
       attendees: { connect: d.attendeeIds.map((id) => ({ id })) },
+      remindAt,
     },
     include: meetingInclude,
   });
 
   for (const attendeeId of d.attendeeIds) {
     if (attendeeId !== user.id) {
-      await notifyUser(attendeeId, "meeting_invited", { meetingId: meeting.id, meetingTitle: meeting.title, actorName: user.name });
+      await notifyAndPush(
+        attendeeId,
+        "meeting_invited",
+        { meetingId: meeting.id, meetingTitle: meeting.title, actorName: user.name },
+        { title: "Meeting invite", body: `${user.name} invited you to "${meeting.title}"`, url: "/meetings", tag: "meeting-invited" }
+      );
     }
   }
 

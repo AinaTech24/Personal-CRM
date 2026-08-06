@@ -38,6 +38,7 @@ export function NewTaskDialog({
   const [priority, setPriority] = useState<Priority>("MEDIUM");
   const [status, setStatus] = useState<TaskStatus>("TODO");
   const [dueDate, setDueDate] = useState<Date | null>(null);
+  const [remindAt, setRemindAt] = useState<Date | null>(null);
   const [assignedToId, setAssignedToId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -49,6 +50,7 @@ export function NewTaskDialog({
     setPriority("MEDIUM");
     setStatus("TODO");
     setDueDate(null);
+    setRemindAt(null);
     setAssignedToId("");
     setAttachments([]);
     setError(null);
@@ -68,6 +70,7 @@ export function NewTaskDialog({
           priority,
           status,
           dueDate: dueDate ? dueDate.toISOString() : null,
+          remindAt: remindAt ? remindAt.toISOString() : null,
           assignedToId: assignedToId || null,
         }),
       });
@@ -163,6 +166,14 @@ export function NewTaskDialog({
                 <Label>Due date</Label>
                 <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Not set" />
               </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label>Remind me at</Label>
+              <DateTimePicker value={remindAt} onChange={setRemindAt} placeholder="No reminder" clearable onClear={() => setRemindAt(null)} />
+              <p className="text-xs text-muted-foreground">
+                Notifies whoever this is assigned to — toast, bell, and a push notification if the app is closed.
+              </p>
             </div>
 
             <AttachmentPicker value={attachments} onChange={setAttachments} disabled={loading} />

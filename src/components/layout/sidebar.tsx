@@ -5,24 +5,18 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  IconDashboard,
   IconLeads,
-  IconTasks,
-  IconProjects,
   IconQuotations,
   IconInvoices,
   IconBuilding,
-  IconUsers,
   IconMail,
   IconSettings,
   IconClock,
-  IconCalendar,
-  IconMessage,
   IconChevronLeft,
   IconGrid,
   IconHistory,
-  IconFolder,
 } from "@/components/icons";
+import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSocket } from "@/components/providers/socket-provider";
@@ -31,30 +25,83 @@ import { cn } from "@/lib/utils";
 interface NavItem {
   href: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  // `hovering`/`highlighted` are only ever set (and only ever read) by a
+  // Lottie-backed icon — a static Icon* simply ignores props it doesn't
+  // declare; it gets both effects for free via `stroke="currentColor"`.
+  icon: React.ComponentType<{ className?: string; hovering?: boolean; highlighted?: boolean }>;
 }
 
+/**
+ * Wraps a Lottie animation (see lottie-icon.tsx) so it can slot into
+ * NavItem.icon exactly like a static SVG component — static at rest, plays
+ * for as long as the row it's part of is hovered, and recolors to match
+ * whatever shade the row's own label text is currently in (muted at rest,
+ * full foreground once hovered or on the active route) so it "highlights"
+ * the same way a static icon's `currentColor` stroke already does. Both are
+ * threaded in from the row itself (NavLinkItem below), not tracked here, so
+ * hovering anywhere on the row — not just the icon glyph — triggers it.
+ * Only the icons an animated replacement has actually been provided for use
+ * this; everything else still uses its static Icon*.
+ */
+function lottieNavIcon(src: string) {
+  return function NavIcon({
+    className,
+    hovering,
+    highlighted,
+  }: {
+    className?: string;
+    hovering?: boolean;
+    highlighted?: boolean;
+  }) {
+    // Matches the h-5 w-5 (20px) every static Icon* renders at here — Lottie
+    // needs an explicit pixel size rather than relying on the className alone.
+    return <LottieIcon src={src} size={20} className={className} playing={hovering} highlighted={highlighted} />;
+  };
+}
+
+/**
+ * Every static Icon* spreads its full props object onto the underlying
+ * `<svg>` (see icons/index.tsx's `base()`) so its caller can pass through
+ * arbitrary SVG attributes — which means an unwrapped static icon would leak
+ * `hovering`/`highlighted` straight onto the DOM as invalid boolean
+ * attributes. This strips them before the icon ever sees them, so every
+ * NavItem.icon can be called identically regardless of which kind it is.
+ */
+function staticNavIcon(Icon: React.ComponentType<{ className?: string }>) {
+  return function NavIcon({ className }: { className?: string; hovering?: boolean; highlighted?: boolean }) {
+    return <Icon className={className} />;
+  };
+}
+
+const LottieDashboard = lottieNavIcon("/icons/Dashboard.json");
+const LottieTasks = lottieNavIcon("/icons/Tasks.json");
+const LottieProjects = lottieNavIcon("/icons/Projects.json");
+const LottieMeetings = lottieNavIcon("/icons/Meetings.json");
+const LottieMessages = lottieNavIcon("/icons/Messages.json");
+const LottieClients = lottieNavIcon("/icons/Clients.json");
+const LottieUsersInvites = lottieNavIcon("/icons/users and invites.json");
+
 const mainNav: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: IconDashboard },
-  { href: "/leads", label: "Leads", icon: IconLeads },
-  { href: "/tasks", label: "Tasks", icon: IconTasks },
-  { href: "/projects", label: "Projects", icon: IconProjects },
-  { href: "/meetings", label: "Meetings", icon: IconCalendar },
-  { href: "/messages", label: "Messages", icon: IconMessage },
-  { href: "/quotations", label: "Quotations", icon: IconQuotations },
-  { href: "/invoices", label: "Invoices", icon: IconInvoices },
-  { href: "/attendance", label: "My Attendance", icon: IconClock },
-  { href: "/activity", label: "My Activity", icon: IconHistory },
+  { href: "/", label: "Dashboard", icon: LottieDashboard },
+  { href: "/leads", label: "Leads", icon: staticNavIcon(IconLeads) },
+  { href: "/tasks", label: "Tasks", icon: LottieTasks },
+  { href: "/projects", label: "Projects", icon: LottieProjects },
+  { href: "/meetings", label: "Meetings", icon: LottieMeetings },
+  { href: "/messages", label: "Messages", icon: LottieMessages },
+  { href: "/quotations", label: "Quotations", icon: staticNavIcon(IconQuotations) },
+  { href: "/invoices", label: "Invoices", icon: staticNavIcon(IconInvoices) },
+  { href: "/attendance", label: "My Attendance", icon: staticNavIcon(IconClock) },
+  { href: "/activity", label: "My Activity", icon: staticNavIcon(IconHistory) },
 ];
 
 const adminNav: NavItem[] = [
-  { href: "/admin/modules", label: "Modules", icon: IconGrid },
-  { href: "/admin/logs", label: "View logs", icon: IconHistory },
-  { href: "/admin/departments", label: "Departments", icon: IconBuilding },
-  { href: "/admin/users", label: "Users & Invites", icon: IconUsers },
-  { href: "/admin/attendance", label: "Attendance", icon: IconClock },
-  { href: "/admin/email", label: "Email (SMTP)", icon: IconMail },
-  { href: "/admin/settings", label: "Application", icon: IconSettings },
+  { href: "/admin/modules", label: "Modules", icon: staticNavIcon(IconGrid) },
+  { href: "/admin/logs", label: "View logs", icon: staticNavIcon(IconHistory) },
+  { href: "/admin/departments", label: "Departments", icon: staticNavIcon(IconBuilding) },
+  { href: "/admin/users", label: "Users & Invites", icon: LottieUsersInvites },
+  { href: "/admin/attendance", label: "Attendance", icon: staticNavIcon(IconClock) },
+  { href: "/admin/email", label: "Email (SMTP)", icon: staticNavIcon(IconMail) },
+  { href: "/admin/settings", label: "Application", icon: staticNavIcon(IconSettings) },
 ];
 
 /**
@@ -63,10 +110,92 @@ const adminNav: NavItem[] = [
  * instead) — but a team member still needs some way to reach their own
  * client list day to day, so this one link survives for them specifically.
  */
-const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: IconFolder };
+const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: LottieClients };
 
 /** Modules a Social Media team member (regular or lead) never sees, even if an admin hasn't globally hidden them. */
 const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
+
+/**
+ * One sidebar row. Defined at module scope (not inside Sidebar) so its
+ * identity is stable across renders — a component recreated every render
+ * would remount here, losing the very hover state this exists to hold.
+ * Hover is tracked on the whole row and forwarded to item.icon as
+ * `hovering`, so a Lottie-backed icon animates the moment the pointer
+ * enters anywhere on the link, not just its own glyph. `highlighted`
+ * (hovering or the active route) is forwarded alongside it, matching
+ * exactly when the row's own label text switches from muted to foreground,
+ * so the icon "lights up" the same way the text does.
+ */
+function NavLinkItem({
+  item,
+  active,
+  badgeCount = 0,
+  tone = "attention",
+  collapsed,
+  labelClass,
+  onNavigate,
+}: {
+  item: NavItem;
+  active: boolean;
+  badgeCount?: number;
+  tone?: "attention" | "count";
+  collapsed: boolean;
+  labelClass: string;
+  onNavigate?: () => void;
+}) {
+  const [hovering, setHovering] = useState(false);
+  // Unread messages are a running tally, not something needing triage, so they
+  // get a plain count pill rather than the pinging "look at me" dot.
+  const isCount = tone === "count";
+  return (
+    <Tooltip
+      label={collapsed ? (badgeCount > 0 ? `${item.label} (${badgeCount})` : item.label) : ""}
+      side="right"
+      wrapperClassName="w-full"
+    >
+      <Link
+        href={item.href}
+        onClick={onNavigate}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+        className={cn(
+          "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground",
+          active && "bg-accent text-foreground"
+        )}
+      >
+        <span className="relative shrink-0">
+          <item.icon className="h-5 w-5" hovering={hovering} highlighted={hovering || active} />
+          {badgeCount > 0 &&
+            (isCount ? (
+              // Collapsed, the rail is too narrow for a number, so the icon
+              // carries a dot instead — the tooltip still gives the count.
+              collapsed && (
+                <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-card" />
+              )
+            ) : (
+              <span className="absolute -right-1 -top-1 flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-card" />
+              </span>
+            ))}
+        </span>
+        <span className={cn("flex-1", labelClass)}>{item.label}</span>
+        {badgeCount > 0 && !collapsed && (
+          <span
+            className={cn(
+              "min-w-5 rounded-full px-1.5 text-center text-[10px] font-semibold tabular-nums",
+              isCount
+                ? "bg-primary text-primary-foreground"
+                : "bg-emerald-500/15 font-medium text-emerald-600 dark:text-emerald-400"
+            )}
+          >
+            {badgeCount > 99 ? "99+" : badgeCount}
+          </span>
+        )}
+      </Link>
+    </Tooltip>
+  );
+}
 
 /**
  * Presentational sidebar rail. Its width is driven by the parent grid column
@@ -214,59 +343,6 @@ export function Sidebar({
     collapsed ? "opacity-0" : "opacity-100"
   );
 
-  function renderItem(item: NavItem, active: boolean, badgeCount = 0, tone: "attention" | "count" = "attention") {
-    // Unread messages are a running tally, not something needing triage, so they
-    // get a plain count pill rather than the pinging "look at me" dot.
-    const isCount = tone === "count";
-    return (
-      <Tooltip
-        key={item.href}
-        label={collapsed ? (badgeCount > 0 ? `${item.label} (${badgeCount})` : item.label) : ""}
-        side="right"
-        wrapperClassName="w-full"
-      >
-        <Link
-          href={item.href}
-          onClick={onNavigate}
-          className={cn(
-            "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground",
-            active && "bg-accent text-foreground"
-          )}
-        >
-          <span className="relative shrink-0">
-            <item.icon className="h-4 w-4" />
-            {badgeCount > 0 &&
-              (isCount ? (
-                // Collapsed, the rail is too narrow for a number, so the icon
-                // carries a dot instead — the tooltip still gives the count.
-                collapsed && (
-                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-card" />
-                )
-              ) : (
-                <span className="absolute -right-1 -top-1 flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-card" />
-                </span>
-              ))}
-          </span>
-          <span className={cn("flex-1", labelClass)}>{item.label}</span>
-          {badgeCount > 0 && !collapsed && (
-            <span
-              className={cn(
-                "min-w-5 rounded-full px-1.5 text-center text-[10px] font-semibold tabular-nums",
-                isCount
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-emerald-500/15 font-medium text-emerald-600 dark:text-emerald-400"
-              )}
-            >
-              {badgeCount > 99 ? "99+" : badgeCount}
-            </span>
-          )}
-        </Link>
-      </Tooltip>
-    );
-  }
-
   return (
     <aside
       className={cn(
@@ -305,9 +381,19 @@ export function Sidebar({
               </div>
             ))
           : visibleMainNav.map((item) => {
-          const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
-          if (item.href === "/messages") return renderItem(item, active, unreadMessages, "count");
-          return renderItem(item, active);
+              const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+              return (
+                <NavLinkItem
+                  key={item.href}
+                  item={item}
+                  active={active}
+                  badgeCount={item.href === "/messages" ? unreadMessages : 0}
+                  tone={item.href === "/messages" ? "count" : "attention"}
+                  collapsed={collapsed}
+                  labelClass={labelClass}
+                  onNavigate={onNavigate}
+                />
+              );
             })}
 
         {isAdmin && (
@@ -320,9 +406,17 @@ export function Sidebar({
             >
               Admin
             </div>
-            {adminNav.map((item) =>
-              renderItem(item, pathname.startsWith(item.href), item.href === "/admin/attendance" ? pendingCount : 0)
-            )}
+            {adminNav.map((item) => (
+              <NavLinkItem
+                key={item.href}
+                item={item}
+                active={pathname.startsWith(item.href)}
+                badgeCount={item.href === "/admin/attendance" ? pendingCount : 0}
+                collapsed={collapsed}
+                labelClass={labelClass}
+                onNavigate={onNavigate}
+              />
+            ))}
           </>
         )}
       </nav>
