@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, hasSocialMediaAccess, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
 import { socialClientListWhere } from "@/lib/social-media-permissions";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -63,7 +63,12 @@ export async function POST(req: NextRequest) {
   await logSocialClientActivity(client.id, user.id, "created");
 
   if (data.assignedToId && data.assignedToId !== user.id) {
-    await notifyUser(data.assignedToId, "social_client_assigned", { clientId: client.id, clientName: client.name, actorName: user.name });
+    await notifyAndPush(
+      data.assignedToId,
+      "social_client_assigned",
+      { clientId: client.id, clientName: client.name, actorName: user.name },
+      { title: "Client assigned", body: `${user.name} assigned you the client "${client.name}"`, url: `/social-media/${client.id}`, tag: "social-client-assigned" }
+    );
   }
 
   await broadcastSocialChange("social_client_created", { clientId: client.id });

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { broadcastLeadChange, canDeleteLead, leadListWhere } from "@/lib/leads";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
 export async function GET() {
@@ -76,7 +76,12 @@ export async function POST(req: NextRequest) {
   });
 
   if (data.assignedToId && data.assignedToId !== user.id) {
-    await notifyUser(data.assignedToId, "lead_assigned", { leadId: lead.id, leadName: lead.name, actorName: user.name });
+    await notifyAndPush(
+      data.assignedToId,
+      "lead_assigned",
+      { leadId: lead.id, leadName: lead.name, actorName: user.name },
+      { title: "Lead assigned", body: `${user.name} assigned you the lead "${lead.name}"`, url: "/leads", tag: "lead-assigned" }
+    );
   }
 
   broadcastLeadChange("lead_created", lead);

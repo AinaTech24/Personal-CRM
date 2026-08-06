@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getTaskForUser } from "@/lib/tasks";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 const bodySchema = z.object({ body: z.string().min(1) });
 
@@ -28,7 +28,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     [access.createdById, access.assignedToId].filter((uid): uid is string => !!uid && uid !== user.id)
   );
   for (const targetId of notifyTargets) {
-    await notifyUser(targetId, "task_comment", { taskId: id, taskTitle: access.title, actorName: user.name });
+    await notifyAndPush(
+      targetId,
+      "task_comment",
+      { taskId: id, taskTitle: access.title, actorName: user.name },
+      { title: "New comment", body: `${user.name} commented on the task "${access.title}"`, url: "/tasks", tag: `task-comment-${id}` }
+    );
   }
 
   return NextResponse.json({ comment }, { status: 201 });

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getProjectForUser, logProjectActivity } from "@/lib/projects";
 import { broadcastTaskChange } from "@/lib/tasks";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 const bodySchema = z.object({
   title: z.string().min(1),
@@ -77,7 +77,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (data.assignedToId && data.assignedToId !== user.id) {
     // Notify once, about the project task — the mirrored module task is the same
     // work, so a second "task assigned" would just be noise.
-    await notifyUser(data.assignedToId, "project_task_assigned", { projectId: id, taskTitle: task.title, actorName: user.name });
+    await notifyAndPush(
+      data.assignedToId,
+      "project_task_assigned",
+      { projectId: id, taskTitle: task.title, actorName: user.name },
+      { title: "Project task assigned", body: `${user.name} assigned you the project task "${task.title}"`, url: `/projects/${id}`, tag: "project-task-assigned" }
+    );
   }
   broadcastTaskChange("task_created", mirrored);
 

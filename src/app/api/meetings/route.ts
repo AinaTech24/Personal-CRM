@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -75,7 +75,12 @@ export async function POST(req: NextRequest) {
 
   for (const attendeeId of d.attendeeIds) {
     if (attendeeId !== user.id) {
-      await notifyUser(attendeeId, "meeting_invited", { meetingId: meeting.id, meetingTitle: meeting.title, actorName: user.name });
+      await notifyAndPush(
+        attendeeId,
+        "meeting_invited",
+        { meetingId: meeting.id, meetingTitle: meeting.title, actorName: user.name },
+        { title: "Meeting invite", body: `${user.name} invited you to "${meeting.title}"`, url: "/meetings", tag: "meeting-invited" }
+      );
     }
   }
 

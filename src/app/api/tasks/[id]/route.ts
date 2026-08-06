@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { broadcastTaskChange, canDeleteTask, getTaskForUser } from "@/lib/tasks";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -82,7 +82,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data.assignedToId &&
     data.assignedToId !== user.id
   ) {
-    await notifyUser(data.assignedToId, "task_assigned", { taskId: id, taskTitle: task.title, actorName: user.name });
+    await notifyAndPush(
+      data.assignedToId,
+      "task_assigned",
+      { taskId: id, taskTitle: task.title, actorName: user.name },
+      { title: "Task assigned", body: `${user.name} assigned you the task "${task.title}"`, url: "/tasks", tag: "task-assigned" }
+    );
   }
 
   broadcastTaskChange("task_updated", task);

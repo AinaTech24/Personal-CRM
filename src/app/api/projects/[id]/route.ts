@@ -8,7 +8,7 @@ import {
   getProjectForUser,
   logProjectActivity,
 } from "@/lib/projects";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -105,7 +105,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (data.assignedToId !== undefined && data.assignedToId !== before.assignedToId) {
     if (data.assignedToId && data.assignedToId !== user.id) {
-      await notifyUser(data.assignedToId, "project_assigned", { projectId: id, projectName: project.name, actorName: user.name });
+      await notifyAndPush(
+        data.assignedToId,
+        "project_assigned",
+        { projectId: id, projectName: project.name, actorName: user.name },
+        { title: "Project assigned", body: `${user.name} assigned you the project "${project.name}"`, url: `/projects/${id}`, tag: "project-assigned" }
+      );
     }
   }
 

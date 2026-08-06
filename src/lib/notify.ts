@@ -1,6 +1,7 @@
 import type { InputJsonObject } from "@/generated/prisma/internal/prismaNamespace";
 import { db } from "@/lib/db";
 import { emitToUser } from "@/lib/socket-emit";
+import { sendPushToUsers, type PushPayload } from "@/lib/push";
 
 export type NotificationCategory = "leads" | "tasks" | "projects" | "quotations" | "meetings" | "attendance" | "social";
 
@@ -48,5 +49,25 @@ export async function notifyUser(userId: string, type: string, payload: InputJso
 
   const notification = await db.notification.create({ data: { userId, type, payload } });
   emitToUser(userId, "notification", notification);
+  return notification;
+}
+
+/**
+ * notifyUser, plus a real OS-level push if it actually created one — so a
+ * closed app or backgrounded tab still hears about it, not just an in-app
+ * toast/bell. Skipped automatically when notifyUser itself returns null
+ * (the recipient has this category turned off in Settings), so muting a
+ * category mutes both channels together rather than just the in-app one —
+ * the same rule the reminder routes already apply by hand. Those routes
+ * build their own push payload inline instead of using this: a reminder
+ * fans the exact same content out to several recipients (a meeting's
+ * attendees) with nothing per-recipient in it, where every other call site
+ * here is a single targeted "you" notification.
+ */
+export async function notifyAndPush(userId: string, type: string, payload: InputJsonObject, push: PushPayload) {
+  const notification = await notifyUser(userId, type, payload);
+  if (notification) {
+    await sendPushToUsers([userId], push);
+  }
   return notification;
 }

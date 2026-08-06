@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getProjectForUser, logProjectActivity } from "@/lib/projects";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 const bodySchema = z.object({ userId: z.string() });
 
@@ -29,7 +29,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   await logProjectActivity(id, user.id, "member_added", { userId: parsed.data.userId });
   if (parsed.data.userId !== user.id) {
-    await notifyUser(parsed.data.userId, "project_member_added", { projectId: id, projectName: access.name, actorName: user.name });
+    await notifyAndPush(
+      parsed.data.userId,
+      "project_member_added",
+      { projectId: id, projectName: access.name, actorName: user.name },
+      { title: "Added to project", body: `${user.name} added you to the project "${access.name}"`, url: `/projects/${id}`, tag: "project-member-added" }
+    );
   }
 
   return NextResponse.json({ member }, { status: 201 });

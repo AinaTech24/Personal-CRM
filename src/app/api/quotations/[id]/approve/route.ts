@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canApproveQuotation } from "@/lib/permissions";
 import { broadcastQuotationChange } from "@/lib/quotations";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 const bodySchema = z.object({
   decision: z.enum(["APPROVED", "REJECTED"]),
@@ -38,12 +38,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   if (quotation.createdById !== user.id) {
-    await notifyUser(quotation.createdById, "quotation_decided", {
-      quotationId: id,
-      quotationNumber: quotation.quotationNumber,
-      decision: parsed.data.decision,
-      actorName: user.name,
-    });
+    const decisionWord = parsed.data.decision === "APPROVED" ? "approved" : "rejected";
+    await notifyAndPush(
+      quotation.createdById,
+      "quotation_decided",
+      { quotationId: id, quotationNumber: quotation.quotationNumber, decision: parsed.data.decision, actorName: user.name },
+      {
+        title: "Quotation decided",
+        body: `${user.name} ${decisionWord} quotation ${quotation.quotationNumber}`,
+        url: "/quotations",
+        tag: "quotation-decided",
+      }
+    );
   }
 
   broadcastQuotationChange("quotation_updated", updated);

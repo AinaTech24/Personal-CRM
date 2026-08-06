@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -98,7 +98,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (previousAttendeeIds && d.attendeeIds) {
     const newAttendeeIds = d.attendeeIds.filter((aid) => aid !== user.id && !previousAttendeeIds!.includes(aid));
     for (const aid of newAttendeeIds) {
-      await notifyUser(aid, "meeting_invited", { meetingId: id, meetingTitle: meeting.title, actorName: user.name });
+      await notifyAndPush(
+        aid,
+        "meeting_invited",
+        { meetingId: id, meetingTitle: meeting.title, actorName: user.name },
+        { title: "Meeting invite", body: `${user.name} invited you to "${meeting.title}"`, url: "/meetings", tag: "meeting-invited" }
+      );
     }
   }
 

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { broadcastLeadChange, canDeleteLead, getLeadForUser } from "@/lib/leads";
 import { getSocialMembership, isSocialMediaOnlyUser, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
-import { notifyUser } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -119,7 +119,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     });
     if (data.assignedToId && data.assignedToId !== user.id) {
-      await notifyUser(data.assignedToId, "lead_assigned", { leadId: id, leadName: lead.name, actorName: user.name });
+      await notifyAndPush(
+        data.assignedToId,
+        "lead_assigned",
+        { leadId: id, leadName: lead.name, actorName: user.name },
+        { title: "Lead assigned", body: `${user.name} assigned you the lead "${lead.name}"`, url: "/leads", tag: "lead-assigned" }
+      );
     }
   }
 
