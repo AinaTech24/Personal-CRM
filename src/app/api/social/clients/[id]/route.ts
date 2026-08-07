@@ -26,7 +26,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
           updatedBy: { select: { id: true, name: true } },
         },
       },
-      _count: { select: { contentItems: true, adCampaigns: true, monthlyReports: true } },
+      _count: { select: { contentItems: true, adCampaigns: true, monthlyReports: true, folders: true } },
     },
   });
 
