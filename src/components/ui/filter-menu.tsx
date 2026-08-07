@@ -21,12 +21,31 @@ export interface FilterOption {
 export interface FilterFacet {
   key: string;
   label: string;
-  /** The current selection, or null for "all" (no filter on this facet). */
-  value: string | null;
+  /**
+   * The current selection. null (or an empty array) means "all" — no filter
+   * on this facet. A plain string outside `multiple` mode; an array of
+   * selected values when `multiple` is true.
+   */
+  value: string | string[] | null;
   options: FilterOption[];
-  onChange: (value: string | null) => void;
+  onChange: (value: string | string[] | null) => void;
   /** Wording for the reset row — "All", "Anyone", etc. Defaults to "All". */
   allLabel?: string;
+  /**
+   * Lets more than one option be checked at once within this facet —
+   * clicking an option toggles it rather than replacing the selection and
+   * closing the facet. Defaults to false (the original single-select
+   * behavior every existing call site still gets).
+   */
+  multiple?: boolean;
+}
+
+function facetSelectedValues(facet: FilterFacet): string[] {
+  return Array.isArray(facet.value) ? facet.value : facet.value !== null ? [facet.value] : [];
+}
+
+function facetIsActive(facet: FilterFacet): boolean {
+  return facetSelectedValues(facet).length > 0;
 }
 
 function Avatar({ option }: { option: FilterOption }) {
@@ -59,10 +78,10 @@ export function FilterMenu({ facets, className }: { facets: FilterFacet[]; class
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const activeCount = facets.filter((f) => f.value !== null).length;
+  const activeCount = facets.filter(facetIsActive).length;
 
   function clearAll() {
-    for (const f of facets) if (f.value !== null) f.onChange(null);
+    for (const f of facets) if (facetIsActive(f)) f.onChange(f.multiple ? [] : null);
   }
 
   return (
@@ -118,7 +137,15 @@ export function FilterMenu({ facets, className }: { facets: FilterFacet[]; class
           <div className="max-h-80 overflow-y-auto">
             {facets.map((facet) => {
               const isOpen = expanded === facet.key;
-              const selected = facet.value !== null ? facet.options.find((o) => o.value === facet.value) : null;
+              const selectedValues = facetSelectedValues(facet);
+              const selectedOptions = facet.options.filter((o) => selectedValues.includes(o.value));
+              const noneSelected = selectedOptions.length === 0;
+              const summary =
+                selectedOptions.length === 0
+                  ? (facet.allLabel ?? "All")
+                  : selectedOptions.length === 1
+                    ? selectedOptions[0].label
+                    : `${selectedOptions.length} selected`;
               return (
                 <div key={facet.key} className="border-t border-border/60 first:border-t-0">
                   <button
@@ -128,9 +155,11 @@ export function FilterMenu({ facets, className }: { facets: FilterFacet[]; class
                   >
                     <span className="min-w-0">
                       <span className="block text-xs text-muted-foreground">{facet.label}</span>
-                      <span className={cn("flex items-center gap-1.5 truncate", !selected && "text-muted-foreground")}>
-                        {selected && (selected.showAvatar || selected.avatarDataUrl) && <Avatar option={selected} />}
-                        {selected ? selected.label : (facet.allLabel ?? "All")}
+                      <span className={cn("flex items-center gap-1.5 truncate", noneSelected && "text-muted-foreground")}>
+                        {selectedOptions.length === 1 && (selectedOptions[0].showAvatar || selectedOptions[0].avatarDataUrl) && (
+                          <Avatar option={selectedOptions[0]} />
+                        )}
+                        {summary}
                       </span>
                     </span>
                     <IconChevronDown
@@ -155,37 +184,48 @@ export function FilterMenu({ facets, className }: { facets: FilterFacet[]; class
                           <button
                             type="button"
                             onClick={() => {
-                              facet.onChange(null);
-                              setExpanded(null);
+                              facet.onChange(facet.multiple ? [] : null);
+                              if (!facet.multiple) setExpanded(null);
                             }}
                             className={cn(
                               "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-1.5 text-left text-sm hover:bg-primary/5",
-                              facet.value === null && "bg-accent/60"
+                              noneSelected && "bg-accent/60"
                             )}
                           >
                             <span className="text-muted-foreground">{facet.allLabel ?? "All"}</span>
-                            {facet.value === null && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                            {noneSelected && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
                           </button>
-                          {facet.options.map((opt) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => {
-                                facet.onChange(opt.value);
-                                setExpanded(null);
-                              }}
-                              className={cn(
-                                "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-1.5 text-left text-sm hover:bg-primary/5",
-                                opt.value === facet.value && "bg-accent/60"
-                              )}
-                            >
-                              <span className="flex min-w-0 items-center gap-2">
-                                {(opt.showAvatar || opt.avatarDataUrl) && <Avatar option={opt} />}
-                                <span className="truncate">{opt.label}</span>
-                              </span>
-                              {opt.value === facet.value && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                            </button>
-                          ))}
+                          {facet.options.map((opt) => {
+                            const isChecked = selectedValues.includes(opt.value);
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => {
+                                  if (facet.multiple) {
+                                    facet.onChange(
+                                      isChecked ? selectedValues.filter((v) => v !== opt.value) : [...selectedValues, opt.value]
+                                    );
+                                    // Stays open — picking a second or third value
+                                    // shouldn't require reopening the facet each time.
+                                  } else {
+                                    facet.onChange(opt.value);
+                                    setExpanded(null);
+                                  }
+                                }}
+                                className={cn(
+                                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-1.5 text-left text-sm hover:bg-primary/5",
+                                  isChecked && "bg-accent/60"
+                                )}
+                              >
+                                <span className="flex min-w-0 items-center gap-2">
+                                  {(opt.showAvatar || opt.avatarDataUrl) && <Avatar option={opt} />}
+                                  <span className="truncate">{opt.label}</span>
+                                </span>
+                                {isChecked && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                              </button>
+                            );
+                          })}
                         </div>
                       </motion.div>
                     )}
