@@ -6,8 +6,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IconChevronDown, IconExternalLink } from "@/components/icons";
-import { stageLabel } from "@/lib/social-content-workflow";
-import { adStageLabel } from "@/lib/social-ad-workflow";
+import { StageStepper } from "@/components/social-media/stage-stepper";
+import { stagesFor, stageLabel } from "@/lib/social-content-workflow";
+import { adStages, adStageLabel } from "@/lib/social-ad-workflow";
 import type { SocialAdStage, SocialContentStage, SocialContentType } from "@/generated/prisma/enums";
 import { cn } from "@/lib/utils";
 
@@ -53,11 +54,6 @@ const TYPE_LABEL: Record<SocialContentType, string> = {
 };
 
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** Everything published/uploaded/completed reads as a settled "done" green; everything still moving reads neutral — the summary line is meant to answer "what's still in flight", not distinguish every stage by color. */
-function stageVariant(stage: SocialContentStage | SocialAdStage): "success" | "outline" {
-  return stage === "PUBLISHED" || stage === "COMPLETED" ? "success" : "outline";
-}
 
 /**
  * Per-client breakdown of every content item (reel, post, carousel), ad
@@ -170,14 +166,18 @@ export function ClientPipeline() {
                   <div className="flex flex-col gap-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Content</p>
                     {client.contentItems.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
+                      <div key={item.id} className="flex flex-col gap-1.5 rounded-md bg-muted/40 px-3 py-2 text-sm">
                         <div className="min-w-0">
                           <p className="truncate font-medium">{item.title}</p>
                           <p className="text-xs text-muted-foreground">{TYPE_LABEL[item.type]}</p>
                         </div>
-                        <Badge variant={stageVariant(item.stage)} className="shrink-0">
-                          {stageLabel(item.type, item.stage)}
-                        </Badge>
+                        <StageStepper
+                          sequence={stagesFor(item.type)}
+                          currentStage={item.stage}
+                          isCancelled={item.stage === "CANCELLED"}
+                          isEditing={false}
+                          labelFor={(s) => stageLabel(item.type, s as never)}
+                        />
                       </div>
                     ))}
                   </div>
@@ -187,11 +187,15 @@ export function ClientPipeline() {
                   <div className="flex flex-col gap-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ads</p>
                     {client.adCampaigns.map((ad) => (
-                      <div key={ad.id} className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
+                      <div key={ad.id} className="flex flex-col gap-1.5 rounded-md bg-muted/40 px-3 py-2 text-sm">
                         <p className="min-w-0 truncate font-medium">{ad.name}</p>
-                        <Badge variant={stageVariant(ad.stage)} className="shrink-0">
-                          {adStageLabel(ad.stage)}
-                        </Badge>
+                        <StageStepper
+                          sequence={adStages()}
+                          currentStage={ad.stage}
+                          isCancelled={ad.stage === "CANCELLED"}
+                          isEditing={false}
+                          labelFor={(s) => adStageLabel(s as never)}
+                        />
                       </div>
                     ))}
                   </div>
