@@ -12,6 +12,7 @@ import { SkeletonCards } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
 import { FilterMenu, type FilterFacet } from "@/components/ui/filter-menu";
+import { facetMatches, type FilterValue } from "@/lib/filter-utils";
 import { IconDots, IconPencil, IconTrash, IconPower } from "@/components/icons";
 import { NewProjectDialog } from "@/components/projects/new-project-dialog";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
@@ -61,10 +62,10 @@ export function ProjectsList({ scope }: { scope?: "social-media" } = {}) {
   const [editProject, setEditProject] = useState<ProjectSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
   const [filters, setFilters] = useState<{
-    assignee: string | null;
-    status: string | null;
-    department: string | null;
-    availability: string | null;
+    assignee: FilterValue;
+    status: FilterValue;
+    department: FilterValue;
+    availability: FilterValue;
   }>({ assignee: null, status: null, department: null, availability: null });
 
   const loadProjects = useCallback(async () => {
@@ -128,23 +129,31 @@ export function ProjectsList({ scope }: { scope?: "social-media" } = {}) {
   const filteredProjects = useMemo(() => {
     const q = query.trim().toLowerCase();
     return projects.filter((p) => {
-      if (filters.assignee === UNASSIGNED ? p.assignedTo !== null : filters.assignee && p.assignedTo?.id !== filters.assignee) {
+      if (!facetMatches(filters.assignee, (v) => (v === UNASSIGNED ? p.assignedTo === null : p.assignedTo?.id === v))) {
         return false;
       }
-      if (filters.status && p.status !== filters.status) return false;
-      if (filters.department && p.department.id !== filters.department) return false;
-      if (filters.availability === "active" && !p.isActive) return false;
-      if (filters.availability === "disabled" && p.isActive) return false;
+      if (!facetMatches(filters.status, (v) => p.status === v)) return false;
+      if (!facetMatches(filters.department, (v) => p.department.id === v)) return false;
+      if (
+        !facetMatches(filters.availability, (v) => (v === "active" ? p.isActive : v === "disabled" ? !p.isActive : true))
+      ) {
+        return false;
+      }
       if (!q) return true;
       return [p.name, p.description, p.department.name].filter(Boolean).some((f) => f!.toLowerCase().includes(q));
     });
   }, [projects, query, filters]);
+
+  // The Social Media Team console gets multi-select within each facet;
+  // everywhere else stays the original single-select behavior.
+  const multiSelectFilters = scope === "social-media";
 
   const filterFacets: FilterFacet[] = [
     {
       key: "assignee",
       label: "Assigned to",
       allLabel: "Anyone",
+      multiple: multiSelectFilters,
       value: filters.assignee,
       onChange: (v) => setFilters((f) => ({ ...f, assignee: v })),
       options: [
@@ -160,6 +169,7 @@ export function ProjectsList({ scope }: { scope?: "social-media" } = {}) {
     {
       key: "status",
       label: "Status",
+      multiple: multiSelectFilters,
       value: filters.status,
       onChange: (v) => setFilters((f) => ({ ...f, status: v })),
       options: PROJECT_STATUSES,
@@ -168,6 +178,7 @@ export function ProjectsList({ scope }: { scope?: "social-media" } = {}) {
       key: "availability",
       label: "Availability",
       allLabel: "Any",
+      multiple: multiSelectFilters,
       value: filters.availability,
       onChange: (v) => setFilters((f) => ({ ...f, availability: v })),
       options: [
@@ -182,8 +193,9 @@ export function ProjectsList({ scope }: { scope?: "social-media" } = {}) {
           {
             key: "department",
             label: "Department",
+            multiple: multiSelectFilters,
             value: filters.department,
-            onChange: (v: string | null) => setFilters((f) => ({ ...f, department: v })),
+            onChange: (v: FilterValue) => setFilters((f) => ({ ...f, department: v })),
             options: departments.map((d) => ({ value: d.id, label: d.name })),
           },
         ]

@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dropdown } from "@/components/ui/dropdown";
 import { FilterMenu, type FilterFacet } from "@/components/ui/filter-menu";
+import { facetMatches, type FilterValue } from "@/lib/filter-utils";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
@@ -71,7 +72,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
   const [openSeq, setOpenSeq] = useState(0);
   const [editing, setEditing] = useState<Meeting | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Meeting | null>(null);
-  const [filters, setFilters] = useState<{ organizer: string | null; status: string | null; involvement: string | null }>({
+  const [filters, setFilters] = useState<{ organizer: FilterValue; status: FilterValue; involvement: FilterValue }>({
     organizer: null,
     status: null,
     involvement: null,
@@ -103,10 +104,14 @@ export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
 
   const filteredMeetings = useMemo(() => {
     return meetings.filter((m) => {
-      if (filters.organizer && m.organizer.id !== filters.organizer) return false;
-      if (filters.status && m.status !== filters.status) return false;
+      if (!facetMatches(filters.organizer, (v) => m.organizer.id === v)) return false;
+      if (!facetMatches(filters.status, (v) => m.status === v)) return false;
       // "Involving me" spans both roles: organiser or on the attendee list.
-      if (filters.involvement === "mine" && m.organizer.id !== meId && !m.attendees.some((a) => a.id === meId)) {
+      if (
+        !facetMatches(filters.involvement, (v) =>
+          v === "mine" ? m.organizer.id === meId || m.attendees.some((a) => a.id === meId) : true
+        )
+      ) {
         return false;
       }
       return true;
@@ -126,11 +131,16 @@ export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
     return { upcoming: up, past: pa };
   }, [filteredMeetings]);
 
+  // The Social Media Team console gets multi-select within each facet;
+  // everywhere else stays the original single-select behavior.
+  const multiSelectFilters = scope === "social-media";
+
   const filterFacets: FilterFacet[] = [
     {
       key: "organizer",
       label: "Organizer",
       allLabel: "Anyone",
+      multiple: multiSelectFilters,
       value: filters.organizer,
       onChange: (v) => setFilters((f) => ({ ...f, organizer: v })),
       options: users.map((u) => ({ value: u.id, label: userOptionLabel(u), showAvatar: true })),
@@ -138,6 +148,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
     {
       key: "status",
       label: "Status",
+      multiple: multiSelectFilters,
       value: filters.status,
       onChange: (v) => setFilters((f) => ({ ...f, status: v })),
       options: STATUS_OPTIONS,
@@ -146,6 +157,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
       key: "involvement",
       label: "Involvement",
       allLabel: "Everyone's",
+      multiple: multiSelectFilters,
       value: filters.involvement,
       onChange: (v) => setFilters((f) => ({ ...f, involvement: v })),
       options: [{ value: "mine", label: "Involving me" }],

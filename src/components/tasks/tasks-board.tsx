@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dropdown } from "@/components/ui/dropdown";
 import { FilterMenu, type FilterFacet } from "@/components/ui/filter-menu";
+import { facetMatches, type FilterValue } from "@/lib/filter-utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SkeletonBoard } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
@@ -62,7 +63,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" } = {}) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
   const [view, setView] = useState<ViewMode>("pipeline");
-  const [filters, setFilters] = useState<{ assignee: string | null; status: string | null; priority: string | null }>({
+  const [filters, setFilters] = useState<{ assignee: FilterValue; status: FilterValue; priority: FilterValue }>({
     assignee: null,
     status: null,
     priority: null,
@@ -124,21 +125,27 @@ export function TasksBoard({ scope }: { scope?: "social-media" } = {}) {
   const filteredTasks = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tasks.filter((task) => {
-      if (filters.assignee === UNASSIGNED ? task.assignedTo !== null : filters.assignee && task.assignedTo?.id !== filters.assignee) {
+      if (!facetMatches(filters.assignee, (v) => (v === UNASSIGNED ? task.assignedTo === null : task.assignedTo?.id === v))) {
         return false;
       }
-      if (filters.status && task.status !== filters.status) return false;
-      if (filters.priority && task.priority !== filters.priority) return false;
+      if (!facetMatches(filters.status, (v) => task.status === v)) return false;
+      if (!facetMatches(filters.priority, (v) => task.priority === v)) return false;
       if (!q) return true;
       return [task.title, task.description].filter(Boolean).some((field) => field!.toLowerCase().includes(q));
     });
   }, [tasks, query, filters]);
+
+  // The Social Media Team console gets multi-select within each facet (pick
+  // several statuses/priorities/assignees at once); everywhere else stays
+  // the original single-select behavior.
+  const multiSelectFilters = scope === "social-media";
 
   const filterFacets: FilterFacet[] = [
     {
       key: "assignee",
       label: "Assigned to",
       allLabel: "Anyone",
+      multiple: multiSelectFilters,
       value: filters.assignee,
       onChange: (v) => setFilters((f) => ({ ...f, assignee: v })),
       options: [
@@ -154,6 +161,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" } = {}) {
     {
       key: "status",
       label: "Status",
+      multiple: multiSelectFilters,
       value: filters.status,
       onChange: (v) => setFilters((f) => ({ ...f, status: v })),
       options: TASK_STATUSES,
@@ -161,6 +169,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" } = {}) {
     {
       key: "priority",
       label: "Priority",
+      multiple: multiSelectFilters,
       value: filters.priority,
       onChange: (v) => setFilters((f) => ({ ...f, priority: v })),
       options: PRIORITY_OPTIONS,

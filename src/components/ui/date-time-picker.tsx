@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { format, isSameDay, setHours, setMinutes } from "date-fns";
 import { IconCalendar, IconX } from "@/components/icons";
@@ -161,6 +161,7 @@ function TimeStepper({
   max: number;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const shown = draft ?? String(value).padStart(2, "0");
 
   function commit(text: string) {
@@ -168,6 +169,23 @@ function TimeStepper({
     if (Number.isNaN(n)) return;
     onChange(Math.min(Math.max(n, min), max));
   }
+
+  // Wired as a native listener rather than JSX onWheel: React always attaches
+  // wheel handlers as passive, so e.preventDefault() inside one is silently a
+  // no-op — without this, scrolling the number would also scroll whatever's
+  // behind the popover (nothing here clips/contains that scroll).
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      const next = e.deltaY < 0 ? (value + 1 > max ? min : value + 1) : value - 1 < min ? max : value - 1;
+      onChange(next);
+      setDraft(String(next).padStart(2, "0"));
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [value, min, max, onChange]);
 
   return (
     <div className="flex flex-col items-center gap-0.5">
@@ -181,6 +199,7 @@ function TimeStepper({
         +
       </button>
       <input
+        ref={inputRef}
         type="text"
         inputMode="numeric"
         aria-label={label}
