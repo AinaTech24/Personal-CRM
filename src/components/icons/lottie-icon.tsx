@@ -20,13 +20,39 @@ function loadAnimation(src: string): Promise<Record<string, unknown>> {
 }
 
 /**
+ * oklab(L a b [/ alpha]) → sRGB 0–255, per the CSS Color Module 4 / Björn
+ * Ottosson's reference formulas. Needed because a computed color WITH an
+ * alpha channel (any opacity-modified `text-*` Tailwind class, e.g.
+ * "text-primary/70") comes back from getComputedStyle as `oklab(...)`, not
+ * `rgb(...)`/`rgba(...)` — a
+ * plain-number regex over that string reads L/a/b (each in roughly a 0–1
+ * range) as if they were 0–255 RGB channels, producing a near-black color
+ * regardless of the actual hue. A canvas fillStyle round-trip doesn't help:
+ * current engines report it back as oklab() too, rather than converting.
+ */
+function oklabToRgb(l: number, a: number, b: number): [number, number, number] {
+  const l_ = l + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = l - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = l - 0.0894841775 * a - 1.2914855480 * b;
+  const l3 = l_ ** 3;
+  const m3 = m_ ** 3;
+  const s3 = s_ ** 3;
+  const rLin = 4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3;
+  const gLin = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3;
+  const bLin = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3;
+  const gamma = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+  const clamp = (c: number) => Math.round(Math.min(1, Math.max(0, c)) * 255);
+  return [clamp(gamma(rLin)), clamp(gamma(gLin)), clamp(gamma(bLin))];
+}
+
+/**
  * The actual color the app is currently rendering a given `text-*` utility
  * as — read off a throwaway probe element rather than the raw CSS variable,
  * so this works regardless of what color space the theme defines it in
- * (oklch/hsl/hex/…): the browser always normalizes a computed `color` to
- * `rgb(...)`. Pass "text-muted-foreground" for the icon's resting shade,
- * "text-foreground" for its hovered/active one — the same two classes every
- * surrounding nav label already switches between.
+ * (oklch/hsl/hex/…). Pass "text-muted-foreground" for the icon's resting
+ * shade, "text-foreground" for its hovered/active one — the same two classes
+ * every surrounding nav label already switches between — or any other
+ * `text-*` class, opacity modifier included (e.g. "text-primary/70").
  */
 function readColorRgb(className: string): [number, number, number] {
   const probe = document.createElement("span");
@@ -37,6 +63,12 @@ function readColorRgb(className: string): [number, number, number] {
   document.body.appendChild(probe);
   const resolved = getComputedStyle(probe).color;
   document.body.removeChild(probe);
+
+  // An opacity-modified class (any `text-*/NN`) reports back as oklab(...)
+  // rather than rgb()/rgba() — see oklabToRgb's comment.
+  const oklab = resolved.match(/^oklab\(\s*([\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)/);
+  if (oklab) return oklabToRgb(Number(oklab[1]), Number(oklab[2]), Number(oklab[3]));
+
   const nums = resolved.match(/[\d.]+/g);
   if (!nums || nums.length < 3) return [140, 140, 140];
   return [Number(nums[0]), Number(nums[1]), Number(nums[2])];

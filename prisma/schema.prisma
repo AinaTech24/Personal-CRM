@@ -128,6 +128,8 @@ model User {
   socialPlatformsUpdated           SocialPlatformAccount[]     @relation("SocialPlatformUpdatedBy")
   socialPlatformCredentialsUpdated SocialPlatformAccount[]     @relation("SocialPlatformCredentialsUpdatedBy")
   socialCalendarSlotsCreated       SocialContentCalendarSlot[] @relation("SocialCalendarSlotCreatedBy")
+  socialClientFoldersCreated       SocialClientFolder[]        @relation("SocialClientFolderCreatedBy")
+  socialClientImagesUploaded       SocialClientImage[]         @relation("SocialClientImageUploadedBy")
 }
 
 /// A browser/device push endpoint, so a user can be notified about a new
@@ -1271,9 +1273,44 @@ model SocialClient {
   monthlyReports   SocialMonthlyReport[]
   activities       SocialClientActivity[]
   calendarSlots    SocialContentCalendarSlot[]
+  folders          SocialClientFolder[]
 
   @@index([stage])
   @@index([assignedToId])
+}
+
+/// A flat (single-level) folder for organizing a client's images — the
+/// Files tab's own grouping, distinct from platform credentials/content/ads.
+model SocialClientFolder {
+  id          String       @id @default(cuid())
+  clientId    String
+  client      SocialClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name        String
+  createdById String
+  createdBy   User         @relation("SocialClientFolderCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  images SocialClientImage[]
+
+  @@index([clientId])
+}
+
+/// One uploaded image inside a SocialClientFolder — same base64-in-MySQL
+/// upload shape as TaskAttachment/ProjectDocument/SocialReportFile.
+model SocialClientImage {
+  id           String             @id @default(cuid())
+  folderId     String
+  folder       SocialClientFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  fileName     String
+  filePath     String
+  data         String             @db.LongText
+  uploadedById String
+  uploadedBy   User               @relation("SocialClientImageUploadedBy", fields: [uploadedById], references: [id])
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([folderId])
 }
 
 /// Tracks which platforms are connected and whether login credentials have

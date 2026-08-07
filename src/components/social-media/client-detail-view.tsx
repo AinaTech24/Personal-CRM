@@ -40,6 +40,7 @@ import {
 import { useToast } from "@/components/providers/toast-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import { StageStepper } from "@/components/social-media/stage-stepper";
+import { FilesTab } from "@/components/social-media/files-tab";
 import { stagesFor, stageLabel } from "@/lib/social-content-workflow";
 import { adStages, adStageLabel } from "@/lib/social-ad-workflow";
 import { cn } from "@/lib/utils";
@@ -191,10 +192,10 @@ interface Client {
     createdBy: ActorRef | null;
     updatedBy: ActorRef | null;
   }[];
-  _count: { contentItems: number; adCampaigns: number; monthlyReports: number };
+  _count: { contentItems: number; adCampaigns: number; monthlyReports: number; folders: number };
 }
 
-type TabKey = "platforms" | "content" | "ads" | "reports" | "calendar" | "activity";
+type TabKey = "files" | "platforms" | "content" | "ads" | "reports" | "calendar" | "activity";
 
 /** Lets the parent's single shared "+" button (in the tab bar row) trigger whichever tab is active. */
 interface TabCreateHandle {
@@ -293,11 +294,13 @@ export function SocialClientDetailView({ clientId }: { clientId: string }) {
   const [notFound, setNotFound] = useState(false);
   const [tab, setTab] = useState<TabKey>("platforms");
   const [editOpen, setEditOpen] = useState(false);
+  const filesRef = useRef<TabCreateHandle>(null);
   const platformsRef = useRef<TabCreateHandle>(null);
   const contentRef = useRef<TabCreateHandle>(null);
   const adsRef = useRef<TabCreateHandle>(null);
   const reportsRef = useRef<TabCreateHandle>(null);
   const createHandleForTab: Partial<Record<TabKey, React.RefObject<TabCreateHandle | null>>> = {
+    files: filesRef,
     platforms: platformsRef,
     content: contentRef,
     ads: adsRef,
@@ -339,6 +342,7 @@ export function SocialClientDetailView({ clientId }: { clientId: string }) {
   }
 
   const tabs: { key: TabKey; label: string; count?: number }[] = [
+    { key: "files", label: "Files", count: client._count.folders },
     { key: "platforms", label: "Platforms", count: client.platformAccounts.length },
     { key: "content", label: "Content", count: client._count.contentItems },
     { key: "ads", label: "Ads", count: client._count.adCampaigns },
@@ -400,6 +404,7 @@ export function SocialClientDetailView({ clientId }: { clientId: string }) {
         )}
       </div>
 
+      {tab === "files" && <FilesTab ref={filesRef} clientId={client.id} onChanged={load} />}
       {tab === "platforms" && <PlatformsTab ref={platformsRef} clientId={client.id} accounts={client.platformAccounts} onChanged={load} />}
       {tab === "content" && <ContentTab ref={contentRef} clientId={client.id} platformAccounts={client.platformAccounts} />}
       {tab === "ads" && <AdsTab ref={adsRef} clientId={client.id} onChanged={load} platformAccounts={client.platformAccounts} />}
@@ -2133,6 +2138,13 @@ const ACTIVITY_LABELS: Record<string, string> = {
   monthly_report_deleted: "Monthly report deleted",
   calendar_slot_updated: "Calendar slot added/updated",
   calendar_slot_cleared: "Calendar slot cleared",
+  folder_created: "Folder created",
+  folder_renamed: "Folder renamed",
+  folder_deleted: "Folder deleted",
+  image_uploaded: "Image uploaded",
+  image_renamed: "Image renamed",
+  image_moved: "Image moved",
+  image_deleted: "Image deleted",
 };
 
 function activityLabel(action: string): string {
@@ -2143,8 +2155,8 @@ type ActivityKind = "created" | "updated" | "deleted" | "viewed" | "other";
 
 function activityKind(action: string): ActivityKind {
   if (action.includes("deleted") || action.includes("removed") || action.includes("cleared")) return "deleted";
-  if (action.includes("created")) return "created";
-  if (action.includes("updated") || action.includes("changed")) return "updated";
+  if (action.includes("created") || action.includes("uploaded")) return "created";
+  if (action.includes("updated") || action.includes("changed") || action.includes("renamed") || action.includes("moved")) return "updated";
   if (action.includes("viewed")) return "viewed";
   return "other";
 }
@@ -2166,6 +2178,7 @@ function activityDetail(a: ActivityRow): string | null {
   }
   if (typeof meta.title === "string") return meta.title;
   if (typeof meta.name === "string") return meta.name;
+  if (typeof meta.fileName === "string") return meta.fileName;
   if (typeof meta.platform === "string") return meta.platform;
   if (typeof meta.year === "number" && typeof meta.month === "number") return `${MONTH_NAMES[meta.month - 1]} ${meta.year}`;
   if (typeof meta.week === "number" && typeof meta.weekday === "string") return `Week ${meta.week} · ${meta.weekday}`;

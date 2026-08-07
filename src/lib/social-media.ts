@@ -160,6 +160,28 @@ export async function getSocialReportForUser(user: PermissionUser, membership: S
   return report;
 }
 
+/** Same parent-client-inherited access pattern as getSocialContentForUser, for the Files tab's folders. */
+export async function getSocialFolderForUser(user: PermissionUser, membership: SocialMembership | null, folderId: string) {
+  const folder = await db.socialClientFolder.findUnique({ where: { id: folderId } });
+  if (!folder) return null;
+  const client = await getSocialClientForUser(user, membership, folder.clientId);
+  if (client === "forbidden" || !client) return client;
+  return folder;
+}
+
+/**
+ * Images live inside a folder rather than directly under a client, so this
+ * checks the folder's own client-inherited access rather than duplicating
+ * it — same shape as getSocialContentForUser, one hop deeper.
+ */
+export async function getSocialImageForUser(user: PermissionUser, membership: SocialMembership | null, imageId: string) {
+  const image = await db.socialClientImage.findUnique({ where: { id: imageId } });
+  if (!image) return null;
+  const folder = await getSocialFolderForUser(user, membership, image.folderId);
+  if (folder === "forbidden" || !folder) return folder;
+  return image;
+}
+
 export async function logSocialClientActivity(clientId: string, actorId: string, action: string, meta?: object) {
   await db.socialClientActivity.create({ data: { clientId, actorId, action, meta } });
 }

@@ -50,7 +50,7 @@ function matchesSignature(buffer: Buffer, ext: string): boolean {
  * executable) is rejected here rather than stored and later served back with
  * whatever Content-Type its fake extension implies.
  */
-async function readUploadedFile(scope: "tasks" | "projects" | "reports", entityId: string, file: File) {
+async function readUploadedFile(scope: "tasks" | "projects" | "reports" | "client-images", entityId: string, file: File) {
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new UploadValidationError(`File exceeds the ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB limit`);
   }
@@ -81,6 +81,19 @@ export function saveProjectDocument(projectId: string, file: File) {
 
 export function saveReportFile(reportId: string, file: File) {
   return readUploadedFile("reports", reportId, file);
+}
+
+/// Excludes SVG deliberately — it can carry a <script>, the same stored-XSS
+/// concern the uploads-serving route already guards against for other file
+/// types by forcing it to download rather than render inline.
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
+
+export async function saveClientImage(clientId: string, file: File) {
+  const ext = (file.name || "").split(".").pop()?.toLowerCase() ?? "";
+  if (!IMAGE_EXTENSIONS.has(ext)) {
+    throw new UploadValidationError("Only PNG, JPG, GIF, or WEBP images are allowed");
+  }
+  return readUploadedFile("client-images", clientId, file);
 }
 
 const MIME_TYPES: Record<string, string> = {
