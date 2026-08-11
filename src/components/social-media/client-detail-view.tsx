@@ -4,7 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import Link from "next/link";
 import * as Popover from "@radix-ui/react-popover";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
-import { addDays, differenceInCalendarDays, endOfWeek, format, isSameDay, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
+import { addDays, format, isSameDay, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1595,21 +1595,21 @@ function calendarSlotKey(week: number, weekday: string) {
 }
 
 /**
- * A real Monday–Sunday calendar grid for the given month — as many full
- * weeks as it takes to cover every day of the month (4, 5, or 6 depending on
- * what weekday it starts on), not a fixed count. Week 1's Monday is the
- * Monday on/before the 1st; the grid runs through the Sunday on/after the
- * month's last day, so it always ends on a complete week too. Leading/
- * trailing cells that spill into the adjacent month are still fully
- * editable — the calling code just dims their date to read as "not this
- * month," the same way any standard calendar UI does.
+ * A real Monday–Sunday calendar grid for the given month — always a fixed 6
+ * rows (the most any month ever needs), so the table's height never changes
+ * between months regardless of how many weeks that month actually spans.
+ * Week 1's Monday is the Monday on/before the 1st. A month that only needs
+ * 4 or 5 weeks simply spills further into the next month on the trailing
+ * rows — same as Week 1 spilling into the previous month at the top.
+ * Leading/trailing cells outside the viewed month are still fully editable —
+ * the calling code just dims their date to read as "not this month," the
+ * same way any standard calendar UI does.
  */
+const CALENDAR_GRID_WEEKS = 6;
+
 function monthGridDates(year: number, month: number): Date[][] {
   const gridStart = startOfWeek(new Date(year, month - 1, 1), { weekStartsOn: 1 });
-  const gridEnd = endOfWeek(new Date(year, month, 0), { weekStartsOn: 1 });
-  const totalDays = differenceInCalendarDays(gridEnd, gridStart) + 1;
-  const weekCount = Math.round(totalDays / 7);
-  return Array.from({ length: weekCount }, (_, week) =>
+  return Array.from({ length: CALENDAR_GRID_WEEKS }, (_, week) =>
     Array.from({ length: 7 }, (_, weekdayIndex) => addDays(gridStart, week * 7 + weekdayIndex))
   );
 }
@@ -2066,11 +2066,10 @@ function CalendarTab({ clientId }: { clientId: string }) {
               {dateFilterDropdown}
             </div>
           </div>
-          {/* min-h reserves room for the tallest possible grid (6 weeks) so the
-              table never collapses/jumps as row count or content changes between
-              months — that collapse-then-expand was the real source of the
-              "stutter", not the slide animation itself. */}
-          <div className="min-h-[27rem] overflow-x-auto">
+          {/* The grid is always 6 weeks (see monthGridDates), so the table's
+              height is naturally fixed across every month — no min-height
+              hack needed to stop it from jumping between months. */}
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-primary/90 text-primary-foreground">
@@ -2099,26 +2098,33 @@ function CalendarTab({ clientId }: { clientId: string }) {
                         const date = weekDates[week - 1][weekdayIndex];
                         const inMonth = date.getMonth() === month - 1;
                         const isToday = isSameDay(date, now);
+                        const isSunday = weekday === "SUNDAY";
+                        // Precedence: today (solid red fill) beats Sunday (light red
+                        // tint + red border) beats the normal filled/empty look — a
+                        // Sunday that also happens to be today reads as "today".
+                        const cellStateClasses = isToday
+                          ? "border-solid border-primary bg-primary font-medium text-primary-foreground"
+                          : label
+                            ? cn(
+                                "border-solid font-medium",
+                                CALENDAR_STATUS_TEXT_CLASS[slot!.status],
+                                isSunday ? "border-primary/50 bg-primary/10" : "border-border bg-card"
+                              )
+                            : isSunday
+                              ? "border-dashed border-primary/40 bg-primary/10 text-primary/80"
+                              : "border-dashed border-border text-muted-foreground";
                         return (
                           <td key={weekday} className="px-2 py-2">
                             <button
                               type="button"
                               onClick={() => openCell(week, weekday)}
                               className={cn(
-                                "flex w-full min-w-[7rem] flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-border px-3 py-2 text-sm transition-all hover:scale-[1.02] hover:border-primary hover:bg-primary/5 hover:opacity-100 active:scale-95",
-                                label ? cn("border-solid bg-card font-medium", CALENDAR_STATUS_TEXT_CLASS[slot!.status]) : "text-muted-foreground",
-                                !inMonth && "opacity-50",
-                                isToday && "border-solid border-primary ring-1 ring-primary ring-offset-1 ring-offset-background"
+                                "flex w-full min-w-[7rem] flex-col items-center justify-center gap-0.5 rounded-md border px-3 py-2 text-sm transition-all hover:scale-[1.02] hover:border-primary hover:bg-primary/5 hover:opacity-100 active:scale-95",
+                                cellStateClasses,
+                                !inMonth && "opacity-50"
                               )}
                             >
-                              <span
-                                className={cn(
-                                  "flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[11px] font-semibold tabular-nums",
-                                  isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-                                )}
-                              >
-                                {date.getDate()}
-                              </span>
+                              <span className="text-[11px] font-semibold tabular-nums opacity-80">{date.getDate()}</span>
                               <span>{label ?? "—"}</span>
                             </button>
                           </td>
