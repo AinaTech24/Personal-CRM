@@ -215,3 +215,32 @@ button:disabled,
     animation-duration: 1ms !important;
   }
 }
+
+/* Content Calendar's month-switch slide. Plain CSS rather than framer-motion's
+   AnimatePresence: that library gates the incoming month on the outgoing
+   one's exit animation fully completing, and if that completion signal is
+   ever missed (same animationend-throttling gotcha as the dialogs above) the
+   grid freezes on the old month forever — the header advances but the dates
+   never do. A remount (new `key`) always swaps in the correct content
+   immediately regardless of animation; this only decorates that swap, it
+   never gates it. */
+@keyframes calendar-slide-in-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes calendar-slide-in-left {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.calendar-slide-in-right {
+  animation: calendar-slide-in-right 200ms ease-out;
+}
+.calendar-slide-in-left {
+  animation: calendar-slide-in-left 200ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .calendar-slide-in-right,
+  .calendar-slide-in-left {
+    animation-duration: 1ms !important;
+  }
+}

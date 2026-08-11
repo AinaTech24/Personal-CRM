@@ -3,7 +3,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import * as Popover from "@radix-ui/react-popover";
-import { AnimatePresence, motion, type Variants } from "framer-motion";
 import { format, isSameDay, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1555,19 +1554,6 @@ const CALENDAR_DATE_FILTER_OPTIONS = [
 
 const CALENDAR_DELIVERABLES = { STATIC_POST: 8, CAROUSEL: 2, REEL: 4 } as const;
 
-/**
- * Direction-aware month transition — the incoming month slides in from
- * whichever side matches the nav direction (+1 next → from the right, -1
- * prev → from the left) and the outgoing one exits the opposite way, the
- * same "custom" pattern framer-motion's own docs use for this exact
- * carousel/calendar case.
- */
-const calendarSlideVariants: Variants = {
-  enter: (direction: number) => ({ opacity: 0, x: direction * 24 }),
-  center: { opacity: 1, x: 0 },
-  exit: (direction: number) => ({ opacity: 0, x: direction * -24 }),
-};
-
 /** Resolves a date-filter preset to the month/year it should jump to. "range" is handled separately via the date picker. */
 function resolveCalendarPreset(preset: string): { month: number; year: number } | null {
   const now = new Date();
@@ -1839,9 +1825,14 @@ function CalendarTab({ clientId }: { clientId: string }) {
   const weekNumbers = useMemo(() => weekDates.map((_, i) => i + 1), [weekDates]);
 
   // +1 slides the new month in from the right (going forward), -1 from the
-  // left (going back) — set right before the month/year change that
-  // triggers the transition, read by the AnimatePresence below.
+  // left (going back) — set right before the month/year change that triggers
+  // the transition, read by the tbody's slide-in class below.
   const [direction, setDirection] = useState(1);
+  // The date a grayed-out leading/trailing cell was clicked on, so it's
+  // obviously marked in the month it jumps to — otherwise there's no way to
+  // tell which date you landed on, or that you moved at all, beyond the
+  // small month/year label in the header. Cleared by any other navigation.
+  const [highlightedDate, setHighlightedDate] = useState<Date | null>(null);
 
   function goToMonth(delta: number) {
     setDirection(delta);
@@ -1858,7 +1849,13 @@ function CalendarTab({ clientId }: { clientId: string }) {
     setYear(nextYear);
   }
 
+  function goToSpilloverDate(date: Date, delta: number) {
+    setHighlightedDate(date);
+    goToMonth(delta);
+  }
+
   function applyDateFilter(preset: string) {
+    setHighlightedDate(null);
     setDateFilter(preset);
     const resolved = resolveCalendarPreset(preset);
     if (resolved) {
@@ -1868,6 +1865,7 @@ function CalendarTab({ clientId }: { clientId: string }) {
   }
 
   function applyDateRange(from: string, to: string) {
+    setHighlightedDate(null);
     setRangeFrom(from);
     setRangeTo(to);
     setDateFilter("range");
@@ -1879,6 +1877,7 @@ function CalendarTab({ clientId }: { clientId: string }) {
   }
 
   function openCell(week: number, weekday: CalendarWeekday) {
+    setHighlightedDate(null);
     const existing = byKey.get(calendarSlotKey(week, weekday));
     setEditType(existing?.contentType ?? (existing?.note ? "OTHER" : ""));
     setEditNote(existing?.note ?? "");
@@ -1963,7 +1962,10 @@ function CalendarTab({ clientId }: { clientId: string }) {
                 <button
                   type="button"
                   aria-label="Previous month"
-                  onClick={() => goToMonth(-1)}
+                  onClick={() => {
+                    setHighlightedDate(null);
+                    goToMonth(-1);
+                  }}
                   className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-white/15"
                 >
                   <IconChevronLeft className="h-4 w-4" />
@@ -1974,7 +1976,10 @@ function CalendarTab({ clientId }: { clientId: string }) {
                 <button
                   type="button"
                   aria-label="Next month"
-                  onClick={() => goToMonth(1)}
+                  onClick={() => {
+                    setHighlightedDate(null);
+                    goToMonth(1);
+                  }}
                   className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-white/15"
                 >
                   <IconChevronRight className="h-4 w-4" />
@@ -2005,16 +2010,15 @@ function CalendarTab({ clientId }: { clientId: string }) {
                   ))}
                 </tr>
               </thead>
-              <AnimatePresence mode="wait" custom={direction} initial={false}>
-                <motion.tbody
-                  key={`${year}-${month}`}
-                  custom={direction}
-                  variants={calendarSlideVariants}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                >
+              {/* Plain CSS animation (see .calendar-slide-in-* in globals.css),
+                  not framer-motion's AnimatePresence — that library gates the
+                  incoming month's mount on the outgoing one's exit animation
+                  fully completing, and when that signal doesn't fire the grid
+                  freezes on the old month forever (header keeps advancing,
+                  dates never do). A remount on `key` change always swaps in
+                  the correct content immediately; this class only decorates
+                  that swap, never gates it. */}
+                <tbody key={`${year}-${month}`} className={direction === 1 ? "calendar-slide-in-right" : "calendar-slide-in-left"}>
                   {weekNumbers.map((week) => (
                     <tr key={week} className="border-b border-border last:border-b-0 odd:bg-muted/30">
                       <td className="px-4 py-3 font-medium">Week {week}</td>
@@ -2025,6 +2029,7 @@ function CalendarTab({ clientId }: { clientId: string }) {
                         const inMonth = date.getMonth() === month - 1;
                         const isToday = isSameDay(date, now);
                         const isSunday = weekday === "SUNDAY";
+                        const isHighlighted = !!highlightedDate && isSameDay(date, highlightedDate);
                         // Precedence: today (solid red fill) beats Sunday (light red
                         // tint + red border) beats the normal filled/empty look — a
                         // Sunday that also happens to be today reads as "today".
@@ -2046,7 +2051,8 @@ function CalendarTab({ clientId }: { clientId: string }) {
                         // Leading/trailing cells belong to the adjacent month, not this
                         // one — clicking them can't sanely open an edit dialog keyed to
                         // the wrong month, so it jumps the whole grid to that month
-                        // instead (same as clicking a header nav arrow).
+                        // instead (same as clicking a header nav arrow), and marks the
+                        // clicked date so it's obvious which one you landed on.
                         const monthIndex = year * 12 + (month - 1);
                         const cellMonthIndex = date.getFullYear() * 12 + date.getMonth();
                         const spilloverDirection = cellMonthIndex < monthIndex ? -1 : 1;
@@ -2054,12 +2060,17 @@ function CalendarTab({ clientId }: { clientId: string }) {
                           <td key={weekday} className="px-2 py-2">
                             <button
                               type="button"
-                              onClick={() => (inMonth ? openCell(week, weekday) : goToMonth(spilloverDirection))}
+                              onClick={() =>
+                                inMonth ? openCell(week, weekday) : goToSpilloverDate(date, spilloverDirection)
+                              }
                               className={cn(
                                 "flex w-full min-w-[7rem] flex-col items-center justify-center gap-0.5 rounded-md border px-3 py-2 text-sm transition-all hover:scale-[1.02] hover:border-primary hover:opacity-100 active:scale-95",
                                 hoverBgClass,
                                 cellStateClasses,
-                                !inMonth && "opacity-50"
+                                !inMonth && "opacity-50",
+                                // A distinct blue ring so it never gets lost against the
+                                // existing red today/Sunday treatments.
+                                isHighlighted && "ring-2 ring-blue-500 ring-offset-1 ring-offset-background"
                               )}
                             >
                               <span className="text-[11px] font-semibold tabular-nums opacity-80">{date.getDate()}</span>
@@ -2070,8 +2081,7 @@ function CalendarTab({ clientId }: { clientId: string }) {
                       })}
                     </tr>
                   ))}
-                </motion.tbody>
-              </AnimatePresence>
+                </tbody>
             </table>
           </div>
         </Card>
