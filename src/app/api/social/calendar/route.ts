@@ -34,8 +34,8 @@ const bodySchema = z.object({
   clientId: z.string(),
   year: z.number().int().min(2000).max(2100),
   month: z.number().int().min(1).max(12),
-  // A real calendar month needs anywhere from 4 to 6 Monday-Sunday weeks to
-  // fully cover it, depending on what day it starts on.
+  // The grid is always a fixed 6 Monday-Sunday weeks (so the table's height
+  // never changes between months) — see monthGridDates in client-detail-view.
   week: z.number().int().min(1).max(6),
   weekday: z.enum(WEEKDAYS),
   contentType: z.enum(CONTENT_TYPES).nullable(),

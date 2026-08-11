@@ -92,8 +92,16 @@ body {
   color: var(--foreground);
 }
 
-* {
-  border-color: var(--border);
+/* @layer base, not a bare rule: Tailwind wraps its own utilities in cascade
+   layers, and unlayered CSS always beats layered CSS regardless of
+   specificity — a plain `* { border-color: ... }` here would silently
+   override every border-color utility class in the app (border-primary,
+   border-destructive, etc. would all render as this default and nothing
+   else), which is exactly what was happening before this was layered. */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 }
 
 /* Hide scrollbars everywhere (horizontal + vertical) while keeping scroll functional. */
