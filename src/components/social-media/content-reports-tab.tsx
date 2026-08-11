@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,14 +64,24 @@ function buildContentReportHtml(clientName: string, year: number, month: number,
 <style>
   @page { size: A4; margin: 14mm; }
   * { box-sizing: border-box; }
+  /* Only matters for the on-screen preview (srcDoc) — the downloaded PDF has no
+     scrollbar to begin with. Chrome's built-in PDF viewer ignores the
+     scrollbar=0 open parameter, which is why viewing goes through this HTML
+     directly instead of the rendered PDF. */
+  html { -ms-overflow-style: none; scrollbar-width: none; }
+  html::-webkit-scrollbar { display: none; width: 0; height: 0; }
   body { font-family: Helvetica, Arial, sans-serif; color: #2b2b2b; font-size: 12px; margin: 0; background: #fff; padding: 14mm; }
   .head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
   .co-name { font-weight: 700; font-size: 15px; }
   .sub { color: #555; margin-top: 3px; }
   .meta { text-align: right; color: #777; font-size: 11px; }
   table { width: 100%; border-collapse: collapse; }
-  thead th { background: #3c3c3c; color: #fff; font-weight: 600; padding: 8px; text-align: left; font-size: 11px; }
-  tbody td { padding: 7px 8px; border-bottom: 1px solid #e6e6e6; }
+  /* html2canvas (used for the downloaded PDF) doesn't reliably honor the
+     table/td default vertical-align, so it's spelled out explicitly rather
+     than left implicit — otherwise header/cell text renders hugging the
+     bottom of its cell instead of centered. */
+  thead th { background: #3c3c3c; color: #fff; font-weight: 600; padding: 8px; text-align: left; vertical-align: middle; font-size: 11px; line-height: 1.4; }
+  tbody td { padding: 7px 8px; border-bottom: 1px solid #e6e6e6; vertical-align: middle; line-height: 1.4; }
   tbody tr:nth-child(even) { background: #fafafa; }
   .status { font-weight: 600; }
 </style>
@@ -102,11 +112,11 @@ export function ContentReportsTab({ clientId, clientName }: { clientId: string; 
   const toast = useToast();
   const [months, setMonths] = useState<MonthEntry[] | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ title: string; url: string } | null>(null);
-  // Tracks the live blob: URL outside React state so it's reliably revoked even
-  // across rapid View clicks, not just on close — state alone would leak one
-  // blob per click if the user views several months without closing the dialog.
-  const activeBlobUrl = useRef<string | null>(null);
+  // View renders the report's own HTML straight into an iframe (srcDoc) rather
+  // than going through a generated PDF — Chrome's built-in PDF viewer ignores
+  // the scrollbar=0 open parameter and always shows its own scrollbar, which
+  // an iframe we fully control (and can style with our own CSS) doesn't have.
+  const [preview, setPreview] = useState<{ title: string; html: string } | null>(null);
 
   useEffect(() => {
     fetch(`/api/social/calendar/months?clientId=${clientId}`)
@@ -114,12 +124,6 @@ export function ContentReportsTab({ clientId, clientName }: { clientId: string; 
       .then((d) => setMonths(d.months ?? []))
       .catch(() => setMonths([]));
   }, [clientId]);
-
-  useEffect(() => {
-    return () => {
-      if (activeBlobUrl.current) URL.revokeObjectURL(activeBlobUrl.current);
-    };
-  }, []);
 
   async function loadSlots(year: number, month: number): Promise<CalendarSlot[]> {
     const res = await fetch(`/api/social/calendar?clientId=${clientId}&year=${year}&month=${month}`);
@@ -149,11 +153,7 @@ export function ContentReportsTab({ clientId, clientName }: { clientId: string; 
     try {
       const slots = await loadSlots(m.year, m.month);
       const html = buildContentReportHtml(clientName, m.year, m.month, slots);
-      const pdf = await htmlToPdf(html);
-      const url = pdf.output("bloburl").toString();
-      if (activeBlobUrl.current) URL.revokeObjectURL(activeBlobUrl.current);
-      activeBlobUrl.current = url;
-      setPreview({ title: `${MONTH_NAMES[m.month - 1]} ${m.year}`, url });
+      setPreview({ title: `${MONTH_NAMES[m.month - 1]} ${m.year}`, html });
     } catch {
       toast.error("Couldn't generate the report");
     } finally {
@@ -162,10 +162,6 @@ export function ContentReportsTab({ clientId, clientName }: { clientId: string; 
   }
 
   function closePreview() {
-    if (activeBlobUrl.current) {
-      URL.revokeObjectURL(activeBlobUrl.current);
-      activeBlobUrl.current = null;
-    }
     setPreview(null);
   }
 
@@ -229,16 +225,14 @@ export function ContentReportsTab({ clientId, clientName }: { clientId: string; 
       )}
 
       <Dialog open={previewDialog.open} onOpenChange={(v) => !v && closePreview()}>
-        <DialogContent size="lg" className="max-h-[90vh]">
+        <DialogContent size="lg" className="max-h-[90vh] max-w-4xl">
           <DialogHeader>
             <DialogTitle>{previewDialog.value?.title} Content Report</DialogTitle>
           </DialogHeader>
           <DialogBody className="overflow-hidden p-0">
             {previewDialog.value && (
-              // The fragment hash hides the browser PDF viewer's own toolbar/side
-              // panel/scrollbar so only the document shows inside the dialog.
               <iframe
-                src={`${previewDialog.value.url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                srcDoc={previewDialog.value.html}
                 title={`${previewDialog.value.title} report`}
                 className="h-[80vh] w-full border-0 bg-white"
               />
