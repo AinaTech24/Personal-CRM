@@ -4,7 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import Link from "next/link";
 import * as Popover from "@radix-ui/react-popover";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
-import { addDays, format, isSameDay, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
+import { format, isSameDay, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,17 @@ import { StageStepper } from "@/components/social-media/stage-stepper";
 import { FilesTab } from "@/components/social-media/files-tab";
 import { stagesFor, stageLabel } from "@/lib/social-content-workflow";
 import { adStages, adStageLabel } from "@/lib/social-ad-workflow";
+import {
+  CALENDAR_WEEKDAYS,
+  CALENDAR_WEEKDAY_LABELS,
+  calendarSlotKey,
+  monthGridDates,
+  calendarLabelsFor,
+  type CalendarWeekday,
+  type CalendarSlotStatus,
+  type CalendarSlot,
+} from "@/lib/social-calendar";
+import { ContentReportsTab } from "@/components/social-media/content-reports-tab";
 import { cn } from "@/lib/utils";
 
 const STAGE_OPTIONS = [
@@ -196,7 +207,7 @@ interface Client {
   _count: { contentItems: number; adCampaigns: number; monthlyReports: number; folders: number };
 }
 
-type TabKey = "files" | "platforms" | "content" | "ads" | "reports" | "calendar" | "activity";
+type TabKey = "files" | "platforms" | "content" | "ads" | "reports" | "calendar" | "contentReports" | "activity";
 
 /** Lets the parent's single shared "+" button (in the tab bar row) trigger whichever tab is active. */
 interface TabCreateHandle {
@@ -349,6 +360,7 @@ export function SocialClientDetailView({ clientId }: { clientId: string }) {
     { key: "ads", label: "Ads", count: client._count.adCampaigns },
     { key: "reports", label: "Monthly Reports", count: client._count.monthlyReports },
     { key: "calendar", label: "Content Calendar" },
+    { key: "contentReports", label: "Content Reports" },
     { key: "activity", label: "Activity" },
   ];
 
@@ -411,6 +423,7 @@ export function SocialClientDetailView({ clientId }: { clientId: string }) {
       {tab === "ads" && <AdsTab ref={adsRef} clientId={client.id} onChanged={load} platformAccounts={client.platformAccounts} />}
       {tab === "reports" && <ReportsTab ref={reportsRef} clientId={client.id} onChanged={load} />}
       {tab === "calendar" && <CalendarTab clientId={client.id} />}
+      {tab === "contentReports" && <ContentReportsTab clientId={client.id} clientName={client.name} />}
       {tab === "activity" && <ActivityTab clientId={client.id} />}
 
       <EditClientDialog
@@ -1505,41 +1518,6 @@ const ReportsTab = forwardRef<TabCreateHandle, { clientId: string; onChanged: ()
 
 // ---------- Content Calendar ----------
 
-type CalendarWeekday = "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
-type CalendarSlotStatus = "NOT_UPLOADED" | "PENDING" | "DONE";
-
-interface CalendarSlot {
-  id: string;
-  clientId: string;
-  year: number;
-  month: number;
-  week: number;
-  weekday: CalendarWeekday;
-  contentType: "STATIC_POST" | "CAROUSEL" | "AI_REEL" | "REAL_PERSON_REEL" | null;
-  note: string | null;
-  manualNumber: number | null;
-  status: CalendarSlotStatus;
-}
-
-const CALENDAR_WEEKDAYS: CalendarWeekday[] = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
-const CALENDAR_WEEKDAY_LABELS: Record<CalendarWeekday, string> = {
-  MONDAY: "Monday",
-  TUESDAY: "Tuesday",
-  WEDNESDAY: "Wednesday",
-  THURSDAY: "Thursday",
-  FRIDAY: "Friday",
-  SATURDAY: "Saturday",
-  SUNDAY: "Sunday",
-};
-
-/** AI and real-person reels share one "Reel" bucket for display/numbering — the doc's deliverables count them together. */
-const CALENDAR_DISPLAY_GROUP: Record<NonNullable<CalendarSlot["contentType"]>, string> = {
-  STATIC_POST: "Static",
-  CAROUSEL: "Carousel",
-  AI_REEL: "Reel",
-  REAL_PERSON_REEL: "Reel",
-};
-
 const CALENDAR_TYPE_OPTIONS = [
   { value: "", label: "Empty" },
   { value: "STATIC_POST", label: "Static Post" },
@@ -1589,58 +1567,6 @@ const calendarSlideVariants: Variants = {
   center: { opacity: 1, x: 0 },
   exit: (direction: number) => ({ opacity: 0, x: direction * -24 }),
 };
-
-function calendarSlotKey(week: number, weekday: string) {
-  return `${week}-${weekday}`;
-}
-
-/**
- * A real Monday–Sunday calendar grid for the given month — always a fixed 6
- * rows (the most any month ever needs), so the table's height never changes
- * between months regardless of how many weeks that month actually spans.
- * Week 1's Monday is the Monday on/before the 1st. A month that only needs
- * 4 or 5 weeks simply spills further into the next month on the trailing
- * rows — same as Week 1 spilling into the previous month at the top.
- * Leading/trailing cells outside the viewed month are still fully editable —
- * the calling code just dims their date to read as "not this month," the
- * same way any standard calendar UI does.
- */
-const CALENDAR_GRID_WEEKS = 6;
-
-function monthGridDates(year: number, month: number): Date[][] {
-  const gridStart = startOfWeek(new Date(year, month - 1, 1), { weekStartsOn: 1 });
-  return Array.from({ length: CALENDAR_GRID_WEEKS }, (_, week) =>
-    Array.from({ length: 7 }, (_, weekdayIndex) => addDays(gridStart, week * 7 + weekdayIndex))
-  );
-}
-
-/**
- * Display label for a slot — "Static - 3", "Reel - 1", a freeform note, or
- * null for an empty cell. A slot with manualNumber set uses that number
- * directly; slots left on "Auto" get the next sequential position among
- * only the other auto-numbered slots of the same type.
- */
-function calendarLabelsFor(slots: CalendarSlot[]): Map<string, string> {
-  const ordered = [...slots].sort((a, b) => a.week - b.week || CALENDAR_WEEKDAYS.indexOf(a.weekday) - CALENDAR_WEEKDAYS.indexOf(b.weekday));
-  const counts: Record<string, number> = {};
-  const result = new Map<string, string>();
-  for (const s of ordered) {
-    if (s.contentType) {
-      const group = CALENDAR_DISPLAY_GROUP[s.contentType];
-      let n: number;
-      if (s.manualNumber) {
-        n = s.manualNumber;
-      } else {
-        counts[group] = (counts[group] ?? 0) + 1;
-        n = counts[group];
-      }
-      result.set(s.id, `${group} - ${n}`);
-    } else if (s.note) {
-      result.set(s.id, s.note);
-    }
-  }
-  return result;
-}
 
 /** Resolves a date-filter preset to the month/year it should jump to. "range" is handled separately via the date picker. */
 function resolveCalendarPreset(preset: string): { month: number; year: number } | null {
@@ -2113,13 +2039,25 @@ function CalendarTab({ clientId }: { clientId: string }) {
                             : isSunday
                               ? "border-dashed border-primary/40 bg-primary/10 text-primary/80"
                               : "border-dashed border-border text-muted-foreground";
+                        // Today is already solid red — a 5%-opacity red hover overlay
+                        // replaces that solid fill outright and washes it to near-white
+                        // in light mode, so only the non-today cells get it.
+                        const hoverBgClass = isToday ? "" : "hover:bg-primary/5";
+                        // Leading/trailing cells belong to the adjacent month, not this
+                        // one — clicking them can't sanely open an edit dialog keyed to
+                        // the wrong month, so it jumps the whole grid to that month
+                        // instead (same as clicking a header nav arrow).
+                        const monthIndex = year * 12 + (month - 1);
+                        const cellMonthIndex = date.getFullYear() * 12 + date.getMonth();
+                        const spilloverDirection = cellMonthIndex < monthIndex ? -1 : 1;
                         return (
                           <td key={weekday} className="px-2 py-2">
                             <button
                               type="button"
-                              onClick={() => openCell(week, weekday)}
+                              onClick={() => (inMonth ? openCell(week, weekday) : goToMonth(spilloverDirection))}
                               className={cn(
-                                "flex w-full min-w-[7rem] flex-col items-center justify-center gap-0.5 rounded-md border px-3 py-2 text-sm transition-all hover:scale-[1.02] hover:border-primary hover:bg-primary/5 hover:opacity-100 active:scale-95",
+                                "flex w-full min-w-[7rem] flex-col items-center justify-center gap-0.5 rounded-md border px-3 py-2 text-sm transition-all hover:scale-[1.02] hover:border-primary hover:opacity-100 active:scale-95",
+                                hoverBgClass,
                                 cellStateClasses,
                                 !inMonth && "opacity-50"
                               )}
