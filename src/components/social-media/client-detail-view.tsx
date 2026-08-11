@@ -3,8 +3,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import * as Popover from "@radix-ui/react-popover";
-import { AnimatePresence, motion } from "framer-motion";
-import { addDays, format, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
+import { addDays, differenceInCalendarDays, endOfWeek, format, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   IconChevronLeft,
+  IconChevronRight,
   IconChevronDown,
   IconCheck,
   IconPlus,
@@ -1504,7 +1505,7 @@ const ReportsTab = forwardRef<TabCreateHandle, { clientId: string; onChanged: ()
 
 // ---------- Content Calendar ----------
 
-type CalendarWeekday = "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY";
+type CalendarWeekday = "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
 type CalendarSlotStatus = "NOT_UPLOADED" | "PENDING" | "DONE";
 
 interface CalendarSlot {
@@ -1520,7 +1521,7 @@ interface CalendarSlot {
   status: CalendarSlotStatus;
 }
 
-const CALENDAR_WEEKDAYS: CalendarWeekday[] = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+const CALENDAR_WEEKDAYS: CalendarWeekday[] = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
 const CALENDAR_WEEKDAY_LABELS: Record<CalendarWeekday, string> = {
   MONDAY: "Monday",
   TUESDAY: "Tuesday",
@@ -1528,8 +1529,8 @@ const CALENDAR_WEEKDAY_LABELS: Record<CalendarWeekday, string> = {
   THURSDAY: "Thursday",
   FRIDAY: "Friday",
   SATURDAY: "Saturday",
+  SUNDAY: "Sunday",
 };
-const CALENDAR_WEEKS = [1, 2, 3, 4];
 
 /** AI and real-person reels share one "Reel" bucket for display/numbering — the doc's deliverables count them together. */
 const CALENDAR_DISPLAY_GROUP: Record<NonNullable<CalendarSlot["contentType"]>, string> = {
@@ -1576,25 +1577,40 @@ const CALENDAR_DATE_FILTER_OPTIONS = [
 
 const CALENDAR_DELIVERABLES = { STATIC_POST: 8, CAROUSEL: 2, REEL: 4 } as const;
 
+/**
+ * Direction-aware month transition — the incoming month slides in from
+ * whichever side matches the nav direction (+1 next → from the right, -1
+ * prev → from the left) and the outgoing one exits the opposite way, the
+ * same "custom" pattern framer-motion's own docs use for this exact
+ * carousel/calendar case.
+ */
+const calendarSlideVariants: Variants = {
+  enter: (direction: number) => ({ opacity: 0, x: direction * 24 }),
+  center: { opacity: 1, x: 0 },
+  exit: (direction: number) => ({ opacity: 0, x: direction * -24 }),
+};
+
 function calendarSlotKey(week: number, weekday: string) {
   return `${week}-${weekday}`;
 }
 
 /**
- * Real calendar dates for the fixed 4-week × 6-day (Mon–Sat, no Sunday) grid
- * a client's content plan always uses — that shape is a deliverable quota,
- * not a literal Gregorian month, so it doesn't change here. This only maps
- * each existing (week, weekday) cell onto the actual date it falls on, for
- * display: Week 1's Monday is the Monday on/before the 1st, so a month
- * starting mid-week shows a few real dates from the tail of the previous
- * month at the top, and — since 4×7 rarely divides a month evenly — the grid
- * commonly runs a few days into next month by Week 4. Cells outside the
- * viewed month are still fully editable; only their date reads dimmed.
+ * A real Monday–Sunday calendar grid for the given month — as many full
+ * weeks as it takes to cover every day of the month (4, 5, or 6 depending on
+ * what weekday it starts on), not a fixed count. Week 1's Monday is the
+ * Monday on/before the 1st; the grid runs through the Sunday on/after the
+ * month's last day, so it always ends on a complete week too. Leading/
+ * trailing cells that spill into the adjacent month are still fully
+ * editable — the calling code just dims their date to read as "not this
+ * month," the same way any standard calendar UI does.
  */
 function monthGridDates(year: number, month: number): Date[][] {
-  const anchor = startOfWeek(new Date(year, month - 1, 1), { weekStartsOn: 1 });
-  return CALENDAR_WEEKS.map((week) =>
-    CALENDAR_WEEKDAYS.map((_, weekdayIndex) => addDays(anchor, (week - 1) * 7 + weekdayIndex))
+  const gridStart = startOfWeek(new Date(year, month - 1, 1), { weekStartsOn: 1 });
+  const gridEnd = endOfWeek(new Date(year, month, 0), { weekStartsOn: 1 });
+  const totalDays = differenceInCalendarDays(gridEnd, gridStart) + 1;
+  const weekCount = Math.round(totalDays / 7);
+  return Array.from({ length: weekCount }, (_, week) =>
+    Array.from({ length: 7 }, (_, weekdayIndex) => addDays(gridStart, week * 7 + weekdayIndex))
   );
 }
 
@@ -1889,6 +1905,27 @@ function CalendarTab({ clientId }: { clientId: string }) {
 
   const labels = useMemo(() => calendarLabelsFor(slots ?? []), [slots]);
   const weekDates = useMemo(() => monthGridDates(year, month), [year, month]);
+  const weekNumbers = useMemo(() => weekDates.map((_, i) => i + 1), [weekDates]);
+
+  // +1 slides the new month in from the right (going forward), -1 from the
+  // left (going back) — set right before the month/year change that
+  // triggers the transition, read by the AnimatePresence below.
+  const [direction, setDirection] = useState(1);
+
+  function goToMonth(delta: number) {
+    setDirection(delta);
+    let nextMonth = month + delta;
+    let nextYear = year;
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      nextYear += 1;
+    } else if (nextMonth < 1) {
+      nextMonth = 12;
+      nextYear -= 1;
+    }
+    setMonth(nextMonth);
+    setYear(nextYear);
+  }
 
   function applyDateFilter(preset: string) {
     setDateFilter(preset);
@@ -1990,10 +2027,28 @@ function CalendarTab({ clientId }: { clientId: string }) {
       ) : (
         <Card className="overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 bg-primary px-5 py-3 text-primary-foreground">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-semibold">
-                {MONTH_NAMES[month - 1]} {year}
-              </span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  aria-label="Previous month"
+                  onClick={() => goToMonth(-1)}
+                  className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-white/15"
+                >
+                  <IconChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="min-w-[9rem] text-center text-sm font-semibold">
+                  {MONTH_NAMES[month - 1]} {year}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Next month"
+                  onClick={() => goToMonth(1)}
+                  className="flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-white/15"
+                >
+                  <IconChevronRight className="h-4 w-4" />
+                </button>
+              </div>
               <span className="text-xs text-primary-foreground/80">
                 {format(now, "EEEE, d MMMM yyyy")} · {format(now, "h:mm a")}
               </span>
@@ -2016,15 +2071,17 @@ function CalendarTab({ clientId }: { clientId: string }) {
                   ))}
                 </tr>
               </thead>
-              <AnimatePresence mode="wait">
+              <AnimatePresence mode="wait" custom={direction}>
                 <motion.tbody
                   key={`${year}-${month}`}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  custom={direction}
+                  variants={calendarSlideVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: 0.2, ease: "easeOut" }}
                 >
-                  {CALENDAR_WEEKS.map((week) => (
+                  {weekNumbers.map((week) => (
                     <tr key={week} className="border-b border-border last:border-b-0 odd:bg-muted/30">
                       <td className="px-4 py-3 font-medium">Week {week}</td>
                       {CALENDAR_WEEKDAYS.map((weekday, weekdayIndex) => {
