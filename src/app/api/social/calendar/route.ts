@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, getSocialClientForUser, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
 
-const WEEKDAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"] as const;
+const WEEKDAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"] as const;
 const CONTENT_TYPES = ["STATIC_POST", "CAROUSEL", "AI_REEL", "REAL_PERSON_REEL"] as const;
 const SLOT_STATUSES = ["NOT_UPLOADED", "PENDING", "DONE"] as const;
 
@@ -34,7 +34,9 @@ const bodySchema = z.object({
   clientId: z.string(),
   year: z.number().int().min(2000).max(2100),
   month: z.number().int().min(1).max(12),
-  week: z.number().int().min(1).max(4),
+  // A real calendar month needs anywhere from 4 to 6 Monday-Sunday weeks to
+  // fully cover it, depending on what day it starts on.
+  week: z.number().int().min(1).max(6),
   weekday: z.enum(WEEKDAYS),
   contentType: z.enum(CONTENT_TYPES).nullable(),
   note: z.string().max(200).nullable().optional(),

@@ -1182,6 +1182,7 @@ enum SocialCalendarWeekday {
   THURSDAY
   FRIDAY
   SATURDAY
+  SUNDAY
 }
 
 /// Upload/production status shown as colored text on a filled calendar
