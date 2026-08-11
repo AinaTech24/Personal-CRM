@@ -2,16 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { getAttendancePolicy } from "@/lib/attendance-settings";
-import { istDateKey, dateFromKey, istMinutesOfDay } from "@/lib/attendance";
+import { istDateKey, dateFromKey, istMinutesOfDay, type AttendanceShift } from "@/lib/attendance";
 import { computeReminders, type ReminderUserState } from "@/lib/attendance-reminders";
 import { notifyUser } from "@/lib/notify";
 import { sendPushToUsers } from "@/lib/push";
 import { rateLimit } from "@/lib/rate-limit";
 
 /**
+ * Fixed 9:00-9:30 AM check-in / 6:00-6:30 PM check-out reminder windows
+ * (REMINDER_LEAD_MINUTES = 30, ending at checkInEnd/checkOutEnd below).
+ * Deliberately NOT read from the admin-configured AttendanceSettings shifts:
+ * those same shift windows also gate whether check-in/out is allowed at all
+ * (see the check-in/check-out routes) — reusing them here would silently
+ * turn a "don't forget" nudge into a hard cutoff outside 9:00-9:30/18:00-18:30
+ * for anyone relying on configured shifts. This list only ever feeds the
+ * reminder computation below, never enforcement.
+ */
+const REMINDER_WINDOWS: AttendanceShift[] = [
+  { name: "Standard", type: "FULL_DAY", checkInStart: "00:00", checkInEnd: "09:30", checkOutStart: "00:00", checkOutEnd: "18:30" },
+  { name: "Standard", type: "HALF_DAY", checkInStart: "00:00", checkInEnd: "09:30", checkOutStart: "00:00", checkOutEnd: "18:30" },
+];
+
+/**
  * Sends a check-in or check-out nudge to anyone within REMINDER_LEAD_MINUTES
- * of their shift window closing who hasn't acted yet — both an in-app
+ * of REMINDER_WINDOWS closing who hasn't acted yet — both an in-app
  * toast/bell notification (notifyUser) and a real OS-level push notification
  * (sendPushToUsers), so it reaches a closed app on a phone or desktop, not
  * just a tab that's already open.
@@ -37,11 +51,6 @@ export async function POST(req: NextRequest) {
     if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const policy = await getAttendancePolicy();
-  if (policy.shifts.length === 0) {
-    return NextResponse.json({ sent: 0, checkIn: 0, checkOut: 0, reason: "No shifts configured" });
-  }
-
   const dateKey = istDateKey();
   const date = dateFromKey(dateKey);
   const nowMinutes = istMinutesOfDay();
@@ -65,7 +74,7 @@ export async function POST(req: NextRequest) {
     };
   });
 
-  const candidates = computeReminders(policy.shifts, states, nowMinutes);
+  const candidates = computeReminders(REMINDER_WINDOWS, states, nowMinutes);
 
   let checkIn = 0;
   let checkOut = 0;

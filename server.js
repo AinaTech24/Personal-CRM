@@ -2,10 +2,22 @@ const { createServer } = require("http");
 const { parse } = require("url");
 const next = require("next");
 const { Server } = require("socket.io");
+const crypto = require("crypto");
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOST ?? "localhost";
 const port = Number(process.env.PORT ?? 3000);
+
+// The /api/attendance/send-reminders route (9:00-9:30 AM check-in / 6:00-6:30
+// PM check-out nudges) only fires when hit with this header — normally an
+// external cron would supply it. Generating one here when it's not already
+// set means the sweep below works out of the box on a fresh deploy, with no
+// VPS crontab or external scheduler to configure: server.js and the route
+// handler share this same process, so this value is exactly what the route
+// reads too.
+if (!process.env.CRON_SECRET) {
+  process.env.CRON_SECRET = crypto.randomBytes(24).toString("hex");
+}
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -78,4 +90,16 @@ app.prepare().then(() => {
   httpServer.listen(port, () => {
     console.log(`> Aina CRM ready on http://${hostname}:${port}`);
   });
+
+  // Sweeps for anyone who hasn't checked in by 9:30 AM or checked out by
+  // 6:30 PM (IST) and nudges them — the route itself only actually sends
+  // anything in the last 30 minutes before each window closes, so calling it
+  // this often just means that 30-minute window is never missed.
+  const REMINDER_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+  setInterval(() => {
+    fetch(`http://127.0.0.1:${port}/api/attendance/send-reminders`, {
+      method: "POST",
+      headers: { "x-cron-secret": process.env.CRON_SECRET },
+    }).catch((err) => console.error("attendance reminder sweep failed:", err));
+  }, REMINDER_SWEEP_INTERVAL_MS);
 });
