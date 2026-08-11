@@ -4,7 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import Link from "next/link";
 import * as Popover from "@radix-ui/react-popover";
 import { AnimatePresence, motion, type Variants } from "framer-motion";
-import { addDays, differenceInCalendarDays, endOfWeek, format, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
+import { addDays, differenceInCalendarDays, endOfWeek, format, isSameDay, parseISO, startOfWeek, startOfQuarter, subDays } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1856,6 +1856,11 @@ function CalendarTab({ clientId }: { clientId: string }) {
   const [rangeFrom, setRangeFrom] = useState("");
   const [rangeTo, setRangeTo] = useState("");
   const [slots, setSlots] = useState<CalendarSlot[] | null>(null);
+  // Only the very first load shows the full skeleton. Switching months keeps the
+  // Card mounted (previous month's grid stays on screen until the new data
+  // arrives) — swapping the whole Card out on every nav killed the slide
+  // animation and reflowed the rest of the page around it.
+  const [initialLoading, setInitialLoading] = useState(true);
 
   // A live day/date/time readout in the header — ticks on its own timer
   // rather than once at render, so it doesn't go stale on a tab left open.
@@ -1873,11 +1878,11 @@ function CalendarTab({ clientId }: { clientId: string }) {
   const [saving, setSaving] = useState(false);
 
   function load() {
-    setSlots(null);
     fetch(`/api/social/calendar?clientId=${clientId}&year=${year}&month=${month}`)
       .then((r) => r.json())
       .then((d) => setSlots(d.slots ?? []))
-      .catch(() => setSlots([]));
+      .catch(() => setSlots([]))
+      .finally(() => setInitialLoading(false));
   }
 
   useEffect(() => {
@@ -2022,7 +2027,7 @@ function CalendarTab({ clientId }: { clientId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {slots === null ? (
+      {initialLoading ? (
         <SkeletonForm fields={4} />
       ) : (
         <Card className="overflow-hidden">
@@ -2061,7 +2066,11 @@ function CalendarTab({ clientId }: { clientId: string }) {
               {dateFilterDropdown}
             </div>
           </div>
-          <div className="overflow-x-auto">
+          {/* min-h reserves room for the tallest possible grid (6 weeks) so the
+              table never collapses/jumps as row count or content changes between
+              months — that collapse-then-expand was the real source of the
+              "stutter", not the slide animation itself. */}
+          <div className="min-h-[27rem] overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-primary/90 text-primary-foreground">
@@ -2071,7 +2080,7 @@ function CalendarTab({ clientId }: { clientId: string }) {
                   ))}
                 </tr>
               </thead>
-              <AnimatePresence mode="wait" custom={direction}>
+              <AnimatePresence mode="wait" custom={direction} initial={false}>
                 <motion.tbody
                   key={`${year}-${month}`}
                   custom={direction}
@@ -2089,6 +2098,7 @@ function CalendarTab({ clientId }: { clientId: string }) {
                         const label = slot ? labels.get(slot.id) : undefined;
                         const date = weekDates[week - 1][weekdayIndex];
                         const inMonth = date.getMonth() === month - 1;
+                        const isToday = isSameDay(date, now);
                         return (
                           <td key={weekday} className="px-2 py-2">
                             <button
@@ -2097,10 +2107,18 @@ function CalendarTab({ clientId }: { clientId: string }) {
                               className={cn(
                                 "flex w-full min-w-[7rem] flex-col items-center justify-center gap-0.5 rounded-md border border-dashed border-border px-3 py-2 text-sm transition-all hover:scale-[1.02] hover:border-primary hover:bg-primary/5 hover:opacity-100 active:scale-95",
                                 label ? cn("border-solid bg-card font-medium", CALENDAR_STATUS_TEXT_CLASS[slot!.status]) : "text-muted-foreground",
-                                !inMonth && "opacity-50"
+                                !inMonth && "opacity-50",
+                                isToday && "border-solid border-primary ring-1 ring-primary ring-offset-1 ring-offset-background"
                               )}
                             >
-                              <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">{date.getDate()}</span>
+                              <span
+                                className={cn(
+                                  "flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[11px] font-semibold tabular-nums",
+                                  isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                                )}
+                              >
+                                {date.getDate()}
+                              </span>
                               <span>{label ?? "—"}</span>
                             </button>
                           </td>
