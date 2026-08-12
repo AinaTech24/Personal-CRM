@@ -9,26 +9,32 @@ import { sendPushToUsers } from "@/lib/push";
 import { rateLimit } from "@/lib/rate-limit";
 
 /**
- * Fixed 9:00-9:30 AM check-in / 6:00-6:30 PM check-out reminder windows
- * (REMINDER_LEAD_MINUTES = 30, ending at checkInEnd/checkOutEnd below).
- * Deliberately NOT read from the admin-configured AttendanceSettings shifts:
- * those same shift windows also gate whether check-in/out is allowed at all
- * (see the check-in/check-out routes) — reusing them here would silently
- * turn a "don't forget" nudge into a hard cutoff outside 9:00-9:30/18:00-18:30
- * for anyone relying on configured shifts. This list only ever feeds the
- * reminder computation below, never enforcement.
+ * Fixed 9:30 AM check-in / 6:00-6:30 PM check-out reminder windows (ending
+ * at checkInEnd/checkOutEnd below). Deliberately NOT read from the
+ * admin-configured AttendanceSettings shifts: those same shift windows also
+ * gate whether check-in/out is allowed at all (see the check-in/check-out
+ * routes) — reusing them here would silently turn a "don't forget" nudge
+ * into a hard cutoff for anyone relying on configured shifts. This list only
+ * ever feeds the reminder computation below, never enforcement.
  */
 const REMINDER_WINDOWS: AttendanceShift[] = [
   { name: "Standard", type: "FULL_DAY", checkInStart: "00:00", checkInEnd: "09:30", checkOutStart: "00:00", checkOutEnd: "18:30" },
   { name: "Standard", type: "HALF_DAY", checkInStart: "00:00", checkInEnd: "09:30", checkOutStart: "00:00", checkOutEnd: "18:30" },
 ];
 
+// Check-in should nudge right at 9:30, not from 9:00 onward — a much
+// shorter lead than checkout's. Kept at least as long as the sweep interval
+// below (10 min) so a run always lands inside it; any shorter risks missing
+// the day's only window entirely.
+const CHECK_IN_LEAD_MINUTES = 10;
+
 /**
- * Sends a check-in or check-out nudge to anyone within REMINDER_LEAD_MINUTES
- * of REMINDER_WINDOWS closing who hasn't acted yet — both an in-app
- * toast/bell notification (notifyUser) and a real OS-level push notification
- * (sendPushToUsers), so it reaches a closed app on a phone or desktop, not
- * just a tab that's already open.
+ * Sends a check-in or check-out nudge to anyone within their lead window
+ * (CHECK_IN_LEAD_MINUTES / REMINDER_LEAD_MINUTES) of REMINDER_WINDOWS
+ * closing who hasn't acted yet — both an in-app toast/bell notification
+ * (notifyUser) and a real OS-level push notification (sendPushToUsers), so
+ * it reaches a closed app on a phone or desktop, not just a tab that's
+ * already open.
  *
  * Same two ways in as send-monthly-reports: an admin trigger for testing, or
  * a scheduler with the CRON_SECRET header for the real schedule. This one
@@ -74,7 +80,7 @@ export async function POST(req: NextRequest) {
     };
   });
 
-  const candidates = computeReminders(REMINDER_WINDOWS, states, nowMinutes);
+  const candidates = computeReminders(REMINDER_WINDOWS, states, nowMinutes, { checkInLeadMinutes: CHECK_IN_LEAD_MINUTES });
 
   let checkIn = 0;
   let checkOut = 0;
