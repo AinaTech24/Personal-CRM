@@ -29,15 +29,21 @@ function withinLeadWindow(nowMinutes: number, endMinutes: number, leadMinutes: n
  *
  * Pure and DB-free by design — the route does all the fetching and hands in
  * plain state, so this stays unit-testable without a database. Only fires in
- * the last REMINDER_LEAD_MINUTES of a window, not the instant it opens — a
- * reminder should mean "don't forget, it's closing soon," not "you may act
- * now" (check-in/check-out already tell you that when you try).
+ * the last few minutes of a window, not the instant it opens — a reminder
+ * should mean "don't forget, it's closing soon," not "you may act now"
+ * (check-in/check-out already tell you that when you try). Check-in and
+ * check-out can use different lead times — e.g. check-in only right at
+ * 9:30 rather than the full REMINDER_LEAD_MINUTES ahead of it — both default
+ * to REMINDER_LEAD_MINUTES when omitted.
  */
 export function computeReminders(
   shifts: AttendanceShift[],
   users: ReminderUserState[],
-  nowMinutes: number
+  nowMinutes: number,
+  opts: { checkInLeadMinutes?: number; checkOutLeadMinutes?: number } = {}
 ): ReminderCandidate[] {
+  const checkInLead = opts.checkInLeadMinutes ?? REMINDER_LEAD_MINUTES;
+  const checkOutLead = opts.checkOutLeadMinutes ?? REMINDER_LEAD_MINUTES;
   const results: ReminderCandidate[] = [];
 
   for (const user of users) {
@@ -49,12 +55,12 @@ export function computeReminders(
 
       if (!user.checkedIn) {
         const end = hhmmToMinutes(shift.checkInEnd);
-        if (!Number.isNaN(end) && withinLeadWindow(nowMinutes, end, REMINDER_LEAD_MINUTES)) {
+        if (!Number.isNaN(end) && withinLeadWindow(nowMinutes, end, checkInLead)) {
           results.push({ userId: user.userId, kind: "check_in_reminder", shiftName: shift.name });
         }
       } else if (!user.checkedOut && shift.checkOutStart && shift.checkOutEnd) {
         const end = hhmmToMinutes(shift.checkOutEnd);
-        if (!Number.isNaN(end) && withinLeadWindow(nowMinutes, end, REMINDER_LEAD_MINUTES)) {
+        if (!Number.isNaN(end) && withinLeadWindow(nowMinutes, end, checkOutLead)) {
           results.push({ userId: user.userId, kind: "check_out_reminder", shiftName: shift.name });
         }
       }
