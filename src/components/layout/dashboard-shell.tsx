@@ -17,6 +17,8 @@ export function DashboardShell({
   isAdmin,
   restrictToSocialMedia,
   isSocialMediaLead,
+  hasCrmAccess,
+  isCrmLead,
   userId,
   name,
   email,
@@ -25,6 +27,8 @@ export function DashboardShell({
   isAdmin: boolean;
   restrictToSocialMedia: boolean;
   isSocialMediaLead: boolean;
+  hasCrmAccess: boolean;
+  isCrmLead: boolean;
   userId: string;
   name: string;
   email: string;
@@ -76,6 +80,8 @@ export function DashboardShell({
         isAdmin={isAdmin}
         restrictToSocialMedia={restrictToSocialMedia}
         isSocialMediaLead={isSocialMediaLead}
+        hasCrmAccess={hasCrmAccess}
+        isCrmLead={isCrmLead}
         collapsed={collapsed}
         onToggle={toggle}
       />
@@ -102,6 +108,8 @@ export function DashboardShell({
           isAdmin={isAdmin}
           restrictToSocialMedia={restrictToSocialMedia}
           isSocialMediaLead={isSocialMediaLead}
+          hasCrmAccess={hasCrmAccess}
+          isCrmLead={isCrmLead}
           collapsed={false}
           onToggle={() => setMobileOpen(false)}
           mobile

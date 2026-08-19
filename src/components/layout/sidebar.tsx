@@ -16,6 +16,7 @@ import {
   IconGrid,
   IconHistory,
   IconUsers,
+  IconPhone,
 } from "@/components/icons";
 import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -101,6 +102,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/departments", label: "Departments", icon: staticNavIcon(IconBuilding) },
   { href: "/admin/users", label: "Users & Invites", icon: LottieUsersInvites },
   { href: "/social-media/team", label: "Social Media Team", icon: staticNavIcon(IconUsers) },
+  { href: "/crm/team", label: "CRM Team", icon: staticNavIcon(IconUsers) },
   { href: "/admin/attendance", label: "Attendance", icon: staticNavIcon(IconClock) },
   { href: "/admin/email", label: "Email (SMTP)", icon: staticNavIcon(IconMail) },
   { href: "/admin/settings", label: "Application", icon: staticNavIcon(IconSettings) },
@@ -123,6 +125,16 @@ const teamNavItem: NavItem = { href: "/social-media/team", label: "Social Media 
 
 /** Modules a Social Media team member (regular or lead) never sees, even if an admin hasn't globally hidden them. */
 const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
+
+/**
+ * A CRM team member's way into the call log — unlike Social Media, CRM isn't
+ * a separate curated line of business (they still need Quotations, Invoices,
+ * etc.), so this is purely additive rather than replacing anything.
+ */
+const callsNavItem: NavItem = { href: "/calls", label: "Calls", icon: staticNavIcon(IconPhone) };
+
+/** A non-admin CRM lead's own way into the CRM Team console — mirrors teamNavItem above. */
+const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: staticNavIcon(IconUsers) };
 
 /**
  * One sidebar row. Defined at module scope (not inside Sidebar) so its
@@ -214,6 +226,8 @@ export function Sidebar({
   isAdmin,
   restrictToSocialMedia,
   isSocialMediaLead,
+  hasCrmAccess,
+  isCrmLead,
   collapsed,
   onToggle,
   /** Rendered inside the mobile drawer: always visible, always expanded. */
@@ -223,6 +237,8 @@ export function Sidebar({
   isAdmin: boolean;
   restrictToSocialMedia: boolean;
   isSocialMediaLead: boolean;
+  hasCrmAccess: boolean;
+  isCrmLead: boolean;
   collapsed: boolean;
   onToggle: () => void;
   mobile?: boolean;
@@ -276,6 +292,16 @@ export function Sidebar({
     const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
     const insertAt = leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1;
     visibleMainNav.splice(insertAt, 0, ...(isSocialMediaLead ? [clientsNavItem, teamNavItem] : [clientsNavItem]));
+  }
+
+  // CRM team members (regular or lead, not a company admin) keep the rest of
+  // the standard nav — CRM isn't a separate curated line of business the way
+  // Social Media is — and just gain "Calls" right after Leads. A lead
+  // additionally gets the Team console link itself, right after Calls.
+  if (hasCrmAccess && !isAdmin) {
+    const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
+    const insertAt = leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1;
+    visibleMainNav.splice(insertAt, 0, ...(isCrmLead ? [callsNavItem, crmTeamNavItem] : [callsNavItem]));
   }
 
   // Unread chat messages, for the badge on Messages. Driven by the socket so it

@@ -5,16 +5,16 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { broadcastProjectChange, canDeleteProject, logProjectActivity, projectListWhere } from "@/lib/projects";
 import { notifyAndPush } from "@/lib/notify";
-import { socialMediaTeamOnlyScopeFor, socialMediaTeamScopeFor } from "@/lib/social-media";
+import { resolveTeamScope } from "@/lib/team-scope";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // The Social Media Team console's Projects tab explicitly asks for the
-  // team-only view — narrower than an Admin's normal company-wide list.
-  const teamOnly = req.nextUrl.searchParams.get("scope") === "social-media";
-  const teamUserIds = teamOnly ? await socialMediaTeamOnlyScopeFor(user) : await socialMediaTeamScopeFor(user);
+  // The Social Media / CRM Team console's Projects tab explicitly asks for
+  // the team-only view (scope=social-media|crm) — narrower than an Admin's
+  // normal company-wide list.
+  const { teamOnly, teamUserIds } = await resolveTeamScope(user, req.nextUrl.searchParams.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const projects = await db.project.findMany({

@@ -211,6 +211,14 @@ export function IconClock(props: IconProps) {
   );
 }
 
+export function IconPhone(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M5 4.5h3.5l1.5 4-2 1.5a11 11 0 0 0 5 5l1.5-2 4 1.5V18a1.5 1.5 0 0 1-1.5 1.5C10.5 19.5 4.5 13.5 4.5 6.5A1.5 1.5 0 0 1 5 4.5Z" />
+    </svg>
+  );
+}
+
 export function IconSearch(props: IconProps) {
   return (
     <svg {...base(props)}>

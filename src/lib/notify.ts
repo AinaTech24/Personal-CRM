@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { emitToUser } from "@/lib/socket-emit";
 import { sendPushToUsers, type PushPayload } from "@/lib/push";
 
-export type NotificationCategory = "leads" | "tasks" | "projects" | "quotations" | "meetings" | "attendance" | "social";
+export type NotificationCategory = "leads" | "tasks" | "projects" | "quotations" | "meetings" | "attendance" | "social" | "calls";
 
 /** Maps every concrete notification `type` to the user-facing category it's toggled under. */
 const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
@@ -21,6 +21,7 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   check_in_reminder: "attendance",
   check_out_reminder: "attendance",
   social_client_assigned: "social",
+  call_assigned: "calls",
 };
 
 export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: string; description: string }[] = [
@@ -31,6 +32,7 @@ export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: stri
   { value: "quotations", label: "Quotations", description: "When a quotation you created is approved or rejected" },
   { value: "attendance", label: "Attendance", description: "Reminders to check in or check out before your shift window closes" },
   { value: "social", label: "Social Media", description: "When a social media client is assigned to you" },
+  { value: "calls", label: "Calls", description: "When a call is logged with you as the owner" },
 ];
 
 /**

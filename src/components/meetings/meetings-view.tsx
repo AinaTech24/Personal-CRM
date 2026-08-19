@@ -17,9 +17,18 @@ import { SkeletonList } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
+import { HorizontalScrollbar } from "@/components/ui/horizontal-scrollbar";
+import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
 import { IconPlus, IconClock, IconUsers, IconPencil, IconTrash } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { cn } from "@/lib/utils";
+
+type ViewMode = "list" | "pipeline";
+
+const VIEW_OPTIONS = [
+  { value: "list", label: "List view" },
+  { value: "pipeline", label: "Pipeline view" },
+];
 
 interface MeetingUser {
   id: string;
@@ -58,8 +67,9 @@ const STATUS_STYLE: Record<MeetingStatus, string> = {
 
 const isLink = (s: string) => /^https?:\/\//i.test(s.trim());
 
-export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
-  const meetingsUrl = scope === "social-media" ? "/api/meetings?scope=social-media" : "/api/meetings";
+export function MeetingsView({ scope }: { scope?: "social-media" | "crm" } = {}) {
+  const toast = useToast();
+  const meetingsUrl = scope ? `/api/meetings?scope=${scope}` : "/api/meetings";
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [users, setUsers] = useState<MeetingUser[]>([]);
   const [meId, setMeId] = useState<string>("");
@@ -77,6 +87,13 @@ export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
     status: null,
     involvement: null,
   });
+  // Existing behavior (chronological Upcoming/Past sections) stays the
+  // default — pipeline is opt-in via the toggle, not a replacement.
+  const [view, setView] = useState<ViewMode>("list");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverStatus, setDragOverStatus] = useState<MeetingStatus | null>(null);
+  const { containerRef: scrollContainerRef, onDragOver: handleBoardDragOver, stop: stopAutoScroll } =
+    useDragAutoScroll<HTMLDivElement>();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -133,7 +150,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
 
   // The Social Media Team console gets multi-select within each facet;
   // everywhere else stays the original single-select behavior.
-  const multiSelectFilters = scope === "social-media";
+  const multiSelectFilters = !!scope;
 
   const filterFacets: FilterFacet[] = [
     {
@@ -198,6 +215,26 @@ export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
     if (res.ok) load();
   }
 
+  /** Optimistic status update for a pipeline drag, rolled back if the PATCH fails — same pattern as leads-board.tsx's moveLead. */
+  async function moveMeeting(meetingId: string, status: MeetingStatus) {
+    const current = meetings.find((m) => m.id === meetingId);
+    if (!current || current.status === status) return;
+
+    setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, status } : m)));
+
+    const res = await fetch(`/api/meetings/${meetingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+
+    if (!res.ok) {
+      setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, status: current.status } : m)));
+      const data = await res.json().catch(() => ({}));
+      toast.error("Couldn't move the meeting", data.error);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -206,7 +243,12 @@ export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
           <p className="text-sm text-muted-foreground">Schedule and track team meetings.</p>
         </div>
         <div className="flex items-center gap-2">
-          {meetings.length > 0 && <FilterMenu facets={filterFacets} />}
+          {meetings.length > 0 && (
+            <>
+              <Dropdown size="sm" value={view} onChange={(v) => setView(v as ViewMode)} options={VIEW_OPTIONS} className="w-40" />
+              <FilterMenu facets={filterFacets} />
+            </>
+          )}
           <Button type="button" onClick={openCreate}>
             <IconPlus className="h-4 w-4" />
             New meeting
@@ -228,6 +270,81 @@ export function MeetingsView({ scope }: { scope?: "social-media" } = {}) {
             </Button>
           </CardContent>
         </Card>
+      ) : view === "pipeline" ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+          <div
+            ref={scrollContainerRef}
+            className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden focus:outline-none"
+            onDragOver={handleBoardDragOver}
+          >
+            {STATUS_OPTIONS.map((col) => {
+              const columnMeetings = filteredMeetings.filter((m) => m.status === col.value);
+              const isDragOver = dragOverStatus === col.value;
+              return (
+                <div
+                  key={col.value}
+                  className={cn(
+                    "flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg p-1.5 transition-colors",
+                    isDragOver && "bg-accent/60"
+                  )}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOverStatus(col.value as MeetingStatus);
+                  }}
+                  onDragLeave={() => setDragOverStatus((s) => (s === col.value ? null : s))}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const meetingId = e.dataTransfer.getData("text/plain");
+                    setDragOverStatus(null);
+                    setDraggingId(null);
+                    stopAutoScroll();
+                    if (meetingId) moveMeeting(meetingId, col.value as MeetingStatus);
+                  }}
+                >
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{col.label}</span>
+                    <span className="text-xs text-muted-foreground">{columnMeetings.length}</span>
+                  </div>
+                  <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-0.5">
+                    {columnMeetings.map((m) => (
+                      <Card
+                        key={m.id}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", m.id);
+                          e.dataTransfer.effectAllowed = "move";
+                          setDraggingId(m.id);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingId(null);
+                          setDragOverStatus(null);
+                          stopAutoScroll();
+                        }}
+                        onClick={() => openMeeting(m)}
+                        className={cn(
+                          "select-none cursor-grab p-3 text-left transition-colors hover:border-primary/40 active:cursor-grabbing",
+                          draggingId === m.id && "opacity-30"
+                        )}
+                      >
+                        <p className="line-clamp-2 text-sm font-medium">{m.title}</p>
+                        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <IconClock className="h-3.5 w-3.5 shrink-0" />
+                          <span>{format(parseISO(m.startsAt), "EEE, MMM d · h:mm a")}</span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <IconUsers className="h-3.5 w-3.5 shrink-0" />
+                          <span>{m.organizer.id === meId ? "You" : m.organizer.name}</span>
+                        </div>
+                      </Card>
+                    ))}
+                    {columnMeetings.length === 0 && <p className="px-1 text-xs text-muted-foreground/60">No meetings</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <HorizontalScrollbar containerRef={scrollContainerRef} className="mx-1.5" />
+        </div>
       ) : (
         <div className="flex flex-col gap-6">
           <Section title="Upcoming" meetings={upcoming} meId={meId} onOpen={openMeeting} actionsFor={meetingActions} emptyLabel="No upcoming meetings." />

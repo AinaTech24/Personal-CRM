@@ -60,6 +60,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     } else if (invite.socialMediaMember) {
       await tx.socialMediaMember.create({ data: { userId: created.id, isLead: false } });
     }
+    if (invite.crmAdmin) {
+      await tx.crmMember.create({ data: { userId: created.id, isLead: true } });
+    } else if (invite.crmMember) {
+      await tx.crmMember.create({ data: { userId: created.id, isLead: false } });
+    }
     return created;
   });
 

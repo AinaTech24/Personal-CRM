@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
-import { socialMediaTeamScopeFor } from "@/lib/social-media";
+import { combinedTeamScopeFor } from "@/lib/team-scope";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -23,9 +23,9 @@ const patchSchema = z.object({
 });
 
 /**
- * Only the organizer, an admin, or a Social Media lead managing a meeting
- * organized by (or attended by) someone on their team may change or remove
- * a meeting.
+ * Only the organizer, an admin, or a Social Media/CRM lead managing a
+ * meeting organized by (or attended by) someone on their team may change or
+ * remove a meeting.
  */
 async function canManage(user: PermissionUser, meetingId: string) {
   if (isAdmin(user)) return true;
@@ -36,7 +36,7 @@ async function canManage(user: PermissionUser, meetingId: string) {
   if (!m) return false;
   if (m.organizerId === user.id) return true;
 
-  const teamUserIds = await socialMediaTeamScopeFor(user);
+  const teamUserIds = await combinedTeamScopeFor(user);
   if (!teamUserIds) return false;
   return teamUserIds.includes(m.organizerId) || m.attendees.some((a) => teamUserIds.includes(a.id));
 }
@@ -51,7 +51,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   let visible = isAdmin(user) || meeting.organizer.id === user.id || meeting.attendees.some((a) => a.id === user.id);
   if (!visible) {
-    const teamUserIds = await socialMediaTeamScopeFor(user);
+    const teamUserIds = await combinedTeamScopeFor(user);
     visible =
       !!teamUserIds &&
       (teamUserIds.includes(meeting.organizer.id) || meeting.attendees.some((a) => teamUserIds.includes(a.id)));

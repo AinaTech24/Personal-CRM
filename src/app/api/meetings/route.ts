@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
-import { socialMediaTeamOnlyScopeFor, socialMediaTeamScopeFor } from "@/lib/social-media";
+import { resolveTeamScope } from "@/lib/team-scope";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -16,16 +16,16 @@ const meetingInclude = {
  * first. A Social Media lead additionally sees every meeting organized by,
  * or attended by, anyone on their team.
  *
- * The Social Media Team console's Meetings tab passes `scope=social-media`
- * to explicitly ask for the team-only view — narrower than an Admin's usual
- * `{}` company-wide list, which has no team concept built in.
+ * The Social Media / CRM Team console's Meetings tab passes
+ * `scope=social-media|crm` to explicitly ask for the team-only view —
+ * narrower than an Admin's usual `{}` company-wide list, which has no team
+ * concept built in.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const teamOnly = req.nextUrl.searchParams.get("scope") === "social-media";
-  const teamUserIds = teamOnly ? await socialMediaTeamOnlyScopeFor(user) : await socialMediaTeamScopeFor(user);
+  const { teamOnly, teamUserIds } = await resolveTeamScope(user, req.nextUrl.searchParams.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   let where: object;

@@ -7,6 +7,7 @@ import { canInviteUsers, isAdmin } from "@/lib/permissions";
 import { sendMail, inviteEmailHtml } from "@/lib/mailer";
 import { getAppUrl } from "@/lib/app-settings";
 import { getSocialMembership, isSocialMediaLead } from "@/lib/social-media";
+import { getCrmMembership, isCrmLead } from "@/lib/crm-team";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -16,6 +17,9 @@ const bodySchema = z.object({
   socialMediaAdmin: z.boolean().optional(),
   /** "Social Media User" from the invite picker — a regular (non-lead) team member. */
   socialMediaMember: z.boolean().optional(),
+  /** Same idea as socialMediaAdmin/socialMediaMember, for the CRM Team's own invite picker. */
+  crmAdmin: z.boolean().optional(),
+  crmMember: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -38,13 +42,16 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // A company Admin/Super Admin can invite anyone into anything.
-  // A Social Media lead who ISN'T also a company admin can additionally
-  // invite — but only into their own team: a plain DEPARTMENT_USER, no
-  // department of their own, and it must actually add them to the team
-  // (as a regular member or as a lead) — otherwise this would just be a
-  // side door into "any non-admin can invite anyone."
-  const membership = await getSocialMembership(user.id);
-  const leadInviting = !isAdmin(user) && isSocialMediaLead(user, membership);
+  // A Social Media or CRM lead who ISN'T also a company admin can
+  // additionally invite — but only into their own team: a plain
+  // DEPARTMENT_USER, no department of their own, and it must actually add
+  // them to that team (as a regular member or as a lead) — otherwise this
+  // would just be a side door into "any non-admin can invite anyone."
+  const socialMembership = await getSocialMembership(user.id);
+  const crmMembership = await getCrmMembership(user.id);
+  const socialLeadInviting = !isAdmin(user) && isSocialMediaLead(user, socialMembership);
+  const crmLeadInviting = !isAdmin(user) && !socialLeadInviting && isCrmLead(user, crmMembership);
+  const leadInviting = socialLeadInviting || crmLeadInviting;
   if (!canInviteUsers(user) && !leadInviting) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -54,9 +61,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { email, role, departmentId, socialMediaAdmin, socialMediaMember } = parsed.data;
+  const { email, role, departmentId, socialMediaAdmin, socialMediaMember, crmAdmin, crmMember } = parsed.data;
 
-  if (leadInviting) {
+  if (socialLeadInviting) {
     if (role !== "DEPARTMENT_USER") {
       return NextResponse.json({ error: "Only a company Admin can invite as Admin or Super Admin" }, { status: 403 });
     }
@@ -65,6 +72,16 @@ export async function POST(req: NextRequest) {
     }
     if (!socialMediaAdmin && !socialMediaMember) {
       return NextResponse.json({ error: "Choose Social Media User or Social Media (Admin)" }, { status: 400 });
+    }
+  } else if (crmLeadInviting) {
+    if (role !== "DEPARTMENT_USER") {
+      return NextResponse.json({ error: "Only a company Admin can invite as Admin or Super Admin" }, { status: 403 });
+    }
+    if (departmentId) {
+      return NextResponse.json({ error: "A CRM lead can only invite into the CRM team" }, { status: 400 });
+    }
+    if (!crmAdmin && !crmMember) {
+      return NextResponse.json({ error: "Choose CRM User or CRM (Admin)" }, { status: 400 });
     }
   }
 
@@ -102,6 +119,8 @@ export async function POST(req: NextRequest) {
       departmentId: departmentId || null,
       socialMediaAdmin: socialMediaAdmin ?? false,
       socialMediaMember: socialMediaMember ?? false,
+      crmAdmin: crmAdmin ?? false,
+      crmMember: crmMember ?? false,
       token,
       invitedById: user.id,
       expiresAt,
