@@ -46,8 +46,8 @@ function statusLabel(status: string) {
   return status.replace("_", " ");
 }
 
-export function ProjectsList({ scope }: { scope?: "social-media" } = {}) {
-  const projectsUrl = scope === "social-media" ? "/api/projects?scope=social-media" : "/api/projects";
+export function ProjectsList({ scope }: { scope?: "social-media" | "crm" } = {}) {
+  const projectsUrl = scope ? `/api/projects?scope=${scope}` : "/api/projects";
   const router = useRouter();
   const { query } = useSearch();
   const { socket } = useSocket();
@@ -146,7 +146,7 @@ export function ProjectsList({ scope }: { scope?: "social-media" } = {}) {
 
   // The Social Media Team console gets multi-select within each facet;
   // everywhere else stays the original single-select behavior.
-  const multiSelectFilters = scope === "social-media";
+  const multiSelectFilters = !!scope;
 
   const filterFacets: FilterFacet[] = [
     {

@@ -112,6 +112,9 @@ model User {
   pushSubscriptions       PushSubscription[]
   auditLogs               AuditLog[]           @relation("AuditActor")
 
+  crmMembership                    CrmMember?
+  callsOwned                       Call[]                       @relation("CallOwner")
+  callsCreated                     Call[]                       @relation("CallCreatedBy")
   socialMediaMembership            SocialMediaMember?
   socialClientsCreated             SocialClient[]              @relation("SocialClientCreatedBy")
   socialClientsAssigned            SocialClient[]              @relation("SocialClientAssignedTo")
@@ -173,6 +176,10 @@ model Invite {
   /// provisions SocialMediaMember(isLead: false) on acceptance instead.
   /// Mutually exclusive with socialMediaAdmin in practice, not enforced here.
   socialMediaMember Boolean     @default(false)
+  /// Same idea as socialMediaAdmin/socialMediaMember, but provisions a
+  /// CrmMember row on acceptance instead — the CRM Team's equivalent.
+  crmAdmin          Boolean     @default(false)
+  crmMember         Boolean     @default(false)
   token             String      @unique
   invitedById       String
   invitedBy         User        @relation("InvitedBy", fields: [invitedById], references: [id])
@@ -288,6 +295,7 @@ model Lead {
   activities LeadActivity[]
   reminders  LeadReminder[]
   quotations Quotation[]
+  calls      Call[]
 
   @@index([status])
   @@index([departmentId])
@@ -1244,6 +1252,56 @@ model SocialMediaMember {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   isLead    Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+// ---------- CRM Team ----------
+
+/// The CRM Team's own membership roster — same shape as SocialMediaMember,
+/// kept as a separate model rather than a shared "TeamMember" so each
+/// module's scoping/permission logic stays independently simple, matching
+/// how the rest of this schema already keeps Social Media's own models apart
+/// from everyone else's.
+model CrmMember {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isLead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+enum CallType {
+  INCOMING
+  OUTGOING
+  MISSED
+}
+
+/// A call log entry for the CRM Team — who was called (a Lead, and/or a
+/// free-text client name), when, by whom, and what's next. There's no
+/// standalone "Client" entity outside Social Media's own SocialClient (see
+/// the /clients page), so `clientName` is plain text rather than a relation —
+/// building a whole new Client model wasn't part of this request.
+model Call {
+  id          String    @id @default(cuid())
+  leadId      String?
+  lead        Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  clientName  String?
+  callType    CallType
+  startTime   DateTime
+  endTime     DateTime?
+  ownerId     String
+  owner       User      @relation("CallOwner", fields: [ownerId], references: [id])
+  /// What happens next — a follow-up call, an email, closing the deal, etc.
+  nextAction  String?   @db.Text
+  subject     String?
+  description String?   @db.Text
+  createdById String
+  createdBy   User      @relation("CallCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([leadId])
+  @@index([ownerId])
+  @@index([startTime])
 }
 
 model SocialClient {

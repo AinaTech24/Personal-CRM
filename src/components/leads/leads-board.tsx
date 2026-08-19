@@ -61,8 +61,8 @@ const PRIORITY_VARIANT = {
   URGENT: "destructive",
 } as const;
 
-export function LeadsBoard({ scope }: { scope?: "social-media" } = {}) {
-  const leadsUrl = scope === "social-media" ? "/api/leads?scope=social-media" : "/api/leads";
+export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
+  const leadsUrl = scope ? `/api/leads?scope=${scope}` : "/api/leads";
   const router = useRouter();
   const toast = useToast();
   const { query } = useSearch();
@@ -166,7 +166,7 @@ export function LeadsBoard({ scope }: { scope?: "social-media" } = {}) {
   // The Social Media Team console gets multi-select within each facet (pick
   // several statuses/priorities/assignees at once); everywhere else stays
   // the original single-select behavior.
-  const multiSelectFilters = scope === "social-media";
+  const multiSelectFilters = !!scope;
 
   const filterFacets: FilterFacet[] = [
     {

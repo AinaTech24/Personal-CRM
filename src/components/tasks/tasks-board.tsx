@@ -47,8 +47,8 @@ const PRIORITY_VARIANT = {
   URGENT: "destructive",
 } as const;
 
-export function TasksBoard({ scope }: { scope?: "social-media" } = {}) {
-  const tasksUrl = scope === "social-media" ? "/api/tasks?scope=social-media" : "/api/tasks";
+export function TasksBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
+  const tasksUrl = scope ? `/api/tasks?scope=${scope}` : "/api/tasks";
   const { query } = useSearch();
   const { socket } = useSocket();
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
@@ -138,7 +138,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" } = {}) {
   // The Social Media Team console gets multi-select within each facet (pick
   // several statuses/priorities/assignees at once); everywhere else stays
   // the original single-select behavior.
-  const multiSelectFilters = scope === "social-media";
+  const multiSelectFilters = !!scope;
 
   const filterFacets: FilterFacet[] = [
     {
