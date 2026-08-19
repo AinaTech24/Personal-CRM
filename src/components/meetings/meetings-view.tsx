@@ -562,7 +562,12 @@ function MeetingDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
+      <DialogContent
+        // A meeting form can hold a fair bit of typed-in agenda/notes — an
+        // accidental click on the overlay while working shouldn't discard it.
+        // Still closes via the X button, Escape, or Cancel/Save.
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{editingId ? (readOnly ? "Meeting details" : "Edit meeting") : "New meeting"}</DialogTitle>
         </DialogHeader>
