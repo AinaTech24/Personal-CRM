@@ -21,12 +21,13 @@ model Department {
   slug      String   @unique
   createdAt DateTime @default(now())
 
-  users      User[]
-  leads      Lead[]
-  projects   Project[]
-  quotations Quotation[]
-  invoices   Invoice[]
-  invites    Invite[]
+  users           User[]
+  leads           Lead[]
+  projects        Project[]
+  quotations      Quotation[]
+  invoices        Invoice[]
+  invites         Invite[]
+  passwordEntries PasswordEntry[]
 }
 
 model User {
@@ -113,8 +114,8 @@ model User {
   auditLogs               AuditLog[]           @relation("AuditActor")
 
   crmMembership                    CrmMember?
-  callsOwned                       Call[]                       @relation("CallOwner")
-  callsCreated                     Call[]                       @relation("CallCreatedBy")
+  callsOwned                       Call[]                      @relation("CallOwner")
+  callsCreated                     Call[]                      @relation("CallCreatedBy")
   socialMediaMembership            SocialMediaMember?
   socialClientsCreated             SocialClient[]              @relation("SocialClientCreatedBy")
   socialClientsAssigned            SocialClient[]              @relation("SocialClientAssignedTo")
@@ -133,6 +134,11 @@ model User {
   socialCalendarSlotsCreated       SocialContentCalendarSlot[] @relation("SocialCalendarSlotCreatedBy")
   socialClientFoldersCreated       SocialClientFolder[]        @relation("SocialClientFolderCreatedBy")
   socialClientImagesUploaded       SocialClientImage[]         @relation("SocialClientImageUploadedBy")
+  passwordEntriesCreated           PasswordEntry[]             @relation("PasswordEntryCreatedBy")
+  passwordEntriesUpdated           PasswordEntry[]             @relation("PasswordEntryUpdatedBy")
+  passwordSharesReceived           PasswordEntryShare[]        @relation("PasswordEntrySharedWith")
+  passwordSharesGiven              PasswordEntryShare[]        @relation("PasswordEntrySharedBy")
+  passwordEntryActivities          PasswordEntryActivity[]
 }
 
 /// A browser/device push endpoint, so a user can be notified about a new
@@ -1568,4 +1574,78 @@ model SocialClientActivity {
   createdAt DateTime     @default(now())
 
   @@index([clientId])
+}
+
+// ---------- Password Manager ----------
+
+/// A stored credential. Visible by default only to users in the same
+/// department (departmentId), plus anyone it's been explicitly shared with
+/// via PasswordEntryShare — admins/super admins see every entry regardless
+/// of department. `passwordCipher` is AES-256-GCM ciphertext (see
+/// src/lib/crypto.ts) and is never selected into a list response or the
+/// generic audit trail — see AUDIT_IGNORED_MODELS in src/lib/audit.ts.
+model PasswordEntry {
+  id             String  @id @default(cuid())
+  label          String
+  description    String? @db.Text
+  link           String?
+  username       String?
+  /// iv + authTag + ciphertext, base64-encoded as one blob — never plaintext.
+  passwordCipher String  @db.Text
+  /// Fetched once from a trusted favicon service (never the stored link
+  /// itself, so this never makes an outbound request to a user-supplied
+  /// host) — lets an entry be recognized at a glance in the list.
+  faviconDataUrl String? @db.LongText
+
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  createdById String
+  createdBy   User    @relation("PasswordEntryCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?   @relation("PasswordEntryUpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shares     PasswordEntryShare[]
+  activities PasswordEntryActivity[]
+
+  @@index([departmentId])
+}
+
+/// Grants one specific user access to one specific entry, independent of
+/// their department — the "share with another user" escape hatch on top of
+/// the department-default visibility above.
+model PasswordEntryShare {
+  id              String        @id @default(cuid())
+  passwordEntryId String
+  passwordEntry   PasswordEntry @relation(fields: [passwordEntryId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User          @relation("PasswordEntrySharedWith", fields: [userId], references: [id])
+  sharedById      String
+  sharedBy        User          @relation("PasswordEntrySharedBy", fields: [sharedById], references: [id])
+  createdAt       DateTime      @default(now())
+
+  @@unique([passwordEntryId, userId])
+  @@index([userId])
+}
+
+/// Purpose-built activity log for one entry — created/updated/shared/
+/// unshared/revealed — kept separate from the generic AuditLog so a
+/// credential's access history (who revealed it, and when) is always
+/// available without ever risking the secret value itself landing in a
+/// general-purpose log. Never records the password.
+model PasswordEntryActivity {
+  id              String        @id @default(cuid())
+  passwordEntryId String
+  passwordEntry   PasswordEntry @relation(fields: [passwordEntryId], references: [id], onDelete: Cascade)
+  actorId         String
+  actor           User          @relation(fields: [actorId], references: [id])
+  action          String
+  meta            Json?
+  createdAt       DateTime      @default(now())
+
+  @@index([passwordEntryId])
+  @@index([actorId])
 }
