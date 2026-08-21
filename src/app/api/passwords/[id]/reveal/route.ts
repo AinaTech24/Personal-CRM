@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getPasswordEntryForUser, logPasswordActivity } from "@/lib/passwords";
-import { decryptSecret } from "@/lib/crypto";
+import { decryptSecret, isEncryptionConfigured } from "@/lib/crypto";
 
 /**
  * The only route that ever returns a decrypted password to the client — the
@@ -26,7 +26,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   try {
     password = decryptSecret(entry.passwordCipher);
   } catch {
-    return NextResponse.json({ error: "Couldn't decrypt this entry" }, { status: 500 });
+    const error = isEncryptionConfigured()
+      ? "Couldn't decrypt this entry"
+      : "Password Manager isn't fully set up yet — CREDENTIALS_ENCRYPTION_KEY is missing on the server. Ask an admin to add it and restart the app.";
+    return NextResponse.json({ error }, { status: 500 });
   }
 
   await logPasswordActivity(id, user.id, "revealed");

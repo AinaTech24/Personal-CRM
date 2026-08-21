@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { passwordEntryListWhere, canManagePasswordEntry, logPasswordActivity } from "@/lib/passwords";
-import { encryptSecret } from "@/lib/crypto";
+import { encryptSecret, isEncryptionConfigured } from "@/lib/crypto";
 import { fetchFaviconDataUrl } from "@/lib/favicon";
 
 const entrySelect = {
@@ -61,6 +61,13 @@ const bodySchema = z.object({
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!isEncryptionConfigured()) {
+    return NextResponse.json(
+      { error: "Password Manager isn't fully set up yet — CREDENTIALS_ENCRYPTION_KEY is missing on the server. Ask an admin to add it and restart the app." },
+      { status: 500 }
+    );
+  }
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
