@@ -14,13 +14,36 @@ import {
   IconCalendar,
   IconUsers,
   IconX,
+  IconBuilding,
+  IconBuildingCog,
+  IconMegaphone,
+  IconFileSpreadsheet,
+  IconPhone,
+  IconKey,
+  IconFile,
 } from "@/components/icons";
 import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface SearchResult {
-  type: "lead" | "task" | "project" | "quotation" | "invoice" | "meeting" | "user";
+  type:
+    | "lead"
+    | "task"
+    | "project"
+    | "quotation"
+    | "invoice"
+    | "meeting"
+    | "user"
+    | "client"
+    | "content"
+    | "ad"
+    | "report"
+    | "call"
+    | "password"
+    | "document"
+    | "attendance"
+    | "department";
   id: string;
   title: string;
   subtitle?: string;
@@ -35,6 +58,15 @@ const TYPE_ICON = {
   invoice: IconInvoices,
   meeting: IconCalendar,
   user: IconUsers,
+  client: IconBuilding,
+  content: IconFile,
+  ad: IconMegaphone,
+  report: IconFileSpreadsheet,
+  call: IconPhone,
+  password: IconKey,
+  document: IconFile,
+  attendance: IconClock,
+  department: IconBuildingCog,
 } as const;
 
 /** Wrap every occurrence of the query substring in the text so matches stand out. */
