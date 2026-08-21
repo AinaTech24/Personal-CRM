@@ -1581,17 +1581,19 @@ model SocialClientActivity {
 /// A stored credential. Visible by default only to users in the same
 /// department (departmentId), plus anyone it's been explicitly shared with
 /// via PasswordEntryShare — admins/super admins see every entry regardless
-/// of department. `passwordCipher` is AES-256-GCM ciphertext (see
-/// src/lib/crypto.ts) and is never selected into a list response or the
-/// generic audit trail — see AUDIT_IGNORED_MODELS in src/lib/audit.ts.
+/// of department. `password` is stored as plain text, per explicit request
+/// — same as SmtpSettings.password and SocialPlatformAccount.password
+/// elsewhere in this schema — but is still never selected into a list
+/// response or the generic audit trail (see AUDIT_IGNORED_MODELS in
+/// src/lib/audit.ts); only the reveal endpoint ever returns it, and every
+/// call there is logged.
 model PasswordEntry {
   id             String  @id @default(cuid())
   label          String
   description    String? @db.Text
   link           String?
   username       String?
-  /// iv + authTag + ciphertext, base64-encoded as one blob — never plaintext.
-  passwordCipher String  @db.Text
+  password       String  @db.Text
   /// Fetched once from a trusted favicon service (never the stored link
   /// itself, so this never makes an outbound request to a user-supplied
   /// host) — lets an entry be recognized at a glance in the list.
