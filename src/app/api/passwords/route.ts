@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { passwordEntryListWhere, canManagePasswordEntry, logPasswordActivity } from "@/lib/passwords";
-import { encryptSecret, isEncryptionConfigured } from "@/lib/crypto";
 import { fetchFaviconDataUrl } from "@/lib/favicon";
 
 const entrySelect = {
@@ -23,8 +22,8 @@ const entrySelect = {
   createdAt: true,
   updatedAt: true,
   _count: { select: { shares: true } },
-  // Never select passwordCipher into a list — the reveal endpoint is the
-  // only place a decrypted (or even encrypted) password value ever leaves the server.
+  // Never select `password` into a list — the reveal endpoint is the only
+  // place it ever leaves the server, and every call there is logged.
 };
 
 /** Every entry the current user can see: their own department's, plus anything shared to them directly. Admins see everything. */
@@ -62,13 +61,6 @@ export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!isEncryptionConfigured()) {
-    return NextResponse.json(
-      { error: "Password Manager isn't fully set up yet — CREDENTIALS_ENCRYPTION_KEY is missing on the server. Ask an admin to add it and restart the app." },
-      { status: 500 }
-    );
-  }
-
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const d = parsed.data;
@@ -84,10 +76,7 @@ export async function POST(req: NextRequest) {
   if (!department) return NextResponse.json({ error: "Department not found" }, { status: 404 });
 
   const link = d.link?.trim() || null;
-  const [faviconDataUrl, passwordCipher] = await Promise.all([
-    link ? fetchFaviconDataUrl(link) : Promise.resolve(null),
-    Promise.resolve(encryptSecret(d.password)),
-  ]);
+  const faviconDataUrl = link ? await fetchFaviconDataUrl(link) : null;
 
   const entry = await db.passwordEntry.create({
     data: {
@@ -95,7 +84,7 @@ export async function POST(req: NextRequest) {
       description: d.description?.trim() || null,
       link,
       username: d.username?.trim() || null,
-      passwordCipher,
+      password: d.password,
       faviconDataUrl,
       departmentId,
       createdById: user.id,

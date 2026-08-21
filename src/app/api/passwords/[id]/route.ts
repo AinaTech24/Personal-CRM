@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { getPasswordEntryForUser, canManagePasswordEntry, logPasswordActivity } from "@/lib/passwords";
-import { encryptSecret, isEncryptionConfigured } from "@/lib/crypto";
 import { fetchFaviconDataUrl } from "@/lib/favicon";
 import { summariseChanges } from "@/lib/audit";
 
@@ -78,13 +77,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const d = parsed.data;
 
-  if (d.password && !isEncryptionConfigured()) {
-    return NextResponse.json(
-      { error: "Password Manager isn't fully set up yet — CREDENTIALS_ENCRYPTION_KEY is missing on the server. Ask an admin to add it and restart the app." },
-      { status: 500 }
-    );
-  }
-
   let departmentId: string | undefined;
   if (d.departmentId !== undefined) {
     if (!isAdmin(user)) return NextResponse.json({ error: "Only an admin can move an entry to another department" }, { status: 403 });
@@ -105,7 +97,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(nextLink !== undefined && { link: nextLink }),
       ...(faviconDataUrl !== undefined && { faviconDataUrl }),
       ...(d.username !== undefined && { username: d.username?.trim() || null }),
-      ...(d.password && { passwordCipher: encryptSecret(d.password) }),
+      ...(d.password && { password: d.password }),
       ...(departmentId !== undefined && { departmentId }),
       updatedById: user.id,
     },
