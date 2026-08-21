@@ -17,6 +17,7 @@ import {
   IconHistory,
   IconUsers,
   IconPhone,
+  IconKey,
 } from "@/components/icons";
 import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -92,6 +93,7 @@ const mainNav: NavItem[] = [
   { href: "/messages", label: "Messages", icon: LottieMessages },
   { href: "/quotations", label: "Quotations", icon: staticNavIcon(IconQuotations) },
   { href: "/invoices", label: "Invoices", icon: staticNavIcon(IconInvoices) },
+  { href: "/passwords", label: "Password Manager", icon: staticNavIcon(IconKey) },
   { href: "/attendance", label: "My Attendance", icon: staticNavIcon(IconClock) },
   { href: "/activity", label: "My Activity", icon: staticNavIcon(IconHistory) },
 ];

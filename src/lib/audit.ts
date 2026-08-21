@@ -70,6 +70,14 @@ export const AUDIT_IGNORED_MODELS = new Set([
   "ConversationMember",
   "MessageRead",
   "MessageHidden",
+  // Password Manager keeps its own purpose-built activity log
+  // (PasswordEntryActivity, see src/lib/passwords.ts) so the encrypted
+  // password value never has any chance of landing in the generic,
+  // company-wide audit trail — this excludes it rather than relying solely
+  // on NOISY_FIELDS to strip one specific field name.
+  "PasswordEntry",
+  "PasswordEntryShare",
+  "PasswordEntryActivity",
 ]);
 
 /** Fields never worth recording, and in some cases never worth storing twice. */
