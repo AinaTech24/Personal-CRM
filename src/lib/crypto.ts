@@ -31,6 +31,21 @@ function getKey(): Buffer {
   return key;
 }
 
+/**
+ * Lets a route check up front and return a clean 500 with an actionable
+ * message, instead of encryptSecret/decryptSecret throwing mid-request and
+ * the response coming back with no body at all (which is indistinguishable
+ * on the client from the server just crashing — see the routes' usage).
+ */
+export function isEncryptionConfigured(): boolean {
+  try {
+    getKey();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Encrypts `plaintext` to a single base64 blob: iv (12 bytes) + authTag (16 bytes) + ciphertext. */
 export function encryptSecret(plaintext: string): string {
   const iv = randomBytes(IV_LENGTH);

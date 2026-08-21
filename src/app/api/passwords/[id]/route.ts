@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { getPasswordEntryForUser, canManagePasswordEntry, logPasswordActivity } from "@/lib/passwords";
-import { encryptSecret } from "@/lib/crypto";
+import { encryptSecret, isEncryptionConfigured } from "@/lib/crypto";
 import { fetchFaviconDataUrl } from "@/lib/favicon";
 import { summariseChanges } from "@/lib/audit";
 
@@ -77,6 +77,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const d = parsed.data;
+
+  if (d.password && !isEncryptionConfigured()) {
+    return NextResponse.json(
+      { error: "Password Manager isn't fully set up yet — CREDENTIALS_ENCRYPTION_KEY is missing on the server. Ask an admin to add it and restart the app." },
+      { status: 500 }
+    );
+  }
 
   let departmentId: string | undefined;
   if (d.departmentId !== undefined) {

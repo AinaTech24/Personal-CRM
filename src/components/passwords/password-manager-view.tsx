@@ -114,7 +114,7 @@ export function PasswordManagerView() {
 
   const load = useCallback(async () => {
     const [entriesRes, meRes] = await Promise.all([fetch("/api/passwords"), fetch("/api/auth/me")]);
-    const [entriesData, meData] = await Promise.all([entriesRes.json(), meRes.json()]);
+    const [entriesData, meData] = await Promise.all([entriesRes.json().catch(() => ({})), meRes.json().catch(() => ({}))]);
     setEntries(entriesData.entries ?? []);
     if (meRes.ok && meData.user) {
       setMe({
@@ -496,8 +496,12 @@ function PasswordEntryDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
-      if (!res.ok) return toast.error("Couldn't save", data.error);
+      // A 500 from an unhandled server error (rather than a JSON error body)
+      // has no body at all — .json() would throw and silently swallow the
+      // failure with no toast shown, which is exactly what made this look
+      // like nothing happened at all.
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't save", data.error ?? "Something went wrong");
       toast.success(editingId ? "Entry updated" : "Entry added");
       onSaved();
     } finally {
@@ -711,8 +715,8 @@ function ShareDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userIds: [...selected] }),
       });
-      const data = await res.json();
-      if (!res.ok) return toast.error("Couldn't share", data.error);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't share", data.error ?? "Something went wrong");
       toast.success(`Shared with ${selected.size} ${selected.size === 1 ? "person" : "people"}`);
       setSelected(new Set());
       onChanged(data.shares);
