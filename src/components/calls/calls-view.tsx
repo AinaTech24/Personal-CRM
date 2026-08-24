@@ -312,7 +312,7 @@ function CallDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent>
+      <DialogContent onPointerDownOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{editingId ? "Edit call" : "Log a call"}</DialogTitle>
         </DialogHeader>
