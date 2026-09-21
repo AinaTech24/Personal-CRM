@@ -115,6 +115,16 @@ const adminNav: NavItem[] = [
 const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: LottieClients };
 
 /**
+ * A lightweight clients module for departments that aren't on the Social
+ * Media team but still need a place to track who they work with — gated
+ * server-side by Department.hasClientsModule (see canAccessClientsModule),
+ * off by default and turned on per-department from the Departments admin
+ * page. Distinct route/label from clientsNavItem above on purpose: an Admin
+ * or Analyst can see both at once, and they're genuinely different data.
+ */
+const accountsNavItem: NavItem = { href: "/accounts", label: "Accounts", icon: staticNavIcon(IconBuilding) };
+
+/**
  * A non-admin lead's own way into the same Team console an Admin/Super Admin
  * reaches via adminNav's "Social Media Team" entry above — a regular
  * (non-lead) team member doesn't manage the team, so they don't get this.
@@ -214,6 +224,7 @@ export function Sidebar({
   isAdmin,
   restrictToSocialMedia,
   isSocialMediaLead,
+  canAccessAccounts,
   collapsed,
   onToggle,
   /** Rendered inside the mobile drawer: always visible, always expanded. */
@@ -223,6 +234,7 @@ export function Sidebar({
   isAdmin: boolean;
   restrictToSocialMedia: boolean;
   isSocialMediaLead: boolean;
+  canAccessAccounts: boolean;
   collapsed: boolean;
   onToggle: () => void;
   mobile?: boolean;
@@ -276,6 +288,15 @@ export function Sidebar({
     const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
     const insertAt = leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1;
     visibleMainNav.splice(insertAt, 0, ...(isSocialMediaLead ? [clientsNavItem, teamNavItem] : [clientsNavItem]));
+  }
+
+  // The lightweight Accounts module (see accountsNavItem above) — independent
+  // of the Social Media restriction above, since a department can have this
+  // on without being anywhere near Social Media.
+  if (canAccessAccounts && !visibleMainNav.some((item) => item.href === accountsNavItem.href)) {
+    const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
+    const insertAt = leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1;
+    visibleMainNav.splice(insertAt, 0, accountsNavItem);
   }
 
   // Unread chat messages, for the badge on Messages. Driven by the socket so it

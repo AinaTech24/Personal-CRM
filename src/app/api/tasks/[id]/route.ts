@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isAnalystOnly } from "@/lib/permissions";
 import { broadcastTaskChange, canDeleteTask, getTaskForUser } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
 
@@ -49,6 +50,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const access = await getTaskForUser(user, id);
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // getTaskForUser widens visibility for Analysts (read-only) — block the
+  // write explicitly rather than let that widened read access double as edit access.
+  if (isAnalystOnly(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { buildPoolConfig } from "../src/lib/mysql-pool-config";
+import { slugify } from "../src/lib/slug";
 
 async function main() {
   const adapter = new PrismaMariaDb(buildPoolConfig(process.env.DATABASE_URL!));
@@ -20,25 +21,50 @@ async function main() {
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
+  if (!existing) {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        name,
+        role: "SUPER_ADMIN",
+        isActive: true,
+      },
+    });
+    console.log(`Created super admin: ${user.email} (id: ${user.id})`);
+  } else {
     console.log(`Super admin already exists: ${email}`);
-    await prisma.$disconnect();
-    return;
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
-  const user = await prisma.user.create({
-    data: {
-      email,
-      passwordHash,
-      name,
-      role: "SUPER_ADMIN",
-      isActive: true,
-    },
-  });
+  // Idempotent — safe to run against a database that already has these
+  // departments (from a previous seed run, or created by hand): matched by
+  // slug, only the flag this seed cares about is ever touched, nothing else
+  // about an existing department is overwritten.
+  await upsertDepartmentFlag(prisma, "Analyst", "isAnalystDept");
+  await upsertDepartmentFlag(prisma, "Development", "hasClientsModule");
 
-  console.log(`Created super admin: ${user.email} (id: ${user.id})`);
   await prisma.$disconnect();
+}
+
+async function upsertDepartmentFlag(
+  prisma: PrismaClient,
+  name: string,
+  flag: "isAnalystDept" | "hasClientsModule"
+) {
+  const slug = slugify(name);
+  const existing = await prisma.department.findUnique({ where: { slug } });
+  if (existing) {
+    if (!existing[flag]) {
+      await prisma.department.update({ where: { id: existing.id }, data: { [flag]: true } });
+      console.log(`Enabled ${flag} on existing department: ${existing.name}`);
+    } else {
+      console.log(`Department already has ${flag}: ${existing.name}`);
+    }
+    return;
+  }
+  const department = await prisma.department.create({ data: { name, slug, [flag]: true } });
+  console.log(`Created department: ${department.name} (${flag}=true)`);
 }
 
 main().catch((err) => {

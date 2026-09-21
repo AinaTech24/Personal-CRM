@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin, type PermissionUser } from "@/lib/permissions";
+import { isAdmin, isAnalyst, type PermissionUser } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
@@ -49,7 +49,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const meeting = await db.meeting.findUnique({ where: { id }, include: meetingInclude });
   if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  let visible = isAdmin(user) || meeting.organizer.id === user.id || meeting.attendees.some((a) => a.id === user.id);
+  let visible =
+    isAdmin(user) || isAnalyst(user) || meeting.organizer.id === user.id || meeting.attendees.some((a) => a.id === user.id);
   if (!visible) {
     const teamUserIds = await socialMediaTeamScopeFor(user);
     visible =

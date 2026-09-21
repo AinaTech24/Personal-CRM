@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { canAccessClientsModule, isAdmin } from "@/lib/permissions";
 import { getSocialMembership, isSocialMediaLead, isSocialMediaOnlyUser } from "@/lib/social-media";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { SocketProvider } from "@/components/providers/socket-provider";
@@ -26,6 +26,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           isAdmin={isAdmin(user)}
           restrictToSocialMedia={restrictToSocialMedia}
           isSocialMediaLead={isTeamLead}
+          canAccessAccounts={canAccessClientsModule(user)}
           userId={user.id}
           name={user.name}
           email={user.email}

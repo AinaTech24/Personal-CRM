@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isAnalyst } from "@/lib/permissions";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
@@ -24,7 +24,10 @@ export async function getProjectForUser(user: PermissionUser, projectId: string)
     isAdmin(user) ||
     project.createdById === user.id ||
     isMember ||
-    project.departmentId === user.departmentId;
+    project.departmentId === user.departmentId ||
+    // Read-only, company-wide: PATCH/DELETE routes explicitly block
+    // isAnalystOnly() callers even though this lets them past this check.
+    isAnalyst(user);
 
   if (allowed) return project;
 
@@ -48,7 +51,7 @@ export function projectListWhere(user: PermissionUser, teamUserIds?: string[] | 
   if (teamOnly && teamUserIds) {
     return { OR: [{ createdById: { in: teamUserIds } }, { members: { some: { userId: { in: teamUserIds } } } }] };
   }
-  if (isAdmin(user)) return {};
+  if (isAdmin(user) || isAnalyst(user)) return {};
   const or: object[] = [
     { departmentId: user.departmentId ?? "__none__" },
     { createdById: user.id },

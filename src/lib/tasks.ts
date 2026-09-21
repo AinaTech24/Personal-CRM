@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isAnalyst } from "@/lib/permissions";
 import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
@@ -20,6 +20,10 @@ export async function getTaskForUser(user: PermissionUser, taskId: string) {
   const task = await db.task.findUnique({ where: { id: taskId } });
   if (!task) return null;
   if (canManageTask(user, task)) return task;
+  // Read-only, company-wide: an Analyst may view any task, but PATCH/DELETE
+  // routes explicitly block isAnalystOnly() callers even though this lets
+  // them past the access check.
+  if (isAnalyst(user)) return task;
 
   const teamUserIds = await socialMediaTeamScopeFor(user);
   if (teamUserIds && isSocialMediaTeamTask(task, teamUserIds)) return task;
@@ -52,7 +56,7 @@ export function taskListWhere(user: PermissionUser, teamUserIds?: string[] | nul
   if (teamOnly && teamUserIds) {
     return { OR: [{ createdById: { in: teamUserIds } }, { assignedToId: { in: teamUserIds } }] };
   }
-  if (isAdmin(user)) return {};
+  if (isAdmin(user) || isAnalyst(user)) return {};
   const or: object[] = [{ createdById: user.id }, { assignedToId: user.id }];
   if (teamUserIds && teamUserIds.length > 0) {
     or.push({ createdById: { in: teamUserIds } }, { assignedToId: { in: teamUserIds } });

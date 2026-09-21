@@ -21,12 +21,24 @@ model Department {
   slug      String   @unique
   createdAt DateTime @default(now())
 
+  /// When true, every user in this department sees leads/clients/tasks/
+  /// meetings/projects across every OTHER department too (read-only —
+  /// editing still follows the normal creator/assignee/admin rules). Set on
+  /// a company-wide oversight department such as "Analyst" via the
+  /// Departments admin page.
+  isAnalystDept Boolean @default(false)
+  /// When true, this department's users (and admins) get the Clients module
+  /// in their sidebar. Off by default so enabling it for a department is an
+  /// explicit admin action, set via the Departments admin page.
+  hasClientsModule Boolean @default(false)
+
   users      User[]
   leads      Lead[]
   projects   Project[]
   quotations Quotation[]
   invoices   Invoice[]
   invites    Invite[]
+  clients    Client[]
 }
 
 model User {
@@ -73,6 +85,9 @@ model User {
   leadNotes      LeadNote[]
   leadActivities LeadActivity[]
   leadReminders  LeadReminder[]
+
+  clientsCreated  Client[] @relation("ClientCreatedBy")
+  clientsAssigned Client[] @relation("ClientAssignedTo")
 
   tasksCreated    Task[]           @relation("TaskCreatedBy")
   tasksAssigned   Task[]           @relation("TaskAssignedTo")
@@ -327,6 +342,41 @@ model LeadReminder {
   createdAt   DateTime  @default(now())
 }
 
+// ---------- Clients (lightweight accounts module, gated per-department via
+// Department.hasClientsModule — deliberately separate from the Social Media
+// team's SocialClient pipeline, which carries fields (platforms, content
+// calendar, ad campaigns) that don't apply here) ----------
+
+enum ClientStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  LOST
+}
+
+model Client {
+  id           String       @id @default(cuid())
+  name         String
+  company      String?
+  email        String?
+  phone        String?
+  status       ClientStatus @default(ACTIVE)
+  notes        String?      @db.Text
+  departmentId String?
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  assignedToId String?
+  assignedTo   User?        @relation("ClientAssignedTo", fields: [assignedToId], references: [id])
+  createdById  String
+  createdBy    User         @relation("ClientCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  projects Project[] @relation("ClientProjects")
+
+  @@index([departmentId])
+  @@index([assignedToId])
+}
+
 // ---------- Tasks ----------
 
 enum TaskStatus {
@@ -433,6 +483,7 @@ model Project {
   tasks       ProjectTask[]
   documents   ProjectDocument[]
   activities  ProjectActivity[]
+  clients     Client[]           @relation("ClientProjects")
 
   @@index([departmentId])
   @@index([status])

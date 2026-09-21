@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 interface Department {
   id: string;
   name: string;
+  isAnalystDept: boolean;
+  hasClientsModule: boolean;
   _count: { users: number };
 }
 
@@ -26,6 +28,21 @@ export default function DepartmentsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  async function toggleFlag(dept: Department, flag: "isAnalystDept" | "hasClientsModule") {
+    const next = !dept[flag];
+    // Optimistic — this is a low-stakes admin toggle, not worth a loading spinner per card.
+    setDepartments((prev) => prev.map((d) => (d.id === dept.id ? { ...d, [flag]: next } : d)));
+    const res = await fetch(`/api/departments/${dept.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [flag]: next }),
+    });
+    if (!res.ok) {
+      // Roll back on failure rather than leave the UI lying about server state.
+      setDepartments((prev) => prev.map((d) => (d.id === dept.id ? { ...d, [flag]: !next } : d)));
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -82,8 +99,38 @@ export default function DepartmentsPage() {
             <CardHeader>
               <CardTitle className="text-base">{d.name}</CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              {d._count.users} member{d._count.users === 1 ? "" : "s"}
+            <CardContent className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                {d._count.users} member{d._count.users === 1 ? "" : "s"}
+              </p>
+              <label className="flex cursor-pointer items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={d.isAnalystDept}
+                  onChange={() => toggleFlag(d, "isAnalystDept")}
+                />
+                <span>
+                  Analyst department
+                  <span className="block text-xs text-muted-foreground">
+                    Members see every department&apos;s leads, tasks, meetings, projects and accounts (read-only).
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={d.hasClientsModule}
+                  onChange={() => toggleFlag(d, "hasClientsModule")}
+                />
+                <span>
+                  Accounts module
+                  <span className="block text-xs text-muted-foreground">
+                    Members get the lightweight Accounts (clients) module in their sidebar.
+                  </span>
+                </span>
+              </label>
             </CardContent>
           </Card>
         ))}

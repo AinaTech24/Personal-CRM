@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
-import { canManageRecord, isAdmin, isSuperAdmin } from "@/lib/permissions";
+import { canManageRecord, isAdmin, isAnalyst, isSuperAdmin } from "@/lib/permissions";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
@@ -13,6 +13,10 @@ export async function getLeadForUser(user: PermissionUser, leadId: string) {
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   if (!lead) return null;
   if (canManageRecord(user, lead)) return lead;
+  // Read-only, company-wide: an Analyst may view any lead, but PATCH/DELETE
+  // routes explicitly block isAnalystOnly() callers even though this lets
+  // them past the access check.
+  if (isAnalyst(user)) return lead;
 
   const teamUserIds = await socialMediaTeamScopeFor(user);
   if (teamUserIds && isSocialMediaTeamLead(lead, teamUserIds)) return lead;
@@ -51,7 +55,7 @@ export function leadListWhere(user: PermissionUser, teamUserIds?: string[] | nul
   if (teamOnly && teamUserIds) {
     return { OR: [{ assignedToId: { in: teamUserIds } }, { createdById: { in: teamUserIds } }] };
   }
-  if (isSuperAdmin(user) || isAdmin(user)) return {};
+  if (isSuperAdmin(user) || isAdmin(user) || isAnalyst(user)) return {};
   const or: object[] = [
     { departmentId: user.departmentId },
     { departmentId: null },

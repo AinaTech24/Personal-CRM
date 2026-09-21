@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isAdmin, isAnalystOnly } from "@/lib/permissions";
 import { broadcastLeadChange, canDeleteLead, getLeadForUser } from "@/lib/leads";
 import { getSocialMembership, isSocialMediaOnlyUser, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
 import { notifyAndPush } from "@/lib/notify";
@@ -66,6 +67,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const access = await getLeadForUser(user, id);
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // getLeadForUser widens visibility for Analysts (read-only) — block the
+  // write explicitly rather than let that widened read access double as edit access.
+  if (isAnalystOnly(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -94,7 +98,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }),
       ...(data.meetingStatus !== undefined && { meetingStatus: data.meetingStatus }),
       ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId }),
-      ...(data.departmentId !== undefined && { departmentId: data.departmentId }),
+      // Only an admin may reassign a lead's department — same restriction the
+      // POST route already applies on create. Without this, any user with
+      // edit access to a single lead (creator, assignee, or same-department)
+      // could move it to another department, or clear it to `null`, which
+      // `canAccessDepartmentRecord` treats as visible/editable by everyone.
+      ...(data.departmentId !== undefined && isAdmin(user) && { departmentId: data.departmentId }),
     },
   });
 

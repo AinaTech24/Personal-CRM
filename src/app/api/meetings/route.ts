@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isAnalyst } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 import { socialMediaTeamOnlyScopeFor, socialMediaTeamScopeFor } from "@/lib/social-media";
 
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     if (teamUserIds && teamUserIds.length > 0) {
       or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
     }
-    where = isAdmin(user) ? {} : { OR: or };
+    where = isAdmin(user) || isAnalyst(user) ? {} : { OR: or };
   }
 
   const meetings = await db.meeting.findMany({

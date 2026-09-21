@@ -5,9 +5,13 @@ import { getCurrentUser } from "@/lib/auth";
 import { canManageDepartments } from "@/lib/permissions";
 import { slugify } from "@/lib/slug";
 
-const patchSchema = z.object({ name: z.string().min(1).max(80) });
+const patchSchema = z.object({
+  name: z.string().min(1).max(80).optional(),
+  isAnalystDept: z.boolean().optional(),
+  hasClientsModule: z.boolean().optional(),
+});
 
-/** Rename a department. */
+/** Rename a department, and/or toggle its isAnalystDept / hasClientsModule flags. */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -15,21 +19,35 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "A name is required" }, { status: 400 });
-  const name = parsed.data.name.trim();
+  if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  const data = parsed.data;
 
-  // The slug is unique and derived from the name, so a rename has to move it
-  // too — otherwise the record keeps a slug describing its old name, and the
-  // next department to take that name collides with a row that no longer
-  // resembles it.
-  const slug = slugify(name);
-  const clash = await db.department.findFirst({
-    where: { slug, id: { not: id } },
-    select: { id: true },
+  let nameUpdate: { name: string; slug: string } | null = null;
+  if (data.name !== undefined) {
+    const name = data.name.trim();
+    if (!name) return NextResponse.json({ error: "A name is required" }, { status: 400 });
+
+    // The slug is unique and derived from the name, so a rename has to move it
+    // too — otherwise the record keeps a slug describing its old name, and the
+    // next department to take that name collides with a row that no longer
+    // resembles it.
+    const slug = slugify(name);
+    const clash = await db.department.findFirst({
+      where: { slug, id: { not: id } },
+      select: { id: true },
+    });
+    if (clash) return NextResponse.json({ error: "A department with that name already exists" }, { status: 409 });
+    nameUpdate = { name, slug };
+  }
+
+  const department = await db.department.update({
+    where: { id },
+    data: {
+      ...nameUpdate,
+      ...(data.isAnalystDept !== undefined && { isAnalystDept: data.isAnalystDept }),
+      ...(data.hasClientsModule !== undefined && { hasClientsModule: data.hasClientsModule }),
+    },
   });
-  if (clash) return NextResponse.json({ error: "A department with that name already exists" }, { status: 409 });
-
-  const department = await db.department.update({ where: { id }, data: { name, slug } });
   return NextResponse.json({ department });
 }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isAdmin, isAnalystOnly } from "@/lib/permissions";
 import {
   broadcastProjectChange,
   canDeleteProject,
@@ -76,6 +77,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const access = await getProjectForUser(user, id);
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // getProjectForUser widens visibility for Analysts (read-only) — block the
+  // write explicitly rather than let that widened read access double as edit access.
+  if (isAnalystOnly(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
@@ -92,7 +96,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.progress !== undefined && { progress: data.progress }),
       ...(data.estimatedHours !== undefined && { estimatedHours: data.estimatedHours }),
       ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId || null }),
-      ...(data.departmentId !== undefined && { departmentId: data.departmentId }),
+      // Only an admin may reassign a project's department — same restriction
+      // the POST route already applies on create. Without this, any user
+      // with edit access to a single project could move it to another
+      // department, or clear it to `null`, which is treated as visible/
+      // editable by everyone in `canAccessDepartmentRecord`.
+      ...(data.departmentId !== undefined && isAdmin(user) && { departmentId: data.departmentId }),
       ...(data.isActive !== undefined && { isActive: data.isActive }),
       ...(data.startDate !== undefined && { startDate: data.startDate ? new Date(data.startDate) : null }),
       ...(data.endDate !== undefined && { endDate: data.endDate ? new Date(data.endDate) : null }),
