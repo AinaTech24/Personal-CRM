@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
+import { grantLeaveDay } from "@/lib/leave";
 
 /** Admins see everyone's leave; a regular user sees only their own. */
 export async function GET(req: NextRequest) {
@@ -55,40 +56,13 @@ export async function POST(req: NextRequest) {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const d = parsed.data;
-  const date = dateFromKey(d.date);
-
-  const leave = await db.userLeave.upsert({
-    where: { userId_date: { userId: d.userId, date } },
-    create: { userId: d.userId, date, type: d.type, reason: d.reason || null, createdById: user.id },
-    update: { type: d.type, reason: d.reason || null },
-    include: { user: { select: { id: true, name: true, surname: true, email: true } } },
+  const leave = await grantLeaveDay({
+    userId: d.userId,
+    dateKey: d.date,
+    type: d.type,
+    reason: d.reason || null,
+    actorId: user.id,
   });
-
-  if (d.type === "FULL_DAY") {
-    const note = `On leave${d.reason ? ` — ${d.reason}` : ""}`;
-    await db.attendance.upsert({
-      where: { userId_date: { userId: d.userId, date } },
-      create: {
-        userId: d.userId,
-        date,
-        status: "ABSENT",
-        calculatedStatus: "ABSENT",
-        approvalStatus: "APPROVED",
-        approvedAt: new Date(),
-        approvedById: user.id,
-        adminNote: note,
-      },
-      update: {
-        status: "ABSENT",
-        statusOverride: true,
-        overrideReason: note,
-        approvalStatus: "APPROVED",
-        approvedAt: new Date(),
-        approvedById: user.id,
-        adminNote: note,
-      },
-    });
-  }
 
   return NextResponse.json(
     { leave: { id: leave.id, date: keyFromDate(leave.date), type: leave.type, reason: leave.reason, user: leave.user } },

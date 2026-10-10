@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { getSocialMembership, isSocialMediaLead } from "@/lib/social-media";
+import { BirthdayBanner } from "@/components/birthdays/birthday-banner";
 import { DashboardStats } from "@/components/dashboard/dashboard-stats";
 import { UserDashboard } from "@/components/dashboard/user-dashboard";
 import { ClientPipeline } from "@/components/social-media/client-pipeline";
@@ -26,6 +27,7 @@ export default async function DashboardHomePage() {
   if (admin) {
     return (
       <div className="flex min-h-full flex-col gap-6">
+        <BirthdayBanner />
         <DashboardStats greetingName={user?.name.split(" ")[0] ?? ""} />
         <div>
           <h2 className="text-lg font-semibold">Social Media pipeline</h2>
@@ -44,6 +46,7 @@ export default async function DashboardHomePage() {
 
   return (
     <div className="flex min-h-full flex-col gap-6">
+      <BirthdayBanner />
       <UserDashboard firstName={user?.name.split(" ")[0] ?? "there"} />
       {socialLead && (
         <div>

@@ -25,6 +25,8 @@ export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?:
   check_in_reminder: IconClock,
   check_out_reminder: IconClock,
   social_client_assigned: IconMegaphone,
+  leave_requested: IconCalendar,
+  leave_decided: IconCalendar,
 };
 
 export function notificationMessage(n: NotificationLike): string {
@@ -87,6 +89,10 @@ export function notificationMessage(n: NotificationLike): string {
       const clientName = typeof n.payload.clientName === "string" ? n.payload.clientName : "a client";
       return `${actor} assigned you the social media client "${clientName}"`;
     }
+    case "leave_requested":
+      return `${actor} applied for leave`;
+    case "leave_decided":
+      return `${actor} ${n.payload.decision === "APPROVED" ? "approved" : "rejected"} your leave request`;
     default:
       return "You have a new update";
   }
@@ -107,6 +113,8 @@ export function notificationHref(n: NotificationLike): string | null {
   if (n.type === "meeting_invited" || n.type === "meeting_reminder") return "/meetings";
   if (n.type === "task_reminder") return "/tasks";
   if (n.type === "check_in_reminder" || n.type === "check_out_reminder") return "/attendance";
+  if (n.type === "leave_requested") return "/admin/leave";
+  if (n.type === "leave_decided") return "/leave";
   if (n.type === "social_client_assigned") {
     return typeof n.payload.clientId === "string" ? `/social-media/${n.payload.clientId}` : "/social-media";
   }

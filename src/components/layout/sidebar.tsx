@@ -18,6 +18,8 @@ import {
   IconUsers,
   IconPhone,
   IconKey,
+  IconCake,
+  IconCalendar,
 } from "@/components/icons";
 import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -94,7 +96,9 @@ const mainNav: NavItem[] = [
   { href: "/quotations", label: "Quotations", icon: staticNavIcon(IconQuotations) },
   { href: "/invoices", label: "Invoices", icon: staticNavIcon(IconInvoices) },
   { href: "/passwords", label: "Password Manager", icon: staticNavIcon(IconKey) },
+  { href: "/birthdays", label: "Birthdays", icon: staticNavIcon(IconCake) },
   { href: "/attendance", label: "My Attendance", icon: staticNavIcon(IconClock) },
+  { href: "/leave", label: "My Leave", icon: staticNavIcon(IconCalendar) },
   { href: "/activity", label: "My Activity", icon: staticNavIcon(IconHistory) },
 ];
 
@@ -103,9 +107,12 @@ const adminNav: NavItem[] = [
   { href: "/admin/logs", label: "View logs", icon: staticNavIcon(IconHistory) },
   { href: "/admin/departments", label: "Departments", icon: staticNavIcon(IconBuilding) },
   { href: "/admin/users", label: "Users & Invites", icon: LottieUsersInvites },
+  { href: "/admin/birthdays", label: "Birthday Settings", icon: staticNavIcon(IconCake) },
   { href: "/social-media/team", label: "Social Media Team", icon: staticNavIcon(IconUsers) },
   { href: "/crm/team", label: "CRM Team", icon: staticNavIcon(IconUsers) },
   { href: "/admin/attendance", label: "Attendance", icon: staticNavIcon(IconClock) },
+  { href: "/admin/leave", label: "Leave Requests", icon: staticNavIcon(IconCalendar) },
+  { href: "/admin/clients", label: "Client Accounts", icon: staticNavIcon(IconBuilding) },
   { href: "/admin/email", label: "Email (SMTP)", icon: staticNavIcon(IconMail) },
   { href: "/admin/settings", label: "Application", icon: staticNavIcon(IconSettings) },
 ];
@@ -248,6 +255,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const [pendingCount, setPendingCount] = useState(0);
+  const [pendingLeave, setPendingLeave] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
   // Admins see every module, so their nav is correct on first paint. Everyone
@@ -377,6 +385,27 @@ export function Sidebar({
     };
   }, [isAdmin]);
 
+  // Same for leave requests waiting on a decision. Admin only.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    const poll = () =>
+      fetch("/api/leave-requests/pending-count")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (active && d) setPendingLeave(d.count ?? 0);
+        })
+        .catch(() => {});
+    poll();
+    const id = setInterval(poll, 45_000);
+    if (socket) socket.on("leave_request_changed", poll);
+    return () => {
+      active = false;
+      clearInterval(id);
+      if (socket) socket.off("leave_request_changed", poll);
+    };
+  }, [isAdmin, socket]);
+
   // Labels stay in the DOM and fade so the grid width can slide without reflowing.
   const labelClass = cn(
     "whitespace-nowrap transition-opacity duration-200",
@@ -451,7 +480,7 @@ export function Sidebar({
                 key={item.href}
                 item={item}
                 active={pathname.startsWith(item.href)}
-                badgeCount={item.href === "/admin/attendance" ? pendingCount : 0}
+                badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : 0}
                 collapsed={collapsed}
                 labelClass={labelClass}
                 onNavigate={onNavigate}

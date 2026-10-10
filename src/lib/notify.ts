@@ -22,6 +22,8 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   check_out_reminder: "attendance",
   social_client_assigned: "social",
   call_assigned: "calls",
+  leave_requested: "attendance",
+  leave_decided: "attendance",
 };
 
 export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: string; description: string }[] = [

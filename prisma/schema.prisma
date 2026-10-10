@@ -39,6 +39,9 @@ model User {
   // @unique with a nullable String is fine in MySQL — any number of NULL rows
   // are allowed, only two rows sharing the same non-null value would collide.
   mobile                String?     @unique
+  // Date of birth, set by an admin. Only month/day are shown to colleagues
+  // (see /api/birthdays); the year stays admin-only.
+  birthday              DateTime?   @db.Date
   avatarDataUrl         String?     @db.LongText
   role                  Role        @default(DEPARTMENT_USER)
   departmentId          String?
@@ -98,10 +101,14 @@ model User {
   invoicesCreated  Invoice[] @relation("InvoiceCreatedBy")
   paymentsRecorded Payment[]
 
-  leaves             UserLeave[]       @relation("UserLeaves")
-  attendance         Attendance[]      @relation("AttendanceUser")
-  attendanceApproved Attendance[]      @relation("AttendanceApprover")
-  attendanceAudits   AttendanceAudit[] @relation("AttendanceAuditActor")
+  leaves             UserLeave[]        @relation("UserLeaves")
+  leaveRequests      LeaveRequest[]     @relation("LeaveRequestUser")
+  leaveDecisions     LeaveRequest[]     @relation("LeaveRequestDecider")
+  clientsCreated     Client[]           @relation("ClientCreatedBy")
+  clientTeamRoles    ClientTeamMember[] @relation("ClientTeamMemberUser")
+  attendance         Attendance[]       @relation("AttendanceUser")
+  attendanceApproved Attendance[]       @relation("AttendanceApprover")
+  attendanceAudits   AttendanceAudit[]  @relation("AttendanceAuditActor")
 
   meetingsOrganized Meeting[] @relation("MeetingOrganizer")
   meetingsAttending Meeting[] @relation("MeetingAttendees")
@@ -1650,4 +1657,96 @@ model PasswordEntryActivity {
 
   @@index([passwordEntryId])
   @@index([actorId])
+}
+
+// ---------- Leave requests ----------
+
+enum LeaveCategory {
+  CASUAL
+  SICK
+  EARNED
+  UNPAID
+  OTHER
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// A team member's application for leave, awaiting an admin's decision. Approving
+/// one is what writes the per-day UserLeave rows (and stamps attendance) that the
+/// attendance module already understands; the request itself is the record of
+/// who asked, why, and who decided when.
+model LeaveRequest {
+  id          String             @id @default(cuid())
+  userId      String
+  user        User               @relation("LeaveRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  category    LeaveCategory      @default(CASUAL)
+  startDate   DateTime           @db.Date
+  endDate     DateTime           @db.Date
+  isHalfDay   Boolean            @default(false)
+  /// Working days covered (Sundays/holidays excluded; 0.5 for a half day).
+  /// Computed server-side at apply time, never trusted from the client.
+  days        Float
+  reason      String             @db.Text
+  status      LeaveRequestStatus @default(PENDING)
+  decidedById String?
+  decidedBy   User?              @relation("LeaveRequestDecider", fields: [decidedById], references: [id])
+  /// The "Action Date": when an admin approved/rejected, or the user cancelled.
+  decidedAt   DateTime?
+  adminNote   String?            @db.Text
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([userId, startDate])
+  @@index([status])
+}
+
+// ---------- Client accounts (admin) ----------
+
+enum ClientCategory {
+  CRM
+  WEBSITE
+  WHATSAPP
+  SMM
+  DDQ
+}
+
+/// A company we sell a product to. Distinct from SocialClient, which is the
+/// Social Media team's day-to-day working record.
+model Client {
+  id            String             @id @default(cuid())
+  name          String
+  category      ClientCategory
+  /// Why the client came to us / what they bought the product for.
+  reason        String?            @db.Text
+  ownerName     String
+  mobile        String?
+  email         String?
+  ownerBirthday DateTime?          @db.Date
+  /// The product's contract window.
+  productStart  DateTime?          @db.Date
+  productEnd    DateTime?          @db.Date
+  createdById   String
+  createdBy     User               @relation("ClientCreatedBy", fields: [createdById], references: [id])
+  team          ClientTeamMember[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([category])
+}
+
+model ClientTeamMember {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation("ClientTeamMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  /// Free text, e.g. "Developer", "Account manager".
+  role     String
+
+  @@unique([clientId, userId])
 }
