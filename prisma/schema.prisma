@@ -1754,23 +1754,19 @@ model ClientTeamMember {
 
 // ---------- Birthday gifts ----------
 
-enum BirthdayGiftType {
-  HAMPER
-  CAKE
-  PLANT
-}
-
 /// The gift an admin has chosen for someone's birthday in a given year (the year
-/// the birthday falls in, so a new year starts with no gift chosen).
+/// the birthday falls in, so a new year starts with no gift chosen). Free text:
+/// Hamper / Cake / Plant are just the suggested options. Rows are kept after the
+/// birthday, which is what makes the gift history.
 model BirthdayGift {
-  id          String           @id @default(cuid())
+  id          String   @id @default(cuid())
   userId      String
-  user        User             @relation("BirthdayGiftFor", fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation("BirthdayGiftFor", fields: [userId], references: [id], onDelete: Cascade)
   year        Int
-  gift        BirthdayGiftType
+  gift        String   @db.VarChar(100)
   createdById String
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([userId, year])
 }

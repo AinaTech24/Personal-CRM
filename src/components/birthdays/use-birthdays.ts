@@ -12,7 +12,7 @@ export interface BirthdayEntry {
   daysUntil: number;
   isToday: boolean;
   wish: string | null;
-  /** HAMPER | CAKE | PLANT. Admins always; everyone else only on the day. */
+  /** Free-text gift. Admins always; everyone else only on the day. */
   gift: string | null;
   /** Admin-only. */
   turning?: number;

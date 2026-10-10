@@ -48,18 +48,20 @@ export function birthdayInfo(birthdayKey: string, todayKey: string): BirthdayInf
   };
 }
 
-export const BIRTHDAY_GIFTS = [
-  { value: "HAMPER", label: "Hamper" },
-  { value: "CAKE", label: "Cake" },
-  { value: "PLANT", label: "Plant" },
-] as const;
+/** Suggested gifts in the admin dropdown; the stored gift is free text, so an admin can type anything else. */
+export const BIRTHDAY_GIFTS = ["Hamper", "Cake", "Plant"] as const;
 
-export type BirthdayGiftValue = (typeof BIRTHDAY_GIFTS)[number]["value"];
-
-export const giftLabel = (gift: string) => BIRTHDAY_GIFTS.find((g) => g.value === gift)?.label ?? gift;
+export const MAX_GIFT_LENGTH = 100;
 
 /** The wish shown to the whole company on someone's birthday, with their gift if an admin chose one. */
 export function birthdayWish(name: string, gift?: string | null): string {
   const base = `Happy Birthday, ${name}! 🎂 Wishing you a day full of joy and a year full of success, from all of us in the Aina Family.`;
-  return gift ? `${base} 🎁 A ${giftLabel(gift).toLowerCase()} is coming your way!` : base;
+  return gift ? `${base} 🎁 Your gift: ${gift}!` : base;
+}
+
+/** The calendar date a birthday fell on in `year` as "YYYY-MM-DD" (a Feb 29 birthday is kept on Feb 28 in non-leap years). */
+export function birthdayDateInYear(month: number, day: number, year: number): string {
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const d = month === 2 && day === 29 && !leap ? 28 : day;
+  return `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }

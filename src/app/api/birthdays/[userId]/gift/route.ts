@@ -4,11 +4,11 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { istDateKey, keyFromDate } from "@/lib/attendance";
-import { birthdayInfo } from "@/lib/birthdays";
+import { birthdayInfo, MAX_GIFT_LENGTH } from "@/lib/birthdays";
 
-const bodySchema = z.object({ gift: z.enum(["HAMPER", "CAKE", "PLANT"]).nullable() });
+const bodySchema = z.object({ gift: z.string().trim().min(1).max(MAX_GIFT_LENGTH).nullable() });
 
-/** Admin: choose (or clear, with null) the gift for this person's next birthday. */
+/** Admin: choose (or clear, with null) the gift for this person's next birthday. Free text: Hamper/Cake/Plant are only suggestions. */
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const user = await getCurrentUser();
   if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

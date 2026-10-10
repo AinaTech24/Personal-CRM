@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { birthdayInfo, birthdayWish } from "./birthdays";
+import { birthdayDateInYear, birthdayInfo, birthdayWish } from "./birthdays";
 
 describe("birthdayInfo", () => {
   it("is 0 days away on the birthday itself", () => {
@@ -29,7 +29,15 @@ describe("gifts", () => {
   });
 
   it("mentions the gift in the wish only when there is one", () => {
-    expect(birthdayWish("Asha", "CAKE")).toContain("A cake is coming your way");
+    expect(birthdayWish("Asha", "Amazon voucher")).toContain("Your gift: Amazon voucher!");
     expect(birthdayWish("Asha")).not.toContain("🎁");
+  });
+});
+
+describe("birthdayDateInYear", () => {
+  it("pads month and day", () => expect(birthdayDateInYear(3, 7, 2026)).toBe("2026-03-07"));
+  it("moves Feb 29 to Feb 28 in a non-leap year", () => {
+    expect(birthdayDateInYear(2, 29, 2027)).toBe("2027-02-28");
+    expect(birthdayDateInYear(2, 29, 2028)).toBe("2028-02-29");
   });
 });

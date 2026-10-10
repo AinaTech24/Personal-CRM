@@ -6,7 +6,7 @@ import { SkeletonList } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { IconCake } from "@/components/icons";
-import { giftLabel } from "@/lib/birthdays";
+import { GiftHistory } from "@/components/birthdays/gift-history";
 import { useBirthdays, type BirthdayEntry } from "@/components/birthdays/use-birthdays";
 
 const dayLabel = (b: BirthdayEntry) => format(new Date(2000, b.month - 1, b.day), "MMMM d");
@@ -68,7 +68,7 @@ export function BirthdaysView() {
                     <p className="truncate text-sm font-medium">{b.name}</p>
                     {b.department && <p className="truncate text-xs text-muted-foreground">{b.department}</p>}
                   </div>
-                  {b.gift && <Badge variant="secondary">🎁 {giftLabel(b.gift)}</Badge>}
+                  {b.gift && <Badge variant="secondary">🎁 {b.gift}</Badge>}
                   <div className="text-right text-sm">
                     <p className="font-medium">{dayLabel(b)}</p>
                     <p className="text-xs text-muted-foreground">{untilLabel(b.daysUntil)}</p>
@@ -79,6 +79,8 @@ export function BirthdaysView() {
           </Card>
         )}
       </section>
+
+      <GiftHistory />
     </div>
   );
 }
