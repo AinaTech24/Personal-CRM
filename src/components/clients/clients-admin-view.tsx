@@ -204,10 +204,11 @@ export function ClientsAdminView() {
             <>
               <DialogHeader>
                 <DialogTitle>{c.name}</DialogTitle>
-                <DialogDescription className="flex items-center gap-2">
+                <DialogDescription className="sr-only">Client details</DialogDescription>
+                <div className="flex items-center gap-2">
                   <Badge variant="outline">{categoryLabel(c.category)}</Badge>
                   <ProductStatusBadge client={c} />
-                </DialogDescription>
+                </div>
               </DialogHeader>
               <DialogBody className="flex flex-col gap-4">
                 {c.reason && <p className="rounded-md bg-muted/50 p-3 text-sm">{c.reason}</p>}
