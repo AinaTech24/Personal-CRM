@@ -106,6 +106,7 @@ model User {
   leaveDecisions     LeaveRequest[]     @relation("LeaveRequestDecider")
   clientsCreated     Client[]           @relation("ClientCreatedBy")
   clientTeamRoles    ClientTeamMember[] @relation("ClientTeamMemberUser")
+  birthdayGifts      BirthdayGift[]     @relation("BirthdayGiftFor")
   attendance         Attendance[]       @relation("AttendanceUser")
   attendanceApproved Attendance[]       @relation("AttendanceApprover")
   attendanceAudits   AttendanceAudit[]  @relation("AttendanceAuditActor")
@@ -1749,4 +1750,27 @@ model ClientTeamMember {
   role     String
 
   @@unique([clientId, userId])
+}
+
+// ---------- Birthday gifts ----------
+
+enum BirthdayGiftType {
+  HAMPER
+  CAKE
+  PLANT
+}
+
+/// The gift an admin has chosen for someone's birthday in a given year (the year
+/// the birthday falls in, so a new year starts with no gift chosen).
+model BirthdayGift {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation("BirthdayGiftFor", fields: [userId], references: [id], onDelete: Cascade)
+  year        Int
+  gift        BirthdayGiftType
+  createdById String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([userId, year])
 }

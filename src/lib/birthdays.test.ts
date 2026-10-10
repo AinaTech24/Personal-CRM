@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { birthdayInfo } from "./birthdays";
+import { birthdayInfo, birthdayWish } from "./birthdays";
 
 describe("birthdayInfo", () => {
   it("is 0 days away on the birthday itself", () => {
@@ -19,5 +19,17 @@ describe("birthdayInfo", () => {
   it("celebrates Feb 29 birthdays on Feb 28 in non-leap years", () => {
     expect(birthdayInfo("2000-02-29", "2027-02-28").daysUntil).toBe(0);
     expect(birthdayInfo("2000-02-29", "2028-02-29").daysUntil).toBe(0);
+  });
+});
+
+describe("gifts", () => {
+  it("reports the year the next birthday falls in", () => {
+    expect(birthdayInfo("1990-10-09", "2026-10-10").year).toBe(2027);
+    expect(birthdayInfo("1990-10-15", "2026-10-10").year).toBe(2026);
+  });
+
+  it("mentions the gift in the wish only when there is one", () => {
+    expect(birthdayWish("Asha", "CAKE")).toContain("A cake is coming your way");
+    expect(birthdayWish("Asha")).not.toContain("🎁");
   });
 });

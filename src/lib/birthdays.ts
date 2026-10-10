@@ -30,6 +30,8 @@ export interface BirthdayInfo {
   daysUntil: number;
   /** The age they turn on the next occurrence. */
   turning: number;
+  /** The calendar year that next occurrence falls in. */
+  year: number;
 }
 
 /** Month/day of a stored "YYYY-MM-DD" birthday, and how far away the next one is. */
@@ -42,10 +44,22 @@ export function birthdayInfo(birthdayKey: string, todayKey: string): BirthdayInf
     day,
     daysUntil: Math.round((next.getTime() - today.getTime()) / DAY_MS),
     turning: next.getUTCFullYear() - by,
+    year: next.getUTCFullYear(),
   };
 }
 
-/** The wish shown to the whole company on someone's birthday. */
-export function birthdayWish(name: string): string {
-  return `Happy Birthday, ${name}! 🎂 Wishing you a day full of joy and a year full of success, from all of us in the Aina Family.`;
+export const BIRTHDAY_GIFTS = [
+  { value: "HAMPER", label: "Hamper" },
+  { value: "CAKE", label: "Cake" },
+  { value: "PLANT", label: "Plant" },
+] as const;
+
+export type BirthdayGiftValue = (typeof BIRTHDAY_GIFTS)[number]["value"];
+
+export const giftLabel = (gift: string) => BIRTHDAY_GIFTS.find((g) => g.value === gift)?.label ?? gift;
+
+/** The wish shown to the whole company on someone's birthday, with their gift if an admin chose one. */
+export function birthdayWish(name: string, gift?: string | null): string {
+  const base = `Happy Birthday, ${name}! 🎂 Wishing you a day full of joy and a year full of success, from all of us in the Aina Family.`;
+  return gift ? `${base} 🎁 A ${giftLabel(gift).toLowerCase()} is coming your way!` : base;
 }
