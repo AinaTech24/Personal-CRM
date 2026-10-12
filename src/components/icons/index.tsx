@@ -610,3 +610,13 @@ export function IconSliders(props: IconProps) {
     </svg>
   );
 }
+
+export function IconCake(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 21h16v-7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7Z" />
+      <path d="M4 17c1.5 1.5 2.5 1.5 4 0s2.5-1.5 4 0 2.5 1.5 4 0 2.5-1.5 4 0" />
+      <path d="M12 12V9M12 6.5c-.8-.8-.8-1.8 0-2.8.8 1 .8 2 0 2.8Z" />
+    </svg>
+  );
+}

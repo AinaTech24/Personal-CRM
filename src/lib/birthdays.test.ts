@@ -1,0 +1,43 @@
+import { describe, expect, it } from "vitest";
+import { birthdayDateInYear, birthdayInfo, birthdayWish } from "./birthdays";
+
+describe("birthdayInfo", () => {
+  it("is 0 days away on the birthday itself", () => {
+    expect(birthdayInfo("1995-10-10", "2026-10-10")).toMatchObject({ daysUntil: 0, turning: 31, month: 10, day: 10 });
+  });
+
+  it("counts forward within the year", () => {
+    expect(birthdayInfo("1990-10-15", "2026-10-10").daysUntil).toBe(5);
+  });
+
+  it("wraps to next year once the birthday has passed", () => {
+    const info = birthdayInfo("1990-10-09", "2026-10-10");
+    expect(info.daysUntil).toBe(364);
+    expect(info.turning).toBe(37);
+  });
+
+  it("celebrates Feb 29 birthdays on Feb 28 in non-leap years", () => {
+    expect(birthdayInfo("2000-02-29", "2027-02-28").daysUntil).toBe(0);
+    expect(birthdayInfo("2000-02-29", "2028-02-29").daysUntil).toBe(0);
+  });
+});
+
+describe("gifts", () => {
+  it("reports the year the next birthday falls in", () => {
+    expect(birthdayInfo("1990-10-09", "2026-10-10").year).toBe(2027);
+    expect(birthdayInfo("1990-10-15", "2026-10-10").year).toBe(2026);
+  });
+
+  it("mentions the gift in the wish only when there is one", () => {
+    expect(birthdayWish("Asha", "Amazon voucher")).toContain("Your gift: Amazon voucher!");
+    expect(birthdayWish("Asha")).not.toContain("🎁");
+  });
+});
+
+describe("birthdayDateInYear", () => {
+  it("pads month and day", () => expect(birthdayDateInYear(3, 7, 2026)).toBe("2026-03-07"));
+  it("moves Feb 29 to Feb 28 in a non-leap year", () => {
+    expect(birthdayDateInYear(2, 29, 2027)).toBe("2027-02-28");
+    expect(birthdayDateInYear(2, 29, 2028)).toBe("2028-02-29");
+  });
+});

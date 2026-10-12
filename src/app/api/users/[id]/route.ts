@@ -9,6 +9,16 @@ const patchSchema = z.object({
   role: z.enum(["SUPER_ADMIN", "ADMIN", "DEPARTMENT_USER"]).optional(),
   departmentId: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
+  /** "YYYY-MM-DD", or null to clear. */
+  birthday: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((v) => {
+      const d = new Date(`${v}T00:00:00.000Z`);
+      return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v && d.getTime() <= Date.now();
+    })
+    .nullable()
+    .optional(),
   /** Social Media team membership — not a real company Role, a separate
    *  SocialMediaMember row. "NONE" removes membership entirely. */
   socialMediaRole: z.enum(["NONE", "MEMBER", "ADMIN"]).optional(),
@@ -55,6 +65,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.role !== undefined && { role: data.role }),
       ...(data.departmentId !== undefined && { departmentId: data.departmentId || null }),
       ...(data.isActive !== undefined && { isActive: data.isActive }),
+      ...(data.birthday !== undefined && { birthday: data.birthday ? new Date(`${data.birthday}T00:00:00.000Z`) : null }),
     },
     include: { department: true, socialMediaMembership: { select: { isLead: true } } },
     omit: { passwordHash: true, resetCode: true, resetCodeExpiresAt: true, pinHash: true, pinResetCode: true, pinResetCodeExpiresAt: true },
