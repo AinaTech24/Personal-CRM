@@ -1770,3 +1770,78 @@ model BirthdayGift {
 
   @@unique([userId, year])
 }
+
+// ---------- Website onboarding form ----------
+
+enum OnboardingAttachmentKind {
+  LOGO
+  FOUNDER_DIRECTOR
+  TEAM
+  AWARDS_TESTIMONIALS
+}
+
+/// A client's answers to the public Website Onboarding Form (src/app/onboarding-form).
+/// Anyone with the link can submit one — there's no account behind it, so there's no
+/// relation back to User. Visible only to Admins and the Development department (see
+/// canViewOnboardingSubmissions in src/lib/onboarding.ts).
+model OnboardingSubmission {
+  id String @id @default(cuid())
+
+  fullName     String
+  phone        String
+  email        String
+  companyName  String
+  aboutCompany String @db.Text
+
+  arnNo           String
+  arnRegistration String @db.Text
+  euinNo          String
+  cinNo           String?
+  panNo           String?
+  gstinNo         String?
+
+  grievanceFirstName String?
+  grievanceLastName  String?
+  grievanceEmail     String?
+  grievanceContact   String?
+
+  existingWebsite String?
+  loginLink       String?
+  signupLink      String?
+
+  ourMission String? @db.Text
+  ourVision  String? @db.Text
+  ourPurpose String? @db.Text
+
+  supportPhone String
+  supportEmail String
+
+  addressStreet     String?
+  addressLine2      String?
+  addressCity       String?
+  addressState      String?
+  addressPostalCode String?
+  addressCountry    String? @default("India")
+
+  hostingProvider    String?
+  hostingCredentials String? @db.Text
+
+  attachments OnboardingAttachment[]
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model OnboardingAttachment {
+  id           String               @id @default(cuid())
+  submissionId String
+  submission   OnboardingSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  kind         OnboardingAttachmentKind
+  fileName     String
+  data         String               @db.LongText
+
+  createdAt DateTime @default(now())
+
+  @@index([submissionId])
+}

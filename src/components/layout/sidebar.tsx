@@ -20,6 +20,7 @@ import {
   IconKey,
   IconCake,
   IconCalendar,
+  IconFileSpreadsheet,
 } from "@/components/icons";
 import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -113,6 +114,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/attendance", label: "Attendance", icon: staticNavIcon(IconClock) },
   { href: "/admin/leave", label: "Leave Requests", icon: staticNavIcon(IconCalendar) },
   { href: "/admin/clients", label: "Client Accounts", icon: staticNavIcon(IconBuilding) },
+  { href: "/onboarding-submissions", label: "Onboarding Form", icon: staticNavIcon(IconFileSpreadsheet) },
   { href: "/admin/email", label: "Email (SMTP)", icon: staticNavIcon(IconMail) },
   { href: "/admin/settings", label: "Application", icon: staticNavIcon(IconSettings) },
 ];
@@ -144,6 +146,13 @@ const callsNavItem: NavItem = { href: "/calls", label: "Calls", icon: staticNavI
 
 /** A non-admin CRM lead's own way into the CRM Team console — mirrors teamNavItem above. */
 const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: staticNavIcon(IconUsers) };
+
+/** A non-admin Development-department user's way into the onboarding submissions list — mirrors adminNav's own entry at the same href. */
+const onboardingSubmissionsNavItem: NavItem = {
+  href: "/onboarding-submissions",
+  label: "Onboarding Form",
+  icon: staticNavIcon(IconFileSpreadsheet),
+};
 
 /**
  * One sidebar row. Defined at module scope (not inside Sidebar) so its
@@ -237,6 +246,7 @@ export function Sidebar({
   isSocialMediaLead,
   hasCrmAccess,
   isCrmLead,
+  canViewOnboarding,
   collapsed,
   onToggle,
   /** Rendered inside the mobile drawer: always visible, always expanded. */
@@ -248,6 +258,7 @@ export function Sidebar({
   isSocialMediaLead: boolean;
   hasCrmAccess: boolean;
   isCrmLead: boolean;
+  canViewOnboarding: boolean;
   collapsed: boolean;
   onToggle: () => void;
   mobile?: boolean;
@@ -312,6 +323,12 @@ export function Sidebar({
     const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
     const insertAt = leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1;
     visibleMainNav.splice(insertAt, 0, ...(isCrmLead ? [callsNavItem, crmTeamNavItem] : [callsNavItem]));
+  }
+
+  // Development-department users (not a company admin, who already sees this
+  // via adminNav) get their own way into the onboarding submissions list.
+  if (canViewOnboarding && !isAdmin) {
+    visibleMainNav.push(onboardingSubmissionsNavItem);
   }
 
   // Unread chat messages, for the badge on Messages. Driven by the socket so it

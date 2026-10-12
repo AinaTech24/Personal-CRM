@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { getSocialMembership, isSocialMediaLead, isSocialMediaOnlyUser } from "@/lib/social-media";
 import { getCrmMembership, hasCrmAccess, isCrmLead } from "@/lib/crm-team";
+import { canViewOnboardingSubmissions } from "@/lib/onboarding";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { SocketProvider } from "@/components/providers/socket-provider";
 import { SearchProvider } from "@/components/providers/search-provider";
@@ -27,6 +28,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const crmAccess = !isAdmin(user) && hasCrmAccess(user, crmMembership);
   const crmTeamLead = crmAccess && isCrmLead(user, crmMembership);
 
+  // Same gate as the page itself (src/app/(dashboard)/onboarding-submissions),
+  // minus the admin half — an admin already sees this via adminNav.
+  const canViewOnboarding = !isAdmin(user) && canViewOnboardingSubmissions(user);
+
   return (
     <SocketProvider userId={user.id} departmentId={user.departmentId} isAdmin={isAdmin(user)}>
       <SearchProvider>
@@ -36,6 +41,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           isSocialMediaLead={isTeamLead}
           hasCrmAccess={crmAccess}
           isCrmLead={crmTeamLead}
+          canViewOnboarding={canViewOnboarding}
           userId={user.id}
           name={user.name}
           email={user.email}

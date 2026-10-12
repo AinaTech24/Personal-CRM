@@ -6,6 +6,15 @@ const nextConfig: NextConfig = {
   // dev-only asset/RSC requests whose Origin isn't localhost, which silently
   // breaks hydration/styling for anyone testing from a different machine.
   allowedDevOrigins: ["192.168.29.249"],
+  experimental: {
+    // src/proxy.ts buffers every matched request body in memory up to this
+    // limit — anything over it is silently truncated rather than rejected.
+    // The default (10MB) is too small for the Website Onboarding Form's
+    // several image uploads in one JSON submission (up to ~30MB of raw
+    // attachment bytes, larger again once base64-encoded); raised just
+    // enough to cover that with headroom.
+    proxyClientMaxBodySize: "45mb",
+  },
   async headers() {
     return [
       {

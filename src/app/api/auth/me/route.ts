@@ -16,6 +16,7 @@ export async function GET() {
       surname: user.surname,
       mobile: user.mobile,
       avatarDataUrl: user.avatarDataUrl,
+      birthday: user.birthday,
       role: user.role,
       departmentId: user.departmentId,
       department: user.department,

@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { useToast } from "@/components/providers/toast-provider";
 import { usePushNotifications } from "@/components/providers/use-push-notifications";
+import { birthYearRange } from "@/lib/birthdays";
 import {
   IconBell,
   IconBuildingCog,
@@ -285,6 +287,8 @@ export function SettingsDialog({
   const [surname, setSurname] = useState("");
   const [mobile, setMobile] = useState("");
   const [email, setEmail] = useState("");
+  // "YYYY-MM-DD", or "" for none — same convention as DatePicker/the admin birthday editor.
+  const [birthday, setBirthday] = useState("");
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -340,6 +344,7 @@ export function SettingsDialog({
           setSurname(u.surname ?? "");
           setMobile(u.mobile ?? "");
           setEmail(u.email ?? "");
+          setBirthday(u.birthday ? String(u.birthday).slice(0, 10) : "");
           setAvatarDataUrl(u.avatarDataUrl ?? null);
           setDefaultLandingPage(u.defaultLandingPage ?? "");
           setDensity(u.density === "compact" ? "compact" : "comfortable");
@@ -413,7 +418,7 @@ export function SettingsDialog({
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, surname: surname || null, mobile: mobile || null, avatarDataUrl }),
+        body: JSON.stringify({ name, surname: surname || null, mobile: mobile || null, avatarDataUrl, birthday: birthday || null }),
       });
       const data = await res.json();
       if (!res.ok) return toast.error("Couldn't save profile", data.error);
@@ -696,6 +701,16 @@ export function SettingsDialog({
                         <div className="flex flex-col gap-1.5">
                           <Label htmlFor="set-email">Email (login)</Label>
                           <Input id="set-email" value={email} readOnly disabled className="opacity-70" />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="set-birthday">Date of birth</Label>
+                          <DatePicker
+                            id="set-birthday"
+                            value={birthday}
+                            onChange={setBirthday}
+                            placeholder="Add your birthday"
+                            yearRange={birthYearRange()}
+                          />
                         </div>
                       </div>
                       <Button type="button" onClick={saveProfile} disabled={savingProfile} className="self-start">
