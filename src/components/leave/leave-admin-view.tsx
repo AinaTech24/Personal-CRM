@@ -4,15 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Label } from "@/components/ui/label";
+import { RowActionsMenu } from "@/components/ui/row-actions";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { IconPencil, IconTrash } from "@/components/icons";
 import {
+  CATEGORY_OPTIONS,
   categoryLabel,
   fmtApplied,
   fmtDays,
@@ -37,6 +43,14 @@ export function LeaveAdminView() {
   const [deciding, setDeciding] = useState<{ request: LeaveRequestRow; action: "approve" | "reject" } | null>(null);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<LeaveRequestRow | null>(null);
+  const [editCategory, setEditCategory] = useState("CASUAL");
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+  const [editHalfDay, setEditHalfDay] = useState(false);
+  const [editReason, setEditReason] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingRequest, setDeletingRequest] = useState<LeaveRequestRow | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/leave-requests?scope=all");
@@ -82,6 +96,54 @@ export function LeaveAdminView() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function openEdit(r: LeaveRequestRow) {
+    setEditing(r);
+    setEditCategory(r.category);
+    setEditStart(r.startDate);
+    setEditEnd(r.endDate);
+    setEditHalfDay(r.isHalfDay);
+    setEditReason(r.reason);
+  }
+
+  const editSingleDay = editStart !== "" && editStart === editEnd;
+  const editReady = editStart !== "" && editEnd !== "" && editEnd >= editStart && editReason.trim() !== "";
+
+  async function saveEdit() {
+    if (!editing || !editReady) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/leave-requests/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "edit",
+          category: editCategory,
+          startDate: editStart,
+          endDate: editEnd,
+          isHalfDay: editHalfDay && editSingleDay,
+          reason: editReason,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't save changes", d.error);
+      toast.success("Leave request updated", editing.user.name);
+      setEditing(null);
+      load();
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function confirmDeleteRequest() {
+    if (!deletingRequest) return;
+    const res = await fetch(`/api/leave-requests/${deletingRequest.id}`, { method: "DELETE" });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) toast.error("Couldn't delete the request", d.error);
+    else toast.success("Leave request deleted", deletingRequest.user.name);
+    setDeletingRequest(null);
+    load();
   }
 
   return (
@@ -163,16 +225,33 @@ export function LeaveAdminView() {
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
-                        {r.status === "PENDING" && (
-                          <div className="flex justify-end gap-2">
-                            <Button type="button" size="sm" onClick={() => setDeciding({ request: r, action: "approve" })}>
-                              Approve
-                            </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => setDeciding({ request: r, action: "reject" })}>
-                              Reject
-                            </Button>
-                          </div>
-                        )}
+                        <div className="flex items-center justify-end gap-2">
+                          {r.status === "PENDING" && (
+                            <>
+                              <Button type="button" size="sm" onClick={() => setDeciding({ request: r, action: "approve" })}>
+                                Approve
+                              </Button>
+                              <Button type="button" size="sm" variant="outline" onClick={() => setDeciding({ request: r, action: "reject" })}>
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                          {r.status !== "APPROVED" && (
+                            <RowActionsMenu
+                              label={`Actions for ${r.user.name}'s leave request`}
+                              actions={[
+                                { key: "edit", label: "Edit", icon: <IconPencil className="h-4 w-4" />, onSelect: () => openEdit(r) },
+                                {
+                                  key: "delete",
+                                  label: "Delete",
+                                  icon: <IconTrash className="h-4 w-4" />,
+                                  destructive: true,
+                                  onSelect: () => setDeletingRequest(r),
+                                },
+                              ]}
+                            />
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -214,6 +293,68 @@ export function LeaveAdminView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={editing !== null} onOpenChange={(v) => !v && !savingEdit && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit leave request</DialogTitle>
+            {editing && <DialogDescription>{editing.user.name}</DialogDescription>}
+          </DialogHeader>
+          <DialogBody className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label>Leave type</Label>
+              <Dropdown value={editCategory} onChange={setEditCategory} options={CATEGORY_OPTIONS} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label>Start date</Label>
+                <DatePicker
+                  value={editStart}
+                  clearable={false}
+                  onChange={(v) => {
+                    setEditStart(v);
+                    if (!editEnd || editEnd < v) setEditEnd(v);
+                  }}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>End date</Label>
+                <DatePicker value={editEnd} clearable={false} onChange={setEditEnd} />
+              </div>
+            </div>
+            {editStart && editEnd && editEnd < editStart && (
+              <p className="text-xs text-destructive">End date can&apos;t be before the start date.</p>
+            )}
+            {editSingleDay && (
+              <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
+                <Checkbox checked={editHalfDay} onChange={setEditHalfDay} aria-label="Half day" />
+                Half day only
+              </label>
+            )}
+            <div className="flex flex-col gap-1.5">
+              <Label>Reason</Label>
+              <Textarea value={editReason} onChange={(e) => setEditReason(e.target.value)} rows={3} maxLength={1000} />
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={savingEdit} onClick={() => setEditing(null)}>
+              Cancel
+            </Button>
+            <Button type="button" disabled={!editReady || savingEdit} onClick={saveEdit}>
+              {savingEdit ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={deletingRequest !== null}
+        onOpenChange={(v) => !v && setDeletingRequest(null)}
+        title="Delete this leave request?"
+        description={deletingRequest ? `${deletingRequest.user.name}'s request for ${leaveDatesLabel(deletingRequest.startDate, deletingRequest.endDate)} will be permanently deleted.` : ""}
+        confirmLabel="Delete"
+        onConfirm={confirmDeleteRequest}
+      />
     </div>
   );
 }
