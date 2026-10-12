@@ -32,6 +32,11 @@ export function FormsListView() {
   const router = useRouter();
   const toast = useToast();
   const [rows, setRows] = useState<FormRow[] | null>(null);
+  // Whether the current user can create/edit forms at all — a top-level flag
+  // from the API, not inferred from the rows: with zero forms there's no row
+  // to infer "am I an admin" from, which previously hid the button for anyone
+  // whose first visit found an empty list.
+  const [canCreate, setCanCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -40,7 +45,9 @@ export function FormsListView() {
 
   const load = useCallback(async () => {
     const res = await fetch("/api/forms");
-    setRows(res.ok ? (await res.json()).forms : []);
+    const data = res.ok ? await res.json() : { forms: [], canManage: false };
+    setRows(data.forms ?? []);
+    setCanCreate(!!data.canManage);
   }, []);
 
   useEffect(() => {
@@ -73,8 +80,6 @@ export function FormsListView() {
     load();
   }
 
-  const canCreate = rows?.some((r) => r.canEdit) ?? false;
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -82,7 +87,7 @@ export function FormsListView() {
           <h1 className="text-xl font-semibold">Forms</h1>
           <p className="text-sm text-muted-foreground">Build public forms and review what people submit.</p>
         </div>
-        {(canCreate || rows === null) && (
+        {canCreate && (
           <Button type="button" onClick={() => setCreating(true)}>
             <IconPlus className="h-4 w-4" />
             New Form

@@ -30,6 +30,10 @@ export async function GET() {
     : forms.filter((f) => canViewFormSubmissions(user, f.viewerDepartments.map((v) => v.departmentId)));
 
   return NextResponse.json({
+    // A top-level flag, not just inferred from each row's canEdit — with zero
+    // forms (a brand-new admin) there's no row to infer it from at all, which
+    // previously hid the "New Form" button the moment the empty list loaded.
+    canManage: admin,
     forms: visible.map((f) => ({
       id: f.id,
       title: f.title,
