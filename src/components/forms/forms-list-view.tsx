@@ -13,8 +13,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { RowActionsMenu } from "@/components/ui/row-actions";
 import { useToast } from "@/components/providers/toast-provider";
-import { IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
+import { IconEye, IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
 
 interface FormRow {
   id: string;
@@ -127,21 +128,35 @@ export function FormsListView() {
                       <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{r.submissionCount}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{format(parseISO(r.createdAt), "dd MMM yyyy")}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
-                        <div className="flex justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1">
                           <Button type="button" size="sm" variant="outline" asChild>
                             <Link href={`/forms/${r.id}/submissions`}>Submissions</Link>
                           </Button>
                           {r.canEdit && (
-                            <>
-                              <Button type="button" size="sm" variant="ghost" asChild>
-                                <Link href={`/forms/${r.id}/edit`}>
-                                  <IconPencil className="h-3.5 w-3.5" />
-                                </Link>
-                              </Button>
-                              <Button type="button" size="sm" variant="ghost" onClick={() => setDeleting(r)}>
-                                <IconTrash className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
+                            <RowActionsMenu
+                              label={`Actions for ${r.title}`}
+                              actions={[
+                                {
+                                  key: "view",
+                                  label: "View form",
+                                  icon: <IconEye className="h-4 w-4" />,
+                                  onSelect: () => window.open(`/f/${r.slug}`, "_blank", "noopener,noreferrer"),
+                                },
+                                {
+                                  key: "edit",
+                                  label: "Edit form",
+                                  icon: <IconPencil className="h-4 w-4" />,
+                                  onSelect: () => router.push(`/forms/${r.id}/edit`),
+                                },
+                                {
+                                  key: "delete",
+                                  label: "Delete form",
+                                  icon: <IconTrash className="h-4 w-4" />,
+                                  destructive: true,
+                                  onSelect: () => setDeleting(r),
+                                },
+                              ]}
+                            />
                           )}
                         </div>
                       </td>
