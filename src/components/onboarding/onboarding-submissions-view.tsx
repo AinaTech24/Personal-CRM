@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, DialogDes
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
-import { IconCopy, IconCheck, IconDownload, IconEye, IconFileSpreadsheet, IconPaperclip } from "@/components/icons";
+import { IconCopy, IconCheck, IconDownload, IconExternalLink, IconEye, IconFileSpreadsheet, IconPaperclip } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 interface SubmissionRow {
@@ -132,6 +132,7 @@ export function OnboardingSubmissionsView() {
   const [detail, setDetail] = useState<SubmissionDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
@@ -174,15 +175,21 @@ export function OnboardingSubmissionsView() {
           <h1 className="text-xl font-semibold">Website Onboarding Form</h1>
           <p className="text-sm text-muted-foreground">Submissions from clients filling out the public onboarding form.</p>
         </div>
-        <Button type="button" variant="outline" onClick={copyLink}>
-          <span className="relative flex h-4 w-4 items-center justify-center">
-            <IconCopy className={cn("absolute h-4 w-4 transition-all duration-200", copied ? "scale-50 opacity-0" : "scale-100 opacity-100")} />
-            <IconCheck
-              className={cn("absolute h-4 w-4 text-emerald-500 transition-all duration-200", copied ? "scale-100 opacity-100" : "scale-50 opacity-0")}
-            />
-          </span>
-          {copied ? "Copied" : "Copy form link"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => setPreviewOpen(true)}>
+            <IconExternalLink className="h-4 w-4" />
+            Preview form
+          </Button>
+          <Button type="button" variant="outline" onClick={copyLink}>
+            <span className="relative flex h-4 w-4 items-center justify-center">
+              <IconCopy className={cn("absolute h-4 w-4 transition-all duration-200", copied ? "scale-50 opacity-0" : "scale-100 opacity-100")} />
+              <IconCheck
+                className={cn("absolute h-4 w-4 text-emerald-500 transition-all duration-200", copied ? "scale-100 opacity-100" : "scale-50 opacity-0")}
+              />
+            </span>
+            {copied ? "Copied" : "Copy form link"}
+          </Button>
+        </div>
       </div>
 
       {!rows ? (
@@ -311,6 +318,18 @@ export function OnboardingSubmissionsView() {
                 )}
               </>
             )}
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent size="lg" className="h-[90dvh] max-h-[90dvh]">
+          <DialogHeader>
+            <DialogTitle>Form preview</DialogTitle>
+            <DialogDescription>What a client sees at the public link.</DialogDescription>
+          </DialogHeader>
+          <DialogBody className="p-0">
+            {previewOpen && <iframe src="/onboarding-form" title="Website Onboarding Form preview" className="h-full w-full border-0" />}
           </DialogBody>
         </DialogContent>
       </Dialog>
