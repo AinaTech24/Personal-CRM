@@ -120,3 +120,46 @@ export function mimeTypeFor(fileName: string) {
   const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
   return MIME_TYPES[ext] ?? "application/octet-stream";
 }
+
+// ---------- Base64 data-URL uploads (public, unauthenticated forms) ----------
+//
+// The task-/project-/report-/client-image routes above all take a multipart
+// `File` from an authenticated request. A public form (the Website Onboarding
+// Form, and any form built with the Forms module) has no session to key an
+// upload to, so it submits one JSON body with `data:<mime>;base64,...` strings
+// instead — these helpers validate and decode that shape.
+
+export const MAX_DATA_URL_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5MB per file
+export const MAX_DATA_URL_FILES_PER_FIELD = 8;
+export const MAX_DATA_URL_TOTAL_BYTES = 30 * 1024 * 1024; // 30MB per submission
+
+const ALLOWED_DATA_URL_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+]);
+
+export class AttachmentUploadError extends Error {}
+
+/** Parses a `data:<mime>;base64,<...>` string, validating the MIME type and decoded size. */
+export function parseAttachmentDataUrl(dataUrl: string, fileName: string): { mime: string; base64: string; bytes: number } {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) throw new AttachmentUploadError(`"${fileName}" isn't a valid file upload`);
+  const [, mime, base64] = match;
+  if (!ALLOWED_DATA_URL_MIME_TYPES.has(mime)) {
+    throw new AttachmentUploadError(`"${fileName}" must be an image or PDF`);
+  }
+  // Decoded byte length from a base64 string, without actually allocating the buffer yet.
+  const bytes = Math.floor((base64.length * 3) / 4);
+  if (bytes > MAX_DATA_URL_ATTACHMENT_BYTES) {
+    throw new AttachmentUploadError(`"${fileName}" exceeds the ${MAX_DATA_URL_ATTACHMENT_BYTES / (1024 * 1024)}MB limit`);
+  }
+  return { mime, base64, bytes };
+}
+
+/** Strips anything that isn't safe to carry through as a display file name. */
+export function sanitizeAttachmentFileName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9 ._-]/g, "_").slice(-150) || "file";
+}

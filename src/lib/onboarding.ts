@@ -19,37 +19,14 @@ export function canViewOnboardingSubmissions(user: DepartmentUser): boolean {
   return !!user.department?.name.toLowerCase().includes("development");
 }
 
-export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5MB per file
-export const MAX_FILES_PER_FIELD = 8;
-export const MAX_TOTAL_ATTACHMENT_BYTES = 30 * 1024 * 1024; // 30MB per submission
-
-const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "application/pdf",
-]);
-
-export class OnboardingUploadError extends Error {}
-
-/** Parses a `data:<mime>;base64,<...>` string, validating the MIME type and decoded size. */
-export function parseAttachmentDataUrl(dataUrl: string, fileName: string): { mime: string; base64: string; bytes: number } {
-  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
-  if (!match) throw new OnboardingUploadError(`"${fileName}" isn't a valid file upload`);
-  const [, mime, base64] = match;
-  if (!ALLOWED_ATTACHMENT_MIME_TYPES.has(mime)) {
-    throw new OnboardingUploadError(`"${fileName}" must be an image or PDF`);
-  }
-  // Decoded byte length from a base64 string, without actually allocating the buffer yet.
-  const bytes = Math.floor((base64.length * 3) / 4);
-  if (bytes > MAX_ATTACHMENT_BYTES) {
-    throw new OnboardingUploadError(`"${fileName}" exceeds the ${MAX_ATTACHMENT_BYTES / (1024 * 1024)}MB limit`);
-  }
-  return { mime, base64, bytes };
-}
-
-/** Strips anything that isn't safe to carry through as a display file name. */
-export function sanitizeAttachmentFileName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9 ._-]/g, "_").slice(-150) || "file";
-}
+// The base64 data-URL attachment helpers used to live here — they're shared
+// with the generic Forms module now, so they moved to src/lib/uploads.ts.
+// Re-exported under their old names so nothing else has to change.
+export {
+  MAX_DATA_URL_ATTACHMENT_BYTES as MAX_ATTACHMENT_BYTES,
+  MAX_DATA_URL_FILES_PER_FIELD as MAX_FILES_PER_FIELD,
+  MAX_DATA_URL_TOTAL_BYTES as MAX_TOTAL_ATTACHMENT_BYTES,
+  AttachmentUploadError as OnboardingUploadError,
+  parseAttachmentDataUrl,
+  sanitizeAttachmentFileName,
+} from "@/lib/uploads";
