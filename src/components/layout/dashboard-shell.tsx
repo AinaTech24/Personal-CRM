@@ -20,6 +20,7 @@ export function DashboardShell({
   hasCrmAccess,
   isCrmLead,
   canViewOnboarding,
+  canViewForms,
   userId,
   name,
   email,
@@ -31,6 +32,7 @@ export function DashboardShell({
   hasCrmAccess: boolean;
   isCrmLead: boolean;
   canViewOnboarding: boolean;
+  canViewForms: boolean;
   userId: string;
   name: string;
   email: string;
@@ -85,6 +87,7 @@ export function DashboardShell({
         hasCrmAccess={hasCrmAccess}
         isCrmLead={isCrmLead}
         canViewOnboarding={canViewOnboarding}
+        canViewForms={canViewForms}
         collapsed={collapsed}
         onToggle={toggle}
       />
@@ -114,6 +117,7 @@ export function DashboardShell({
           hasCrmAccess={hasCrmAccess}
           isCrmLead={isCrmLead}
           canViewOnboarding={canViewOnboarding}
+          canViewForms={canViewForms}
           collapsed={false}
           onToggle={() => setMobileOpen(false)}
           mobile

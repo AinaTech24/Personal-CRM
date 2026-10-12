@@ -21,6 +21,7 @@ import {
   IconCake,
   IconCalendar,
   IconFileSpreadsheet,
+  IconLayoutGrid,
 } from "@/components/icons";
 import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -115,6 +116,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/leave", label: "Leave Requests", icon: staticNavIcon(IconCalendar) },
   { href: "/admin/clients", label: "Client Accounts", icon: staticNavIcon(IconBuilding) },
   { href: "/onboarding-submissions", label: "Onboarding Form", icon: staticNavIcon(IconFileSpreadsheet) },
+  { href: "/forms", label: "Forms", icon: staticNavIcon(IconLayoutGrid) },
   { href: "/admin/email", label: "Email (SMTP)", icon: staticNavIcon(IconMail) },
   { href: "/admin/settings", label: "Application", icon: staticNavIcon(IconSettings) },
 ];
@@ -153,6 +155,9 @@ const onboardingSubmissionsNavItem: NavItem = {
   label: "Onboarding Form",
   icon: staticNavIcon(IconFileSpreadsheet),
 };
+
+/** A non-admin user whose department was shared on at least one form — mirrors adminNav's own entry at the same href. */
+const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: staticNavIcon(IconLayoutGrid) };
 
 /**
  * One sidebar row. Defined at module scope (not inside Sidebar) so its
@@ -247,6 +252,7 @@ export function Sidebar({
   hasCrmAccess,
   isCrmLead,
   canViewOnboarding,
+  canViewForms,
   collapsed,
   onToggle,
   /** Rendered inside the mobile drawer: always visible, always expanded. */
@@ -259,6 +265,7 @@ export function Sidebar({
   hasCrmAccess: boolean;
   isCrmLead: boolean;
   canViewOnboarding: boolean;
+  canViewForms: boolean;
   collapsed: boolean;
   onToggle: () => void;
   mobile?: boolean;
@@ -329,6 +336,11 @@ export function Sidebar({
   // via adminNav) get their own way into the onboarding submissions list.
   if (canViewOnboarding && !isAdmin) {
     visibleMainNav.push(onboardingSubmissionsNavItem);
+  }
+
+  // Same idea for the generic Forms module — a department shared on at least one form.
+  if (canViewForms && !isAdmin) {
+    visibleMainNav.push(formsNavItem);
   }
 
   // Unread chat messages, for the badge on Messages. Driven by the socket so it

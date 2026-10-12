@@ -28,6 +28,7 @@ model Department {
   invoices        Invoice[]
   invites         Invite[]
   passwordEntries PasswordEntry[]
+  formViewers     FormViewerDepartment[]
 }
 
 model User {
@@ -105,6 +106,7 @@ model User {
   leaveRequests      LeaveRequest[]     @relation("LeaveRequestUser")
   leaveDecisions     LeaveRequest[]     @relation("LeaveRequestDecider")
   clientsCreated     Client[]           @relation("ClientCreatedBy")
+  formsCreated       Form[]             @relation("FormCreatedBy")
   clientTeamRoles    ClientTeamMember[] @relation("ClientTeamMemberUser")
   birthdayGifts      BirthdayGift[]     @relation("BirthdayGiftFor")
   attendance         Attendance[]       @relation("AttendanceUser")
@@ -1844,4 +1846,122 @@ model OnboardingAttachment {
   createdAt DateTime @default(now())
 
   @@index([submissionId])
+}
+
+// ---------- Forms (generic form builder) ----------
+
+enum FormFieldType {
+  SHORT_TEXT
+  LONG_TEXT
+  EMAIL
+  PHONE
+  NUMBER
+  DATE
+  DROPDOWN
+  RADIO
+  CHECKBOX
+  FILE_SINGLE
+  FILE_MULTI
+  SECTION_HEADING
+}
+
+/// A form an admin built with the drag-and-drop builder (src/app/(dashboard)/forms).
+/// Lives at the public, unauthenticated /f/[slug] — anyone with the link can submit
+/// it, same as the Website Onboarding Form. `slug` is the public URL segment.
+model Form {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  slug        String   @unique
+  isActive    Boolean  @default(true)
+  createdById String
+  createdBy   User     @relation("FormCreatedBy", fields: [createdById], references: [id])
+
+  fields          FormField[]
+  submissions     FormSubmission[]
+  viewerDepartments FormViewerDepartment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Which departments besides Admins may view a given form's submissions —
+/// mirrors the Website Onboarding Form's "Admins + Development" rule, but
+/// configurable per form instead of hard-coded to one department.
+model FormViewerDepartment {
+  id           String     @id @default(cuid())
+  formId       String
+  form         Form       @relation(fields: [formId], references: [id], onDelete: Cascade)
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([formId, departmentId])
+}
+
+model FormField {
+  id          String        @id @default(cuid())
+  formId      String
+  form        Form          @relation(fields: [formId], references: [id], onDelete: Cascade)
+  type        FormFieldType
+  label       String
+  placeholder String?
+  helpText    String?       @db.Text
+  required    Boolean       @default(false)
+  /// Display order within the form — the builder's drag-and-drop reorders this.
+  order       Int
+  /// Pipe-separated choices for DROPDOWN/RADIO/CHECKBOX, e.g. "Red|Green|Blue".
+  options     String?       @db.Text
+
+  answers     FormAnswer[]
+  attachments FormAttachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([formId, order])
+}
+
+/// One person's completed submission of a Form — the answers and attachments
+/// belonging to it are separate rows (one per field) rather than a JSON blob,
+/// so the admin table can be a straightforward join.
+model FormSubmission {
+  id     String @id @default(cuid())
+  formId String
+  form   Form   @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  answers     FormAnswer[]
+  attachments FormAttachment[]
+
+  createdAt DateTime @default(now())
+
+  @@index([formId, createdAt])
+}
+
+model FormAnswer {
+  id           String         @id @default(cuid())
+  submissionId String
+  submission   FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fieldId      String
+  field        FormField      @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  /// The answer as text; a CHECKBOX with multiple selections is pipe-separated,
+  /// same convention as FormField.options.
+  value        String         @db.Text
+
+  @@index([submissionId])
+  @@index([fieldId])
+}
+
+model FormAttachment {
+  id           String         @id @default(cuid())
+  submissionId String
+  submission   FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fieldId      String
+  field        FormField      @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  fileName     String
+  data         String         @db.LongText
+
+  createdAt DateTime @default(now())
+
+  @@index([submissionId])
+  @@index([fieldId])
 }
