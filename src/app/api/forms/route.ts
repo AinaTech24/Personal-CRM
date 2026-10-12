@@ -3,7 +3,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { canManageForms, canViewFormSubmissions, uniqueFormSlug } from "@/lib/forms";
+import { canManageForms, canViewFormSubmissions, isUniqueConstraintError, uniqueFormSlug } from "@/lib/forms";
+import { randomBytes } from "crypto";
+import { slugify } from "@/lib/slug";
 
 /**
  * Admins see every form (to build/edit/delete). A non-admin sees only the
@@ -54,11 +56,22 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const d = parsed.data;
 
-  const slug = await uniqueFormSlug(d.title);
-  const form = await db.form.create({
-    data: { title: d.title, description: d.description || null, slug, createdById: user.id },
-    select: { id: true, slug: true },
-  });
-
-  return NextResponse.json({ form }, { status: 201 });
+  // The slug is checked for a collision up front, but two people creating
+  // same-titled forms at the same instant could still both pass that check
+  // before either write lands — retry once with a guaranteed-random slug
+  // rather than surfacing the database's own unique-constraint error.
+  let slug = await uniqueFormSlug(d.title);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const form = await db.form.create({
+        data: { title: d.title, description: d.description || null, slug, createdById: user.id },
+        select: { id: true, slug: true },
+      });
+      return NextResponse.json({ form }, { status: 201 });
+    } catch (err) {
+      if (!isUniqueConstraintError(err)) throw err;
+      slug = `${slugify(d.title) || "form"}-${randomBytes(3).toString("hex")}`;
+    }
+  }
+  return NextResponse.json({ error: "Couldn't generate a unique link for this form — try again" }, { status: 500 });
 }
