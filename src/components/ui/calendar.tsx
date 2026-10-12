@@ -15,6 +15,7 @@ import {
 import { IconChevronLeft, IconChevronRight } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
+const MONTHS = Array.from({ length: 12 }, (_, i) => format(new Date(2000, i, 1), "MMMM"));
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 /** Visual state for a single day cell, computed by the caller. */
@@ -40,12 +41,18 @@ export function CalendarMonth({
   onPick,
   onHover,
   dayState,
+  yearRange,
 }: {
   viewMonth: Date;
   onViewMonthChange: (d: Date) => void;
   onPick: (day: Date) => void;
   onHover?: (day: Date | null) => void;
   dayState: (day: Date) => DayState;
+  /**
+   * When set, the heading becomes month and year dropdowns so a distant year
+   * (a date of birth) is one pick away instead of dozens of month clicks.
+   */
+  yearRange?: { from: number; to: number };
 }) {
   const gridStart = startOfWeek(startOfMonth(viewMonth));
   const gridEnd = endOfWeek(endOfMonth(viewMonth));
@@ -61,7 +68,36 @@ export function CalendarMonth({
         >
           <IconChevronLeft className="h-3.5 w-3.5" />
         </button>
-        <span className="text-xs font-medium">{format(viewMonth, "MMMM yyyy")}</span>
+        {yearRange ? (
+          <div className="flex items-center gap-1">
+            <select
+              aria-label="Month"
+              value={viewMonth.getMonth()}
+              onChange={(e) => onViewMonthChange(new Date(viewMonth.getFullYear(), Number(e.target.value), 1))}
+              className="h-6 rounded border border-input bg-popover px-1 text-xs font-medium text-popover-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Year"
+              value={viewMonth.getFullYear()}
+              onChange={(e) => onViewMonthChange(new Date(Number(e.target.value), viewMonth.getMonth(), 1))}
+              className="h-6 rounded border border-input bg-popover px-1 text-xs font-medium text-popover-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {Array.from({ length: yearRange.to - yearRange.from + 1 }, (_, i) => yearRange.to - i).map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <span className="text-xs font-medium">{format(viewMonth, "MMMM yyyy")}</span>
+        )}
         <button
           type="button"
           onClick={() => onViewMonthChange(addMonths(viewMonth, 1))}

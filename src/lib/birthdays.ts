@@ -53,6 +53,12 @@ export const BIRTHDAY_GIFTS = ["Hamper", "Cake", "Plant"] as const;
 
 export const MAX_GIFT_LENGTH = 100;
 
+/** Years offered when picking a date of birth: this year back 100 years, newest first. */
+export function birthYearRange(now: Date = new Date()) {
+  const year = now.getFullYear();
+  return { from: year - 100, to: year };
+}
+
 /** The wish shown to the whole company on someone's birthday, with their gift if an admin chose one. */
 export function birthdayWish(name: string, gift?: string | null): string {
   const base = `Happy Birthday, ${name}! 🎂 Wishing you a day full of joy and a year full of success, from all of us in the Aina Family.`;

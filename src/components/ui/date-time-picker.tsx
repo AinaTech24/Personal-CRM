@@ -18,6 +18,8 @@ interface DateTimePickerProps {
   clearable?: boolean;
   onClear?: () => void;
   id?: string;
+  /** Month/year dropdowns in the calendar heading, for far-off dates such as a date of birth. */
+  yearRange?: { from: number; to: number };
 }
 
 export function DateTimePicker({
@@ -29,6 +31,7 @@ export function DateTimePicker({
   clearable = false,
   onClear,
   id,
+  yearRange,
 }: DateTimePickerProps) {
   const [open, setOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState(value ?? new Date());
@@ -105,6 +108,7 @@ export function DateTimePicker({
             viewMonth={viewMonth}
             onViewMonthChange={setViewMonth}
             onPick={pickDay}
+            yearRange={yearRange}
             dayState={(day) => ({ selected: !!value && isSameDay(day, value) })}
           />
           {showTime && (

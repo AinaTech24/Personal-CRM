@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { IconPlus, IconX } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { birthYearRange } from "@/lib/birthdays";
 import { CATEGORIES, type ClientCategory, type ClientRow } from "@/components/clients/clients-shared";
 
 interface PickerUser {
@@ -168,7 +169,12 @@ export function ClientFormDialog({
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Owner birthday</Label>
-                <DatePicker value={form.ownerBirthday} onChange={(v) => set("ownerBirthday", v)} placeholder="Pick a date" />
+                <DatePicker
+                  value={form.ownerBirthday}
+                  onChange={(v) => set("ownerBirthday", v)}
+                  placeholder="Pick a date"
+                  yearRange={birthYearRange()}
+                />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Product start date</Label>
