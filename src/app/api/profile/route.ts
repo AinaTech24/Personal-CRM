@@ -25,6 +25,15 @@ const bodySchema = z.object({
   newPassword: z.string().min(8).optional(),
   currentPin: z.string().optional(),
   newPin: z.string().optional(),
+  birthday: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((v) => {
+      const d = new Date(`${v}T00:00:00.000Z`);
+      return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v && d.getTime() <= Date.now();
+    }, "Enter a valid date of birth")
+    .nullable()
+    .optional(),
   locale: z.string().max(10).optional(),
   defaultLandingPage: z.enum(LANDING_PAGES).nullable().optional(),
   density: z.enum(["comfortable", "compact"]).optional(),
@@ -94,6 +103,7 @@ export async function PUT(req: NextRequest) {
         ...(data.surname !== undefined && { surname: data.surname || null }),
         ...(normalizedMobile !== undefined && { mobile: normalizedMobile }),
         ...(data.avatarDataUrl !== undefined && { avatarDataUrl: data.avatarDataUrl }),
+        ...(data.birthday !== undefined && { birthday: data.birthday ? new Date(`${data.birthday}T00:00:00.000Z`) : null }),
         ...(data.locale !== undefined && { locale: data.locale }),
         ...(data.defaultLandingPage !== undefined && { defaultLandingPage: data.defaultLandingPage }),
         ...(data.density !== undefined && { density: data.density }),
@@ -106,6 +116,7 @@ export async function PUT(req: NextRequest) {
         surname: true,
         mobile: true,
         avatarDataUrl: true,
+        birthday: true,
         email: true,
         timezone: true,
         locale: true,

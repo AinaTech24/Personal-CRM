@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { birthdayDateInYear, birthdayInfo, birthdayWish } from "./birthdays";
+import { birthYearRange, birthdayDateInYear, birthdayInfo, birthdayWish } from "./birthdays";
 
 describe("birthdayInfo", () => {
   it("is 0 days away on the birthday itself", () => {
@@ -39,5 +39,11 @@ describe("birthdayDateInYear", () => {
   it("moves Feb 29 to Feb 28 in a non-leap year", () => {
     expect(birthdayDateInYear(2, 29, 2027)).toBe("2027-02-28");
     expect(birthdayDateInYear(2, 29, 2028)).toBe("2028-02-29");
+  });
+});
+
+describe("birthYearRange", () => {
+  it("spans the last 100 years up to this one", () => {
+    expect(birthYearRange(new Date("2026-10-12"))).toEqual({ from: 1926, to: 2026 });
   });
 });

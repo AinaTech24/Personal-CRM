@@ -10,7 +10,7 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useToast } from "@/components/providers/toast-provider";
 import { GiftHistory } from "@/components/birthdays/gift-history";
-import { BIRTHDAY_GIFTS, MAX_GIFT_LENGTH } from "@/lib/birthdays";
+import { BIRTHDAY_GIFTS, MAX_GIFT_LENGTH, birthYearRange } from "@/lib/birthdays";
 
 interface Row {
   id: string;
@@ -168,6 +168,7 @@ export default function AdminBirthdaysPage() {
                     value={current}
                     onChange={(v) => setDraft((d) => ({ ...d, [r.id]: v }))}
                     placeholder="Add birthday"
+                    yearRange={birthYearRange()}
                     className="w-44"
                   />
                   <Button size="sm" disabled={!dirty || saving === r.id} onClick={() => save(r)}>

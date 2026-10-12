@@ -19,6 +19,7 @@ export function DashboardShell({
   isSocialMediaLead,
   hasCrmAccess,
   isCrmLead,
+  canViewOnboarding,
   userId,
   name,
   email,
@@ -29,6 +30,7 @@ export function DashboardShell({
   isSocialMediaLead: boolean;
   hasCrmAccess: boolean;
   isCrmLead: boolean;
+  canViewOnboarding: boolean;
   userId: string;
   name: string;
   email: string;
@@ -82,6 +84,7 @@ export function DashboardShell({
         isSocialMediaLead={isSocialMediaLead}
         hasCrmAccess={hasCrmAccess}
         isCrmLead={isCrmLead}
+        canViewOnboarding={canViewOnboarding}
         collapsed={collapsed}
         onToggle={toggle}
       />
@@ -110,6 +113,7 @@ export function DashboardShell({
           isSocialMediaLead={isSocialMediaLead}
           hasCrmAccess={hasCrmAccess}
           isCrmLead={isCrmLead}
+          canViewOnboarding={canViewOnboarding}
           collapsed={false}
           onToggle={() => setMobileOpen(false)}
           mobile
