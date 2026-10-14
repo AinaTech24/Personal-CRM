@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
 import { grantLeaveDay, leaveWorkingDays, revokeLeaveDay } from "@/lib/leave";
 import { leaveRequestInclude, serializeLeaveRequest } from "@/lib/leave-requests";
@@ -43,8 +44,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const request = await db.leaveRequest.findUnique({ where: { id } });
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const canManageLeave = isAdmin(user) || (await canManageModule(user, "LEAVE"));
+
   if (action === "edit") {
-    if (!isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!canManageLeave) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const d = parsed.data;
     if (!d.category || !d.startDate || !d.endDate || !d.reason) {
       return NextResponse.json({ error: "Please fill in every field." }, { status: 400 });
@@ -101,7 +104,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (action === "cancel") {
     if (request.userId !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   } else {
-    if (!isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!canManageLeave) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     if (request.userId === user.id) {
       return NextResponse.json({ error: "You can't decide your own leave request." }, { status: 403 });
     }
@@ -155,7 +158,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 /** Admin only. An approved request's attendance stamp is undone first, so nothing is left stuck marked as leave. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "LEAVE")))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
   const request = await db.leaveRequest.findUnique({ where: { id } });

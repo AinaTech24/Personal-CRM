@@ -26,6 +26,7 @@ import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSocket } from "@/components/providers/socket-provider";
+import type { ManagedModule } from "@/lib/module-permissions";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -151,6 +152,24 @@ const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: st
 const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: staticNavIcon(IconLayoutGrid) };
 
 /**
+ * Which adminNav entries an individually-granted module permission (not
+ * company-admin) can unlock, and the module that unlocks each — Leave and
+ * Attendance live under /admin for everyone, so this is how a Support
+ * Executive-style grant reaches them without becoming a full Admin. Tasks,
+ * Meetings, Leads, Projects, Messages already have their own always-visible
+ * top-level nav entry above; Clients is handled separately below since its
+ * non-admin page lives at /clients, not /admin/clients.
+ */
+const MODULE_ADMIN_HREFS: Partial<Record<ManagedModule, string>> = {
+  LEAVE: "/admin/leave",
+  ATTENDANCE: "/admin/attendance",
+  BIRTHDAYS: "/admin/birthdays",
+};
+const ADMIN_HREF_MODULE = new Map<string, ManagedModule>(
+  (Object.entries(MODULE_ADMIN_HREFS) as [ManagedModule, string][]).map(([module, href]) => [href, module])
+);
+
+/**
  * One sidebar row. Defined at module scope (not inside Sidebar) so its
  * identity is stable across renders — a component recreated every render
  * would remount here, losing the very hover state this exists to hold.
@@ -243,6 +262,7 @@ export function Sidebar({
   hasCrmAccess,
   isCrmLead,
   canViewForms,
+  managedModules,
   collapsed,
   onToggle,
   /** Rendered inside the mobile drawer: always visible, always expanded. */
@@ -255,12 +275,14 @@ export function Sidebar({
   hasCrmAccess: boolean;
   isCrmLead: boolean;
   canViewForms: boolean;
+  managedModules: ManagedModule[];
   collapsed: boolean;
   onToggle: () => void;
   mobile?: boolean;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const managedModuleSet = new Set(managedModules);
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingLeave, setPendingLeave] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
@@ -328,6 +350,25 @@ export function Sidebar({
     visibleMainNav.push(formsNavItem);
   }
 
+  // Someone granted the Clients module permission gets the same "Clients" link
+  // a Social Media team member has — unless they already got it above (a
+  // Social Media member who also holds the grant shouldn't see it twice).
+  if (!isAdmin && managedModuleSet.has("CLIENTS") && !visibleMainNav.some((item) => item.href === "/clients")) {
+    const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
+    visibleMainNav.splice(leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1, 0, clientsNavItem);
+  }
+
+  // Leave/Attendance/Birthdays each have an /admin page a module grant can
+  // unlock without making the holder a full Admin — everything else granted
+  // (Tasks, Meetings, Leads, Projects, Messages) already has its own
+  // always-visible top-level nav entry above.
+  const grantedAdminNav = isAdmin
+    ? adminNav
+    : adminNav.filter((item) => {
+        const grantedModule = ADMIN_HREF_MODULE.get(item.href);
+        return !!grantedModule && managedModuleSet.has(grantedModule);
+      });
+
   // Unread chat messages, for the badge on Messages. Driven by the socket so it
   // reacts the moment something arrives; the poll is a backstop for a dropped
   // connection or a read that happened in another tab.
@@ -380,9 +421,12 @@ export function Sidebar({
     return () => clearTimeout(t);
   }, [pathname]);
 
-  // Poll pending attendance so the Attendance item can flag new check-ins. Admin only.
+  const canSeeAttendanceAdmin = isAdmin || managedModuleSet.has("ATTENDANCE");
+  const canSeeLeaveAdmin = isAdmin || managedModuleSet.has("LEAVE");
+
+  // Poll pending attendance so the Attendance item can flag new check-ins.
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canSeeAttendanceAdmin) return;
     let active = true;
     const poll = () =>
       fetch("/api/attendance/pending-count")
@@ -397,11 +441,11 @@ export function Sidebar({
       active = false;
       clearInterval(id);
     };
-  }, [isAdmin]);
+  }, [canSeeAttendanceAdmin]);
 
-  // Same for leave requests waiting on a decision. Admin only.
+  // Same for leave requests waiting on a decision.
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canSeeLeaveAdmin) return;
     let active = true;
     const poll = () =>
       fetch("/api/leave-requests/pending-count")
@@ -418,7 +462,7 @@ export function Sidebar({
       clearInterval(id);
       if (socket) socket.off("leave_request_changed", poll);
     };
-  }, [isAdmin, socket]);
+  }, [canSeeLeaveAdmin, socket]);
 
   // Labels stay in the DOM and fade so the grid width can slide without reflowing.
   const labelClass = cn(
@@ -479,7 +523,7 @@ export function Sidebar({
               );
             })}
 
-        {isAdmin && (
+        {(isAdmin || grantedAdminNav.length > 0) && (
           <>
             <div
               className={cn(
@@ -489,7 +533,7 @@ export function Sidebar({
             >
               Admin
             </div>
-            {adminNav.map((item) => (
+            {grantedAdminNav.map((item) => (
               <NavLinkItem
                 key={item.href}
                 item={item}

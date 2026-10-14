@@ -8,6 +8,7 @@ export type NotificationCategory = "leads" | "tasks" | "projects" | "quotations"
 /** Maps every concrete notification `type` to the user-facing category it's toggled under. */
 const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   lead_assigned: "leads",
+  lead_reminder: "leads",
   task_assigned: "tasks",
   task_comment: "tasks",
   project_assigned: "projects",
@@ -27,7 +28,7 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
 };
 
 export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: string; description: string }[] = [
-  { value: "leads", label: "Leads", description: "When a lead is assigned to you" },
+  { value: "leads", label: "Leads", description: "When a lead is assigned to you, or someone sends a reminder about one" },
   { value: "tasks", label: "Tasks", description: "When a task is assigned to you, gets a new comment, or a reminder you set on it comes due" },
   { value: "projects", label: "Projects", description: "When you're assigned a project, added as a member or supporter, or assigned a project task" },
   { value: "meetings", label: "Meetings", description: "When you're invited to a meeting, or a reminder you set on one comes due" },

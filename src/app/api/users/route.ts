@@ -11,7 +11,11 @@ export async function GET() {
 
   const users = await db.user.findMany({
     orderBy: { createdAt: "desc" },
-    include: { department: true, socialMediaMembership: { select: { isLead: true } } },
+    include: {
+      department: true,
+      socialMediaMembership: { select: { isLead: true } },
+      modulePermissions: { select: { module: true } },
+    },
     // Never ship secrets to the client — not the password hash, and not the
     // reset-code hash or its expiry, which the admin console would otherwise
     // surface as columns. Same for the PIN hash and its own reset code.

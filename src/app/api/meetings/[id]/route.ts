@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 import { combinedTeamScopeFor } from "@/lib/team-scope";
+import { canManageModule } from "@/lib/module-permissions-store";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -28,7 +29,7 @@ const patchSchema = z.object({
  * remove a meeting.
  */
 async function canManage(user: PermissionUser, meetingId: string) {
-  if (isAdmin(user)) return true;
+  if (isAdmin(user) || (await canManageModule(user, "MEETINGS"))) return true;
   const m = await db.meeting.findUnique({
     where: { id: meetingId },
     select: { organizerId: true, attendees: { select: { id: true } } },
@@ -49,7 +50,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const meeting = await db.meeting.findUnique({ where: { id }, include: meetingInclude });
   if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  let visible = isAdmin(user) || meeting.organizer.id === user.id || meeting.attendees.some((a) => a.id === user.id);
+  let visible =
+    isAdmin(user) ||
+    meeting.organizer.id === user.id ||
+    meeting.attendees.some((a) => a.id === user.id) ||
+    (await canManageModule(user, "MEETINGS"));
   if (!visible) {
     const teamUserIds = await combinedTeamScopeFor(user);
     visible =

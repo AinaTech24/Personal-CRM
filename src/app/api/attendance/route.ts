@@ -4,11 +4,14 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { keyFromDate } from "@/lib/attendance";
 import { buildAttendanceWhere } from "@/lib/attendance-query";
+import { canManageModule } from "@/lib/module-permissions-store";
 
-/** Admin: attendance across all users, filterable by user, date range, status, approval, and free-text name/email. */
+/** Admin (or an Attendance module grant): attendance across all users, filterable by user, date range, status, approval, and free-text name/email. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const where = buildAttendanceWhere(req.nextUrl.searchParams);
   const rows = await db.attendance.findMany({

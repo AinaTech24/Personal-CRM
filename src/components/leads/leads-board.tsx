@@ -16,7 +16,7 @@ import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { HorizontalScrollbar } from "@/components/ui/horizontal-scrollbar";
-import { IconPencil, IconTrash } from "@/components/icons";
+import { IconPencil, IconTrash, IconBell } from "@/components/icons";
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog";
 import { LeadDetailDialog } from "@/components/leads/lead-detail-dialog";
 import { LeadsListView } from "@/components/leads/leads-list-view";
@@ -45,6 +45,7 @@ interface CurrentUser {
   id: string;
   role: "SUPER_ADMIN" | "ADMIN" | "DEPARTMENT_USER";
   socialMedia?: { hasAccess: boolean; isLead: boolean };
+  modulePermissions?: string[];
 }
 
 type ViewMode = "pipeline" | "list";
@@ -284,16 +285,29 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
     }
   }
 
+  // A Leads module grant manages/deletes every lead, same as an admin.
+  const hasLeadsGrant = !!currentUser?.modulePermissions?.includes("LEADS");
+  const fullLeadAccess = isAdmin || hasLeadsGrant;
   // Edit is open to the creator and the assignee; deletion to the creator or an
   // admin — matching the API. This only decides what the menu offers.
   const canManageLead = (l: LeadSummary) =>
-    isAdmin || l.createdBy.id === currentUser?.id || l.assignedTo?.id === currentUser?.id;
-  const canDeleteLead = (l: LeadSummary) => isAdmin || l.createdBy.id === currentUser?.id;
+    fullLeadAccess || l.createdBy.id === currentUser?.id || l.assignedTo?.id === currentUser?.id;
+  const canDeleteLead = (l: LeadSummary) => fullLeadAccess || l.createdBy.id === currentUser?.id;
+
+  async function remindLead(lead: LeadSummary) {
+    const res = await fetch(`/api/leads/${lead.id}/remind`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error("Couldn't send the reminder", data.error);
+    toast.success("Reminder sent", lead.name);
+  }
 
   function leadActions(lead: LeadSummary): RowAction[] {
     const actions: RowAction[] = [];
     if (canManageLead(lead)) {
       actions.push({ key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => setSelectedLead(lead) });
+    }
+    if (fullLeadAccess && (lead.assignedTo?.id ?? lead.createdBy.id) !== currentUser?.id) {
+      actions.push({ key: "remind", label: "Send reminder", icon: <IconBell className="h-3.5 w-3.5" />, onSelect: () => remindLead(lead) });
     }
     if (canDeleteLead(lead)) {
       actions.push({

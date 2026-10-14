@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { broadcastTaskChange, canDeleteTask, taskListWhere } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
+import { canManageModule } from "@/lib/module-permissions-store";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -16,8 +17,10 @@ export async function GET(req: NextRequest) {
   const { teamOnly, teamUserIds } = await resolveTeamScope(user, req.nextUrl.searchParams.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const fullAccess = await canManageModule(user, "TASKS");
+
   const tasks = await db.task.findMany({
-    where: taskListWhere(user, teamUserIds, teamOnly),
+    where: taskListWhere(user, teamUserIds, teamOnly, fullAccess),
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },

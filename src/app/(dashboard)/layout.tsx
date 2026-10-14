@@ -4,6 +4,7 @@ import { isAdmin } from "@/lib/permissions";
 import { getSocialMembership, isSocialMediaLead, isSocialMediaOnlyUser } from "@/lib/social-media";
 import { getCrmMembership, hasCrmAccess, isCrmLead } from "@/lib/crm-team";
 import { hasAnyFormAccess } from "@/lib/forms";
+import { getUserModulePermissions } from "@/lib/module-permissions-store";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { SocketProvider } from "@/components/providers/socket-provider";
 import { SearchProvider } from "@/components/providers/search-provider";
@@ -34,6 +35,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // user alone.
   const canViewForms = !isAdmin(user) && (await hasAnyFormAccess(user));
 
+  // Module permissions an admin granted individually — an admin already sees
+  // every module, so this only ever drives a non-admin's extra nav entries.
+  const managedModules = isAdmin(user) ? [] : await getUserModulePermissions(user.id);
+
   return (
     <SocketProvider userId={user.id} departmentId={user.departmentId} isAdmin={isAdmin(user)}>
       <SearchProvider>
@@ -44,6 +49,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           hasCrmAccess={crmAccess}
           isCrmLead={crmTeamLead}
           canViewForms={canViewForms}
+          managedModules={managedModules}
           userId={user.id}
           name={user.name}
           email={user.email}

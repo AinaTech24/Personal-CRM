@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { isAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
@@ -24,7 +25,8 @@ export async function getProjectForUser(user: PermissionUser, projectId: string)
     isAdmin(user) ||
     project.createdById === user.id ||
     isMember ||
-    project.departmentId === user.departmentId;
+    project.departmentId === user.departmentId ||
+    (await canManageModule(user, "PROJECTS"));
 
   if (allowed) return project;
 
@@ -44,11 +46,11 @@ export async function getProjectForUser(user: PermissionUser, projectId: string)
  * their usual `{}` — for the Social Media Team console's Projects tab, a
  * narrower, team-only view regardless of who's looking.
  */
-export function projectListWhere(user: PermissionUser, teamUserIds?: string[] | null, teamOnly?: boolean) {
+export function projectListWhere(user: PermissionUser, teamUserIds?: string[] | null, teamOnly?: boolean, fullAccess?: boolean) {
   if (teamOnly && teamUserIds) {
     return { OR: [{ createdById: { in: teamUserIds } }, { members: { some: { userId: { in: teamUserIds } } } }] };
   }
-  if (isAdmin(user)) return {};
+  if (isAdmin(user) || fullAccess) return {};
   const or: object[] = [
     { departmentId: user.departmentId ?? "__none__" },
     { createdById: user.id },
@@ -70,6 +72,7 @@ export async function canDeleteProject(
   project: { createdById: string; members: { userId: string }[] }
 ) {
   if (isAdmin(user) || project.createdById === user.id) return true;
+  if (await canManageModule(user, "PROJECTS")) return true;
   const teamUserIds = await socialMediaTeamScopeFor(user);
   return !!teamUserIds && isSocialMediaTeamProject(project, teamUserIds);
 }

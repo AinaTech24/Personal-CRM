@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageUsers, isSuperAdmin } from "@/lib/permissions";
+import { canManageModule, setUserModulePermissions } from "@/lib/module-permissions-store";
 import { emitToAdmins } from "@/lib/socket-emit";
 
 const patchSchema = z.object({
@@ -22,6 +23,10 @@ const patchSchema = z.object({
   /** Social Media team membership — not a real company Role, a separate
    *  SocialMediaMember row. "NONE" removes membership entirely. */
   socialMediaRole: z.enum(["NONE", "MEMBER", "ADMIN"]).optional(),
+  /** Full replacement of this user's individually-granted module permissions. */
+  modulePermissions: z
+    .array(z.enum(["LEAVE", "ATTENDANCE", "TASKS", "MEETINGS", "LEADS", "CLIENTS", "BIRTHDAYS", "MESSAGES", "PROJECTS"]))
+    .optional(),
 });
 
 /** Blocks the last remaining active Super Admin from being demoted, blocked, or deleted. */
@@ -34,7 +39,7 @@ async function wouldRemoveLastSuperAdmin(targetId: string) {
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || !canManageUsers(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   const target = await db.user.findUnique({ where: { id } });
@@ -43,6 +48,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const data = parsed.data;
+
+  // Someone holding the Birthdays module grant (not a company admin) may set
+  // only the birthday field — nothing else in this body's keys, so even a
+  // crafted payload can't sneak a role/department/isActive change through.
+  const touchedKeys = Object.keys(data);
+  const isBirthdayOnly = touchedKeys.length > 0 && touchedKeys.every((k) => k === "birthday");
+  const allowed = canManageUsers(user) || (isBirthdayOnly && (await canManageModule(user, "BIRTHDAYS")));
+  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // Only Super Admins may create/modify Super Admin or Admin roles.
   if (data.role !== undefined && !isSuperAdmin(user) && (data.role === "SUPER_ADMIN" || target.role === "SUPER_ADMIN")) {
@@ -67,7 +80,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.isActive !== undefined && { isActive: data.isActive }),
       ...(data.birthday !== undefined && { birthday: data.birthday ? new Date(`${data.birthday}T00:00:00.000Z`) : null }),
     },
-    include: { department: true, socialMediaMembership: { select: { isLead: true } } },
+    include: {
+      department: true,
+      socialMediaMembership: { select: { isLead: true } },
+      modulePermissions: { select: { module: true } },
+    },
     omit: { passwordHash: true, resetCode: true, resetCodeExpiresAt: true, pinHash: true, pinResetCode: true, pinResetCodeExpiresAt: true },
   });
 
@@ -80,15 +97,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       update: { isLead: data.socialMediaRole === "ADMIN" },
     });
   }
-  // Re-read so the response reflects the membership change made just above —
-  // the `updated` object above was fetched before it.
-  const withMembership =
-    data.socialMediaRole !== undefined
-      ? { ...updated, socialMediaMembership: await db.socialMediaMember.findUnique({ where: { userId: id }, select: { isLead: true } }) }
-      : updated;
+  // modulePermissions is a full replacement, always admin-initiated (the
+  // narrower Birthdays-only path above never sets this field).
+  if (data.modulePermissions !== undefined) {
+    await setUserModulePermissions(id, data.modulePermissions);
+  }
+
+  // Re-read so the response reflects the membership/permission changes made
+  // just above — the `updated` object was fetched before either of them.
+  const needsRefresh = data.socialMediaRole !== undefined || data.modulePermissions !== undefined;
+  const withExtras = needsRefresh
+    ? {
+        ...updated,
+        socialMediaMembership: await db.socialMediaMember.findUnique({ where: { userId: id }, select: { isLead: true } }),
+        modulePermissions: await db.userModulePermission.findMany({ where: { userId: id }, select: { module: true } }),
+      }
+    : updated;
 
   emitToAdmins("user_updated", { id: updated.id });
-  return NextResponse.json({ user: withMembership });
+  return NextResponse.json({ user: withExtras });
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

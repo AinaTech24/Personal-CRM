@@ -2,20 +2,22 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { istDateKey, keyFromDate } from "@/lib/attendance";
 import { birthdayInfo, birthdayWish } from "@/lib/birthdays";
 
 /**
  * Everyone's birthday, soonest first. Open to every signed-in user — the whole
  * company sees who's celebrating — but only month/day go out: the birth year
- * (and so the age) is returned to admins alone. The gift an admin picked is a
- * surprise: admins always see it, everyone else only on the day itself.
+ * (and so the age) is returned to admins (and a Birthdays module grant) alone.
+ * The gift an admin picked is a surprise: admins/grant-holders always see it,
+ * everyone else only on the day itself.
  */
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const admin = isAdmin(user);
+  const admin = isAdmin(user) || (await canManageModule(user, "BIRTHDAYS"));
   const todayKey = istDateKey();
 
   const people = await db.user.findMany({

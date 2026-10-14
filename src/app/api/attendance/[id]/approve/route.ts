@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requestDevice } from "@/lib/request-info";
 import { canManageAttendanceFor } from "@/lib/social-media";
 import { canManageCrmAttendanceFor } from "@/lib/crm-team";
+import { canManageModule } from "@/lib/module-permissions-store";
 
 const bodySchema = z.object({
   decision: z.enum(["APPROVED", "REJECTED"]),
@@ -23,7 +24,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const record = await db.attendance.findUnique({ where: { id } });
   if (!record) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!(await canManageAttendanceFor(actor, record.userId)) && !(await canManageCrmAttendanceFor(actor, record.userId))) {
+  if (
+    !(await canManageAttendanceFor(actor, record.userId)) &&
+    !(await canManageCrmAttendanceFor(actor, record.userId)) &&
+    !(await canManageModule(actor, "ATTENDANCE"))
+  ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

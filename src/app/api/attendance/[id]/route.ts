@@ -8,6 +8,7 @@ import { getAttendancePolicy } from "@/lib/attendance-settings";
 import { computeWorkedMinutes, classifyStatus } from "@/lib/attendance";
 import { canManageAttendanceFor } from "@/lib/social-media";
 import { canManageCrmAttendanceFor } from "@/lib/crm-team";
+import { canManageModule } from "@/lib/module-permissions-store";
 
 const bodySchema = z.object({
   // Times as ISO strings, or null to clear. Editing them re-runs classification.
@@ -37,7 +38,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const record = await db.attendance.findUnique({ where: { id } });
   if (!record) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!(await canManageAttendanceFor(actor, record.userId)) && !(await canManageCrmAttendanceFor(actor, record.userId))) {
+  if (
+    !(await canManageAttendanceFor(actor, record.userId)) &&
+    !(await canManageCrmAttendanceFor(actor, record.userId)) &&
+    !(await canManageModule(actor, "ATTENDANCE"))
+  ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
