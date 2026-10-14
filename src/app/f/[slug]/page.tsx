@@ -10,9 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
+import { AttachmentPreview } from "@/components/forms/attachment-preview";
+import { Tooltip } from "@/components/ui/tooltip";
 import { MAX_DATA_URL_ATTACHMENT_BYTES as MAX_ATTACHMENT_BYTES, MAX_DATA_URL_FILES_PER_FIELD as MAX_FILES_PER_FIELD } from "@/lib/uploads";
 import { parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
-import { IconX } from "@/components/icons";
+import { IconHelpCircle, IconX } from "@/components/icons";
 
 interface PickedFile {
   fileName: string;
@@ -90,8 +92,11 @@ function FileInput({
       ) : (
         <div className="flex flex-col gap-1">
           {files.map((f, i) => (
-            <div key={i} className="flex items-center justify-between rounded-md border border-border px-3 py-1.5 text-sm">
-              <span className="truncate">{f.fileName}</span>
+            <div key={i} className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-1.5 text-sm">
+              <span className="flex min-w-0 items-center gap-2 truncate">
+                <AttachmentPreview fileName={f.fileName} src={f.dataUrl} />
+                <span className="truncate">{f.fileName}</span>
+              </span>
               <button
                 type="button"
                 onClick={() => onChange(files.filter((_, idx) => idx !== i))}
@@ -240,10 +245,14 @@ export default function PublicFormPage() {
               </div>
             ) : (
               <div key={field.id} className="flex flex-col gap-1.5">
-                <Label>
+                <Label className="flex items-center gap-1.5">
                   {field.label} {field.required && <span className="text-destructive">*</span>}
+                  {field.helpText && (
+                    <Tooltip label={field.helpText}>
+                      <IconHelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    </Tooltip>
+                  )}
                 </Label>
-                {field.helpText && <p className="text-xs text-muted-foreground">{field.helpText}</p>}
                 <FieldInput field={field} value={answers[field.id]} onChange={(v) => setAnswer(field.id, v)} />
               </div>
             )
