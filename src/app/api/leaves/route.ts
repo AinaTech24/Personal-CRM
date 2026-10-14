@@ -3,10 +3,11 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
 import { grantLeaveDay } from "@/lib/leave";
 
-/** Admins see everyone's leave; a regular user sees only their own. */
+/** Admins (or an Attendance module grant) see everyone's leave; a regular user sees only their own. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");
   const where = {
-    ...(isAdmin(user) ? {} : { userId: user.id }),
+    ...((isAdmin(user) || (await canManageModule(user, "ATTENDANCE"))) ? {} : { userId: user.id }),
     ...(from || to
       ? { date: { ...(from ? { gte: dateFromKey(from) } : {}), ...(to ? { lte: dateFromKey(to) } : {}) } }
       : {}),
@@ -46,12 +47,15 @@ const bodySchema = z.object({
 });
 
 /**
- * Admin: put a user on leave. Full-day leave also stamps that day's attendance
- * as Absent with the reason, so the record reflects it without any check-in.
+ * Admin (or an Attendance module grant): put a user on leave. Full-day leave
+ * also stamps that day's attendance as Absent with the reason, so the record
+ * reflects it without any check-in.
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

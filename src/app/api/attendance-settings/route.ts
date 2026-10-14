@@ -3,12 +3,15 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { DEFAULT_POLICY } from "@/lib/attendance";
 import { parseShifts } from "@/lib/attendance-settings";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const row = await db.attendanceSettings.findUnique({ where: { id: "default" } });
   return NextResponse.json({
@@ -58,7 +61,9 @@ const bodySchema = z
 
 export async function PUT(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

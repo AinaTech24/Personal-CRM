@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { istDateKey, dateFromKey, keyFromDate } from "@/lib/attendance";
 
-/** Admin: per-day team attendance counts for a year, for the overview heatmap. */
+/** Admin (or an Attendance module grant): per-day team attendance counts for a year, for the overview heatmap. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const yearParam = Number(req.nextUrl.searchParams.get("year"));
   const year = Number.isInteger(yearParam) && yearParam > 2000 ? yearParam : Number(istDateKey().slice(0, 4));
