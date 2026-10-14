@@ -1164,7 +1164,8 @@ model AuditLog {
 
   @@index([createdAt])
   @@index([model, recordId])
-  @@index([actorId])
+  @@index([actorId, createdAt])
+  @@index([model, createdAt])
 }
 
 // ---------- Social Media Management ----------
