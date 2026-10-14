@@ -20,7 +20,6 @@ import {
   IconKey,
   IconCake,
   IconCalendar,
-  IconFileSpreadsheet,
   IconLayoutGrid,
 } from "@/components/icons";
 import { LottieIcon } from "@/components/icons/lottie-icon";
@@ -115,7 +114,6 @@ const adminNav: NavItem[] = [
   { href: "/admin/attendance", label: "Attendance", icon: staticNavIcon(IconClock) },
   { href: "/admin/leave", label: "Leave Requests", icon: staticNavIcon(IconCalendar) },
   { href: "/admin/clients", label: "Client Accounts", icon: staticNavIcon(IconBuilding) },
-  { href: "/onboarding-submissions", label: "Onboarding Form", icon: staticNavIcon(IconFileSpreadsheet) },
   { href: "/forms", label: "Forms", icon: staticNavIcon(IconLayoutGrid) },
   { href: "/admin/email", label: "Email (SMTP)", icon: staticNavIcon(IconMail) },
   { href: "/admin/settings", label: "Application", icon: staticNavIcon(IconSettings) },
@@ -148,13 +146,6 @@ const callsNavItem: NavItem = { href: "/calls", label: "Calls", icon: staticNavI
 
 /** A non-admin CRM lead's own way into the CRM Team console — mirrors teamNavItem above. */
 const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: staticNavIcon(IconUsers) };
-
-/** A non-admin Development-department user's way into the onboarding submissions list — mirrors adminNav's own entry at the same href. */
-const onboardingSubmissionsNavItem: NavItem = {
-  href: "/onboarding-submissions",
-  label: "Onboarding Form",
-  icon: staticNavIcon(IconFileSpreadsheet),
-};
 
 /** A non-admin user whose department was shared on at least one form — mirrors adminNav's own entry at the same href. */
 const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: staticNavIcon(IconLayoutGrid) };
@@ -251,7 +242,6 @@ export function Sidebar({
   isSocialMediaLead,
   hasCrmAccess,
   isCrmLead,
-  canViewOnboarding,
   canViewForms,
   collapsed,
   onToggle,
@@ -264,7 +254,6 @@ export function Sidebar({
   isSocialMediaLead: boolean;
   hasCrmAccess: boolean;
   isCrmLead: boolean;
-  canViewOnboarding: boolean;
   canViewForms: boolean;
   collapsed: boolean;
   onToggle: () => void;
@@ -332,13 +321,9 @@ export function Sidebar({
     visibleMainNav.splice(insertAt, 0, ...(isCrmLead ? [callsNavItem, crmTeamNavItem] : [callsNavItem]));
   }
 
-  // Development-department users (not a company admin, who already sees this
-  // via adminNav) get their own way into the onboarding submissions list.
-  if (canViewOnboarding && !isAdmin) {
-    visibleMainNav.push(onboardingSubmissionsNavItem);
-  }
-
-  // Same idea for the generic Forms module — a department shared on at least one form.
+  // A department shared on at least one form (or a department admin) gets
+  // their own way into Forms, not a company admin who already sees this
+  // via adminNav.
   if (canViewForms && !isAdmin) {
     visibleMainNav.push(formsNavItem);
   }

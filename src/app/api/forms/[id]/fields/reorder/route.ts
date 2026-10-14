@@ -9,7 +9,7 @@ const bodySchema = z.object({ fieldIds: z.array(z.string()).min(1) });
 /** Admin only — the builder sends the full field-id order after a drag-and-drop reorder. */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || !canManageForms(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || !(await canManageForms(user))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: formId } = await params;
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

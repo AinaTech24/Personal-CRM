@@ -2,15 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
-import { canManageForms, canViewFormSubmissions, isUniqueConstraintError, uniqueFormSlug } from "@/lib/forms";
+import { canManageForms, isUniqueConstraintError, uniqueFormSlug } from "@/lib/forms";
 import { randomBytes } from "crypto";
 import { slugify } from "@/lib/slug";
 
 /**
- * Admins see every form (to build/edit/delete). A non-admin sees only the
- * forms whose submissions were shared with their department — read-only,
- * for the submissions table.
+ * Admins and department admins (Social Media/CRM leads) see every form (to
+ * build/edit/delete). Anyone else sees only the forms whose submissions were
+ * shared with their department — read-only, for the submissions table.
  */
 export async function GET() {
   const user = await getCurrentUser();
@@ -24,16 +23,16 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  const admin = isAdmin(user);
-  const visible = admin
+  const canManage = await canManageForms(user);
+  const visible = canManage
     ? forms
-    : forms.filter((f) => canViewFormSubmissions(user, f.viewerDepartments.map((v) => v.departmentId)));
+    : forms.filter((f) => user.departmentId && f.viewerDepartments.some((v) => v.departmentId === user.departmentId));
 
   return NextResponse.json({
     // A top-level flag, not just inferred from each row's canEdit — with zero
     // forms (a brand-new admin) there's no row to infer it from at all, which
     // previously hid the "New Form" button the moment the empty list loaded.
-    canManage: admin,
+    canManage,
     forms: visible.map((f) => ({
       id: f.id,
       title: f.title,
@@ -42,7 +41,7 @@ export async function GET() {
       createdAt: f.createdAt,
       fieldCount: f._count.fields,
       submissionCount: f._count.submissions,
-      canEdit: admin,
+      canEdit: canManage,
     })),
   });
 }
@@ -54,7 +53,7 @@ const createSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !canManageForms(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || !(await canManageForms(user))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

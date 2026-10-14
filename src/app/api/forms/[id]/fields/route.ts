@@ -17,7 +17,7 @@ const bodySchema = z.object({
 /** Admin only — appends a new field to the end of the form. */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || !canManageForms(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || !(await canManageForms(user))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: formId } = await params;
   const form = await db.form.findUnique({ where: { id: formId }, select: { id: true } });

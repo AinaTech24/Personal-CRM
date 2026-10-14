@@ -18,7 +18,7 @@ export async function GET(
     include: { viewerDepartments: { select: { departmentId: true } } },
   });
   if (!form) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!canViewFormSubmissions(user, form.viewerDepartments.map((v) => v.departmentId))) {
+  if (!(await canViewFormSubmissions(user, form.viewerDepartments.map((v) => v.departmentId)))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
