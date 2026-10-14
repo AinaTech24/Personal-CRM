@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
-import { grantLeaveDay, leaveWorkingDays } from "@/lib/leave";
+import { grantLeaveDay, leaveWorkingDays, revokeLeaveDay } from "@/lib/leave";
 import { leaveRequestInclude, serializeLeaveRequest } from "@/lib/leave-requests";
 import { notifyAndPush } from "@/lib/notify";
 import { emitToAdmins } from "@/lib/socket-emit";
@@ -25,9 +25,11 @@ const patchSchema = z.object({
 const CATEGORY_LABEL: Record<string, string> = { CASUAL: "Casual", SICK: "Sick", EARNED: "Earned", UNPAID: "Unpaid", OTHER: "Other" };
 
 /**
- * Approve / reject (admins) or cancel (the requester). Only a pending request
- * can be acted on: a decision is final, so two admins can't overwrite each
- * other, and approving can't apply the same days twice.
+ * Approve / reject (admins) or cancel (the requester) a pending request — a
+ * decision is final, so two admins can't overwrite each other and approving
+ * can't apply the same days twice. "edit" is separate: admins can edit any
+ * request regardless of status, and editing an approved one re-syncs its
+ * attendance stamp to the new dates.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -43,12 +45,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (action === "edit") {
     if (!isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    // An approved request already wrote UserLeave/Attendance rows for its
-    // original dates — editing it here wouldn't undo or redo that grant, so
-    // the record and the attendance it produced would quietly disagree.
-    if (request.status === "APPROVED") {
-      return NextResponse.json({ error: "An approved request can't be edited — reject it first if it needs to change." }, { status: 400 });
-    }
     const d = parsed.data;
     if (!d.category || !d.startDate || !d.endDate || !d.reason) {
       return NextResponse.json({ error: "Please fill in every field." }, { status: 400 });
@@ -64,6 +60,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (workingDays.length === 0) {
       return NextResponse.json({ error: "That range has no working days (Sundays and holidays don't count)." }, { status: 400 });
     }
+
+    // An approved request already stamped attendance for its original dates —
+    // clear that stamp and re-apply it for the edited dates/type so the two
+    // never quietly disagree. Revoking everything first (rather than diffing)
+    // also covers a full-day leave shrinking to half-day on the same date.
+    if (request.status === "APPROVED") {
+      const oldDays = await leaveWorkingDays(keyFromDate(request.startDate), keyFromDate(request.endDate));
+      for (const key of oldDays) {
+        await revokeLeaveDay(request.userId, key);
+      }
+      const reason = `${CATEGORY_LABEL[d.category]} leave: ${d.reason}`.slice(0, 300);
+      for (const key of workingDays) {
+        await grantLeaveDay({
+          userId: request.userId,
+          dateKey: key,
+          type: d.isHalfDay ? "HALF_DAY" : "FULL_DAY",
+          reason,
+          actorId: user.id,
+        });
+      }
+    }
+
     const updated = await db.leaveRequest.update({
       where: { id },
       data: {
@@ -134,20 +152,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ request: serializeLeaveRequest(updated) });
 }
 
-/**
- * Admin only. Same reasoning as "edit" above: an approved request already
- * produced attendance records, so deleting it here would leave those
- * orphaned rather than actually undoing the leave — reject it first instead.
- */
+/** Admin only. An approved request's attendance stamp is undone first, so nothing is left stuck marked as leave. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const request = await db.leaveRequest.findUnique({ where: { id }, select: { status: true } });
+  const request = await db.leaveRequest.findUnique({ where: { id } });
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   if (request.status === "APPROVED") {
-    return NextResponse.json({ error: "An approved request can't be deleted — reject it first if it needs to go." }, { status: 400 });
+    const days = await leaveWorkingDays(keyFromDate(request.startDate), keyFromDate(request.endDate));
+    for (const key of days) {
+      await revokeLeaveDay(request.userId, key);
+    }
   }
 
   await db.leaveRequest.delete({ where: { id } });

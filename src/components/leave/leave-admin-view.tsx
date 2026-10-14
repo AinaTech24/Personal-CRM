@@ -236,21 +236,19 @@ export function LeaveAdminView() {
                               </Button>
                             </>
                           )}
-                          {r.status !== "APPROVED" && (
-                            <RowActionsMenu
-                              label={`Actions for ${r.user.name}'s leave request`}
-                              actions={[
-                                { key: "edit", label: "Edit", icon: <IconPencil className="h-4 w-4" />, onSelect: () => openEdit(r) },
-                                {
-                                  key: "delete",
-                                  label: "Delete",
-                                  icon: <IconTrash className="h-4 w-4" />,
-                                  destructive: true,
-                                  onSelect: () => setDeletingRequest(r),
-                                },
-                              ]}
-                            />
-                          )}
+                          <RowActionsMenu
+                            label={`Actions for ${r.user.name}'s leave request`}
+                            actions={[
+                              { key: "edit", label: "Edit", icon: <IconPencil className="h-4 w-4" />, onSelect: () => openEdit(r) },
+                              {
+                                key: "delete",
+                                label: "Delete",
+                                icon: <IconTrash className="h-4 w-4" />,
+                                destructive: true,
+                                onSelect: () => setDeletingRequest(r),
+                              },
+                            ]}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -301,6 +299,11 @@ export function LeaveAdminView() {
             {editing && <DialogDescription>{editing.user.name}</DialogDescription>}
           </DialogHeader>
           <DialogBody className="flex flex-col gap-4">
+            {editing?.status === "APPROVED" && (
+              <p className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+                This request is already approved — saving will update their attendance to match the new dates.
+              </p>
+            )}
             <div className="flex flex-col gap-1.5">
               <Label>Leave type</Label>
               <Dropdown value={editCategory} onChange={setEditCategory} options={CATEGORY_OPTIONS} />
@@ -351,7 +354,12 @@ export function LeaveAdminView() {
         open={deletingRequest !== null}
         onOpenChange={(v) => !v && setDeletingRequest(null)}
         title="Delete this leave request?"
-        description={deletingRequest ? `${deletingRequest.user.name}'s request for ${leaveDatesLabel(deletingRequest.startDate, deletingRequest.endDate)} will be permanently deleted.` : ""}
+        description={
+          deletingRequest
+            ? `${deletingRequest.user.name}'s request for ${leaveDatesLabel(deletingRequest.startDate, deletingRequest.endDate)} will be permanently deleted.` +
+              (deletingRequest.status === "APPROVED" ? " This also removes the leave from their attendance." : "")
+            : ""
+        }
         confirmLabel="Delete"
         onConfirm={confirmDeleteRequest}
       />
