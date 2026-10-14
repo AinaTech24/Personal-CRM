@@ -132,11 +132,23 @@ export async function POST(req: NextRequest) {
   // which sends fine and is dead on arrival.
   const baseUrl = (await getAppUrl()) ?? req.nextUrl.origin;
   const acceptUrl = `${baseUrl}/invite/${token}`;
-  await sendMail({
-    to: email,
-    subject: "You're invited to Aina CRM",
-    html: inviteEmailHtml({ inviterName: user.name, acceptUrl }),
-  });
 
-  return NextResponse.json({ invite: { id: invite.id, email: invite.email } }, { status: 201 });
+  // The invite row above is already committed — a mail-server hiccup (bad
+  // credentials, a blocked port, a timeout) shouldn't make a perfectly valid,
+  // already-created invite look like it failed outright. Report the send
+  // failure instead of throwing, so the admin can still copy and share the
+  // link by hand rather than seeing an opaque 500 for work that mostly worked.
+  let emailSent = true;
+  try {
+    await sendMail({
+      to: email,
+      subject: "You're invited to Aina CRM",
+      html: inviteEmailHtml({ inviterName: user.name, acceptUrl }),
+    });
+  } catch (err) {
+    console.error("[invites] Failed to send invite email", err);
+    emailSent = false;
+  }
+
+  return NextResponse.json({ invite: { id: invite.id, email: invite.email }, emailSent, acceptUrl }, { status: 201 });
 }
