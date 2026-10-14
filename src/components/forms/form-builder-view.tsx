@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { SkeletonForm } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { FIELD_PALETTE, FIELD_TYPE_META, parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
 import {
@@ -32,6 +33,7 @@ import {
   IconExternalLink,
   IconFile,
   IconGrid,
+  IconHelpCircle,
   IconPlus,
   IconTrash,
 } from "@/components/icons";
@@ -219,6 +221,11 @@ function SortableField({
           onChange={(e) => onChange({ label: e.target.value })}
           className="h-8 flex-1 border-transparent bg-transparent px-1.5 font-medium hover:border-input focus-visible:border-input"
         />
+        {field.helpText && (
+          <Tooltip label={field.helpText}>
+            <IconHelpCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </Tooltip>
+        )}
         <Button type="button" size="sm" variant="ghost" onClick={onToggleExpand} aria-label="Field settings">
           <IconChevronDown className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")} />
         </Button>

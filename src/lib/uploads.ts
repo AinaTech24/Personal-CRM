@@ -139,6 +139,13 @@ const ALLOWED_DATA_URL_MIME_TYPES = new Set([
   "image/webp",
   "image/gif",
   "application/pdf",
+  "application/zip",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ]);
 
 export class AttachmentUploadError extends Error {}
@@ -149,7 +156,7 @@ export function parseAttachmentDataUrl(dataUrl: string, fileName: string): { mim
   if (!match) throw new AttachmentUploadError(`"${fileName}" isn't a valid file upload`);
   const [, mime, base64] = match;
   if (!ALLOWED_DATA_URL_MIME_TYPES.has(mime)) {
-    throw new AttachmentUploadError(`"${fileName}" must be an image or PDF`);
+    throw new AttachmentUploadError(`"${fileName}" isn't an accepted file type (image, PDF, Office document, or ZIP)`);
   }
   // Decoded byte length from a base64 string, without actually allocating the buffer yet.
   const bytes = Math.floor((base64.length * 3) / 4);

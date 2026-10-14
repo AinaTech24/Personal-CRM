@@ -67,3 +67,18 @@ export function parseFieldOptions(options: string | null | undefined): string[] 
 export function serializeFieldOptions(options: string[]): string {
   return options.map((s) => s.trim()).filter(Boolean).join("|");
 }
+
+/** What kind of preview an uploaded file gets: a real thumbnail for an image, otherwise a type-appropriate icon. */
+export type AttachmentKind = "image" | "spreadsheet" | "archive" | "file";
+
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
+const SPREADSHEET_EXTENSIONS = new Set(["xls", "xlsx"]);
+const ARCHIVE_EXTENSIONS = new Set(["zip"]);
+
+export function attachmentKindFor(fileName: string): AttachmentKind {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  if (IMAGE_EXTENSIONS.has(ext)) return "image";
+  if (SPREADSHEET_EXTENSIONS.has(ext)) return "spreadsheet";
+  if (ARCHIVE_EXTENSIONS.has(ext)) return "archive";
+  return "file";
+}

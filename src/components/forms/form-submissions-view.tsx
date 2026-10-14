@@ -15,6 +15,7 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
+import { AttachmentPreview } from "@/components/forms/attachment-preview";
 import { parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
 import {
   IconCheck,
@@ -23,7 +24,6 @@ import {
   IconExternalLink,
   IconEye,
   IconFileSpreadsheet,
-  IconPaperclip,
   IconPencil,
   IconTrash,
 } from "@/components/icons";
@@ -356,8 +356,11 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
                         <div className="flex flex-col gap-1">
                           {items.map((a) => (
                             <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-1.5 text-sm">
-                              <span className="flex min-w-0 items-center gap-1.5 truncate">
-                                <IconPaperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <span className="flex min-w-0 items-center gap-2 truncate">
+                                <AttachmentPreview
+                                  fileName={a.fileName}
+                                  src={`/api/forms/${formId}/submissions/${detail.id}/attachments/${a.id}?mode=view`}
+                                />
                                 <span className="truncate">{a.fileName}</span>
                               </span>
                               <span className="flex shrink-0 items-center gap-1">

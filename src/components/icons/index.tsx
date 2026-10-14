@@ -447,6 +447,16 @@ export function IconInfo(props: IconProps) {
   );
 }
 
+export function IconHelpCircle(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 2.2-2.4 3.7" />
+      <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
 export function IconReply(props: IconProps) {
   return (
     <svg {...base(props)}>
@@ -497,6 +507,19 @@ export function IconFile(props: IconProps) {
     <svg {...base(props)}>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
+    </svg>
+  );
+}
+
+export function IconFileZip(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="11" y1="10" x2="13" y2="10" />
+      <line x1="11" y1="13" x2="13" y2="13" />
+      <line x1="11" y1="16" x2="13" y2="16" />
+      <circle cx="12" cy="19" r="1.5" />
     </svg>
   );
 }
