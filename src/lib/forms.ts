@@ -1,7 +1,6 @@
 import { randomBytes } from "crypto";
 import { db } from "@/lib/db";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
-import { slugify } from "@/lib/slug";
 import { getSocialMembership } from "@/lib/social-media";
 import { isSocialMediaLead } from "@/lib/social-media-permissions";
 import { getCrmMembership, isCrmLead } from "@/lib/crm-team";
@@ -27,17 +26,24 @@ export async function hasAnyFormAccess(user: PermissionUser): Promise<boolean> {
   return !!match;
 }
 
+/** Hex characters long enough that a brute-force guess is infeasible, short enough to stay a reasonable URL. */
+export const FORM_SLUG_PATTERN = /^[0-9a-f]{12}$/;
+
 /**
- * A fresh, unique slug for a new form's public URL (/f/<slug>) — collisions
- * (including two people creating same-titled forms at the same moment) get a
- * short random suffix. `Form.slug` is also `@unique` in the schema, so this
- * is a courtesy check for a clean URL, not the only thing enforcing it.
+ * A fresh, unique public URL segment (/f/<slug>) — a random hash, not derived
+ * from the title, so a form's link can't be guessed from its name (an
+ * "Appointment Form" shouldn't be reachable by anyone who thinks to try
+ * /f/appointment-form). `Form.slug` is also `@unique` in the schema, so the
+ * collision check here is about not wasting a round trip on an unlucky
+ * collision, not the only thing enforcing uniqueness.
  */
-export async function uniqueFormSlug(title: string): Promise<string> {
-  const base = slugify(title) || "form";
-  const existing = await db.form.findUnique({ where: { slug: base }, select: { id: true } });
-  if (!existing) return base;
-  return `${base}-${randomBytes(3).toString("hex")}`;
+export async function uniqueFormSlug(): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = randomBytes(6).toString("hex");
+    const existing = await db.form.findUnique({ where: { slug: candidate }, select: { id: true } });
+    if (!existing) return candidate;
+  }
+  throw new Error("Couldn't generate a unique form link — try again");
 }
 
 /** True if a Prisma error is a unique-constraint violation (P2002) — used to retry a slug collision at create time. */
