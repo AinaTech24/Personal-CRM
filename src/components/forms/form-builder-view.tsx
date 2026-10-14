@@ -65,6 +65,22 @@ interface FormDetail {
 
 const DROP_ZONE_ID = "form-canvas";
 
+/**
+ * The canvas's own droppable zone, mounted only while it has no fields yet.
+ * Once fields exist, SortableContext's own items are the drop targets —
+ * having both this wrapper and the sortable items droppable at once let
+ * dnd-kit's collision detection resolve `over` to this container instead of
+ * the specific field being dropped onto, which silently no-opped reordering.
+ */
+function EmptyCanvas() {
+  const { setNodeRef } = useDroppable({ id: DROP_ZONE_ID });
+  return (
+    <div ref={setNodeRef} className="flex flex-1 items-center justify-center py-10 text-center text-sm text-muted-foreground">
+      Drag a field type here, or click one on the left, to start building the form.
+    </div>
+  );
+}
+
 function PaletteItem({ type, onAdd }: { type: FormFieldType; onAdd: () => void }) {
   const meta = FIELD_TYPE_META[type];
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `palette-${type}`, data: { kind: "palette", type } });
@@ -225,7 +241,6 @@ export function FormBuilderView({ formId }: { formId: string }) {
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTitleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { setNodeRef: setDropRef } = useDroppable({ id: DROP_ZONE_ID });
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -399,18 +414,16 @@ export function FormBuilderView({ formId }: { formId: string }) {
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-[14rem_1fr]">
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:self-start md:overflow-y-auto">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">Add a field</p>
             {FIELD_PALETTE.map((type) => (
               <PaletteItem key={type} type={type} onAdd={() => addField(type)} />
             ))}
           </div>
 
-          <div ref={setDropRef} className="flex min-h-40 flex-col gap-2 rounded-lg border border-dashed border-border p-3">
+          <div className="flex min-h-40 flex-col gap-2 rounded-lg border border-dashed border-border p-3">
             {form.fields.length === 0 ? (
-              <div className="flex flex-1 items-center justify-center py-10 text-center text-sm text-muted-foreground">
-                Drag a field type here, or click one on the left, to start building the form.
-              </div>
+              <EmptyCanvas />
             ) : (
               <SortableContext items={form.fields.map((f) => f.id)} strategy={verticalListSortingStrategy}>
                 {form.fields.map((field) => (
