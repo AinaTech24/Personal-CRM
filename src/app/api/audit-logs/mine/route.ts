@@ -15,13 +15,18 @@ export async function GET(req: NextRequest) {
 
   const model = req.nextUrl.searchParams.get("model");
 
-  const logs = await db.auditLog.findMany({
-    where: { actorId: user.id, ...(model ? { model } : {}) },
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
+  try {
+    const logs = await db.auditLog.findMany({
+      where: { actorId: user.id, ...(model ? { model } : {}) },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
 
-  const models = [...new Set(logs.map((l) => l.model))].sort();
+    const models = [...new Set(logs.map((l) => l.model))].sort();
 
-  return NextResponse.json({ logs, models });
+    return NextResponse.json({ logs, models });
+  } catch (err) {
+    console.error("[audit-logs/mine] failed to load:", err);
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to load activity" }, { status: 500 });
+  }
 }
