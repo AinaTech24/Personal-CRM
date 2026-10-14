@@ -132,9 +132,18 @@ async function main() {
         console.log(`[migrate-onboarding] Found existing form "${form.title}" (id: ${form.id}, ${form.fields.length} field(s), ${form._count.submissions} submission(s))`);
       }
 
-      if (form.fields.length === 0) {
-        form.fields = await Promise.all(
-          FIELDS.map((f, order) =>
+      // Tops up whichever of the original fields aren't already on the form —
+      // by label, so a field someone already added by hand (matching the
+      // original form's own label) is never duplicated — rather than an
+      // all-or-nothing "only if it has zero fields" check. That left an
+      // already-started form stuck with only the handful of fields someone
+      // had gotten through so far.
+      const existingLabels = new Set(form.fields.map((f) => f.label));
+      const missing = FIELDS.filter((f) => !existingLabels.has(f.label));
+      if (missing.length > 0) {
+        const startOrder = form.fields.reduce((max, f) => Math.max(max, f.order), -1) + 1;
+        const added = await Promise.all(
+          missing.map((f, i) =>
             tx.formField.create({
               data: {
                 formId: form!.id,
@@ -143,14 +152,15 @@ async function main() {
                 required: f.required ?? false,
                 placeholder: f.placeholder ?? null,
                 options: f.options ?? null,
-                order,
+                order: startOrder + i,
               },
             })
           )
         );
-        console.log(`[migrate-onboarding] Created ${form.fields.length} fields`);
+        form.fields = [...form.fields, ...added];
+        console.log(`[migrate-onboarding] Added ${added.length} missing field(s): ${added.map((f) => f.label).join(", ")}`);
       } else {
-        console.log(`[migrate-onboarding] Form already has fields — leaving them as-is, mapping old answers onto them by label`);
+        console.log(`[migrate-onboarding] Form already has every original field — nothing to add`);
       }
 
       if (form._count.submissions > 0) {
