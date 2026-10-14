@@ -4,15 +4,20 @@ import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { buildPoolConfig } from "../src/lib/mysql-pool-config";
 
 /**
- * One-off, idempotent migration: recreates the hard-coded Website Onboarding
- * Form as a real Form (built the same way an admin would build one, so it's
- * fully editable going forward), and carries over every existing
- * OnboardingSubmission + its attachments as FormSubmission/FormAnswer/
- * FormAttachment rows — nothing submitted by a real client is lost when the
- * old hard-coded module is removed.
+ * One-off migration: makes sure a "Website Onboarding Form" Form exists
+ * (creating it with the original ~30 fields if nothing's there yet — but
+ * leaving an already-existing one's fields alone, since by the time this
+ * first ran someone had already rebuilt it by hand in the new builder), and
+ * carries over every existing OnboardingSubmission + its attachments as
+ * FormSubmission/FormAnswer/FormAttachment rows on THAT form — nothing
+ * submitted by a real client is lost when the old hard-coded module goes
+ * away, regardless of who defined the form's fields.
  *
- * Safe to run more than once: it no-ops entirely if a form with this slug
- * already exists, so it stays harmless if left in the build chain.
+ * Safe to run more than once: skips field creation once the form has any
+ * fields, and skips submission migration once the form has any submissions,
+ * so it stays harmless left in the build chain. A field label from an old
+ * submission that has no matching field on the live form is logged and
+ * skipped rather than aborting the whole run.
  *
  * Deliberately does NOT touch the old OnboardingSubmission/OnboardingAttachment
  * tables beyond reading them — dropping those happens in a separate follow-up
@@ -89,70 +94,74 @@ const FIELDS: FieldSpec[] = [
   { label: "Please provide us credentials of hostinger/godaddy/etc", type: "LONG_TEXT" },
 ];
 
+const ATTACHMENT_FIELD_LABEL: Record<string, string> = {
+  LOGO: "Company Logo",
+  FOUNDER_DIRECTOR: "Founder & Director Images",
+  TEAM: "Team Images",
+  AWARDS_TESTIMONIALS: "Awards & Testimonials",
+};
+
 async function main() {
   const adapter = new PrismaMariaDb(buildPoolConfig(process.env.DATABASE_URL!));
   const prisma = new PrismaClient({ adapter });
 
-  const already = await prisma.form.findUnique({ where: { slug: SLUG }, select: { id: true } });
-  if (already) {
-    console.log(`[migrate-onboarding] "${SLUG}" already exists (id: ${already.id}) — nothing to do.`);
-    await prisma.$disconnect();
-    return;
-  }
-
-  const author = await prisma.user.findFirst({ where: { role: "SUPER_ADMIN" }, orderBy: { createdAt: "asc" } });
-  if (!author) {
-    throw new Error("No SUPER_ADMIN user found to attribute the migrated form to.");
-  }
-
   const submissions = await prisma.onboardingSubmission.findMany({ include: { attachments: true } });
 
-  const ATTACHMENT_FIELD_LABEL: Record<string, string> = {
-    LOGO: "Company Logo",
-    FOUNDER_DIRECTOR: "Founder & Director Images",
-    TEAM: "Team Images",
-    AWARDS_TESTIMONIALS: "Awards & Testimonials",
-  };
-
-  // Everything below is one transaction: a failure partway through (a bad
-  // network blip mid-deploy, say) rolls back entirely rather than leaving a
-  // form that exists — which the idempotency check above would then treat as
-  // "already migrated" on the next run, silently stranding whatever hadn't
-  // been copied yet.
   await prisma.$transaction(
     async (tx) => {
-      const form = await tx.form.create({
-        data: {
-          title: "Website Onboarding Form",
-          description: "Collects a new client's company, compliance, and website details.",
-          slug: SLUG,
-          isActive: true,
-          createdById: author.id,
-        },
+      let form = await tx.form.findUnique({
+        where: { slug: SLUG },
+        include: { fields: true, _count: { select: { submissions: true } } },
       });
-      console.log(`[migrate-onboarding] Created form "${form.title}" (id: ${form.id})`);
 
-      const fieldRows = await Promise.all(
-        FIELDS.map((f, order) =>
-          tx.formField.create({
-            data: {
-              formId: form.id,
-              type: f.type,
-              label: f.label,
-              required: f.required ?? false,
-              placeholder: f.placeholder ?? null,
-              options: f.options ?? null,
-              order,
-            },
-          })
-        )
-      );
-      console.log(`[migrate-onboarding] Created ${fieldRows.length} fields`);
+      if (!form) {
+        const author = await tx.user.findFirst({ where: { role: "SUPER_ADMIN" }, orderBy: { createdAt: "asc" } });
+        if (!author) throw new Error("No SUPER_ADMIN user found to attribute the migrated form to.");
+        const created = await tx.form.create({
+          data: {
+            title: "Website Onboarding Form",
+            description: "Collects a new client's company, compliance, and website details.",
+            slug: SLUG,
+            isActive: true,
+            createdById: author.id,
+          },
+        });
+        console.log(`[migrate-onboarding] Created form "${created.title}" (id: ${created.id})`);
+        form = { ...created, fields: [], _count: { submissions: 0 } };
+      } else {
+        console.log(`[migrate-onboarding] Found existing form "${form.title}" (id: ${form.id}, ${form.fields.length} field(s), ${form._count.submissions} submission(s))`);
+      }
 
-      const fieldIdByLabel = new Map(fieldRows.map((f) => [f.label, f.id]));
+      if (form.fields.length === 0) {
+        form.fields = await Promise.all(
+          FIELDS.map((f, order) =>
+            tx.formField.create({
+              data: {
+                formId: form!.id,
+                type: f.type,
+                label: f.label,
+                required: f.required ?? false,
+                placeholder: f.placeholder ?? null,
+                options: f.options ?? null,
+                order,
+              },
+            })
+          )
+        );
+        console.log(`[migrate-onboarding] Created ${form.fields.length} fields`);
+      } else {
+        console.log(`[migrate-onboarding] Form already has fields — leaving them as-is, mapping old answers onto them by label`);
+      }
+
+      if (form._count.submissions > 0) {
+        console.log(`[migrate-onboarding] Form already has submissions — skipping submission migration (already done).`);
+        return;
+      }
+
+      const fieldIdByLabel = new Map(form.fields.map((f) => [f.label, f.id]));
       const idFor = (label: string) => {
         const id = fieldIdByLabel.get(label);
-        if (!id) throw new Error(`No field seeded for label "${label}"`);
+        if (!id) console.warn(`[migrate-onboarding]   no field on the live form matches "${label}" — skipping that answer`);
         return id;
       };
 
@@ -192,26 +201,24 @@ async function main() {
           { label: "Please provide us credentials of hostinger/godaddy/etc", value: s.hostingCredentials },
         ];
 
+        const answers = textAnswers
+          .filter((a) => a.value && a.value.trim())
+          .map((a) => ({ fieldId: idFor(a.label), value: a.value as string }))
+          .filter((a): a is { fieldId: string; value: string } => !!a.fieldId);
+
+        const attachments = s.attachments
+          .map((a) => ({ fieldId: idFor(ATTACHMENT_FIELD_LABEL[a.kind]), fileName: a.fileName, data: a.data, createdAt: a.createdAt }))
+          .filter((a): a is { fieldId: string; fileName: string; data: string; createdAt: Date } => !!a.fieldId);
+
         await tx.formSubmission.create({
           data: {
-            formId: form.id,
+            formId: form!.id,
             createdAt: s.createdAt,
-            answers: {
-              create: textAnswers
-                .filter((a) => a.value && a.value.trim())
-                .map((a) => ({ fieldId: idFor(a.label), value: a.value as string })),
-            },
-            attachments: {
-              create: s.attachments.map((a) => ({
-                fieldId: idFor(ATTACHMENT_FIELD_LABEL[a.kind]),
-                fileName: a.fileName,
-                data: a.data,
-                createdAt: a.createdAt,
-              })),
-            },
+            answers: { create: answers },
+            attachments: { create: attachments },
           },
         });
-        console.log(`[migrate-onboarding]   migrated submission ${s.id} (${s.attachments.length} attachment(s))`);
+        console.log(`[migrate-onboarding]   migrated submission ${s.id} (${answers.length} answer(s), ${attachments.length}/${s.attachments.length} attachment(s))`);
       }
     },
     { timeout: 60_000 }
