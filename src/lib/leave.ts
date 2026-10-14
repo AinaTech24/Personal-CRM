@@ -73,6 +73,41 @@ export async function grantLeaveDay(opts: {
   return leave;
 }
 
+/**
+ * Undoes grantLeaveDay for one day: removes the UserLeave row and, if the
+ * attendance row it stamped hasn't been touched since (its override reason
+ * still reads "On leave…"), reverts or removes that stamp too. An admin
+ * correction made after the leave was granted is left alone — a later manual
+ * edit wins over an automatic revert.
+ */
+export async function revokeLeaveDay(userId: string, dateKey: string) {
+  const date = dateFromKey(dateKey);
+
+  await db.userLeave.deleteMany({ where: { userId, date } });
+
+  const attendance = await db.attendance.findUnique({ where: { userId_date: { userId, date } } });
+  if (!attendance || !attendance.overrideReason?.startsWith("On leave")) return;
+
+  if (!attendance.checkIn) {
+    // The row only exists because leave stamped it — nothing else to preserve.
+    await db.attendance.delete({ where: { id: attendance.id } });
+    return;
+  }
+
+  await db.attendance.update({
+    where: { id: attendance.id },
+    data: {
+      status: attendance.calculatedStatus,
+      statusOverride: false,
+      overrideReason: null,
+      adminNote: null,
+      approvalStatus: "PENDING",
+      approvedAt: null,
+      approvedById: null,
+    },
+  });
+}
+
 export interface LeaveSummary {
   /** Approved days this calendar year, every category. */
   taken: number;
