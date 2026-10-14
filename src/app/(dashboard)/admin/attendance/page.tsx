@@ -178,9 +178,9 @@ export default function AdminAttendancePage() {
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/attendance/team-year?year=${overviewYear}`)
-      .then((res) => res.json())
+      .then(async (res) => (res.ok ? res.json() : null))
       .then((json) => {
-        if (!cancelled) setTeamYear(json);
+        if (!cancelled && json) setTeamYear(json);
       })
       .catch(() => {});
     return () => {

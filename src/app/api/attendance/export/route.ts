@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { keyFromDate, istDateKey, summarize } from "@/lib/attendance";
 import { STATUS_LABEL, APPROVAL_LABEL, HALF_DAY_REASON_LABEL, formatDuration, formatIstTime } from "@/lib/attendance-ui";
 import { buildAttendanceWhere } from "@/lib/attendance-query";
@@ -23,10 +24,12 @@ function csvCell(value: string | number | null | undefined): string {
   return `"${s.replace(/"/g, '""')}"`;
 }
 
-/** Admin: CSV export of the filtered attendance, same filters as the list view. */
+/** Admin (or an Attendance module grant): CSV export of the filtered attendance, same filters as the list view. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const where = buildAttendanceWhere(req.nextUrl.searchParams);
   const rows = await db.attendance.findMany({

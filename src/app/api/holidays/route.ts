@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
 
 /** Any signed-in user can read holidays — the employee calendar needs them to colour non-working days. */
@@ -19,10 +20,12 @@ const bodySchema = z.object({
   name: z.string().trim().min(1).max(120),
 });
 
-/** Admin adds a holiday. Unique per date — re-adding the same date updates its name. */
+/** Admin (or an Attendance module grant) adds a holiday. Unique per date — re-adding the same date updates its name. */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
