@@ -201,14 +201,19 @@ function MembersTab({ onForbidden }: { onForbidden: () => void }) {
           socialMediaMember: inviteRole === "MEMBER",
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setInviteError(data.error ?? "Something went wrong");
         toast.error("Couldn't send invite", data.error);
         return;
       }
       setInviteOpen(false);
-      toast.success(`Invite sent to ${inviteEmail}`);
+      if (data.emailSent === false) {
+        toast.error("Invite created, but the email couldn't be sent", "Copy the link and share it manually.");
+        if (data.acceptUrl) navigator.clipboard.writeText(data.acceptUrl).catch(() => {});
+      } else {
+        toast.success(`Invite sent to ${inviteEmail}`);
+      }
     } finally {
       setInviteSaving(false);
     }
