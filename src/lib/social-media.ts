@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
 import { canAccessSocialClient, isSocialMediaLead, isSocialMediaOnlyUser, type SocialMembership } from "@/lib/social-media-permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 
 export type { SocialMembership };
 export {
@@ -122,8 +123,9 @@ export async function isRestrictedFromModule(user: PermissionUser): Promise<bool
 export async function getSocialClientForUser(user: PermissionUser, membership: SocialMembership | null, clientId: string) {
   const client = await db.socialClient.findUnique({ where: { id: clientId } });
   if (!client) return null;
-  if (!canAccessSocialClient(user, membership, client)) return "forbidden" as const;
-  return client;
+  if (canAccessSocialClient(user, membership, client)) return client;
+  if (await canManageModule(user, "CLIENTS")) return client;
+  return "forbidden" as const;
 }
 
 /**

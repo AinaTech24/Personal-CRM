@@ -19,7 +19,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { HorizontalScrollbar } from "@/components/ui/horizontal-scrollbar";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
-import { IconPlus, IconClock, IconUsers, IconPencil, IconTrash } from "@/components/icons";
+import { IconPlus, IconClock, IconUsers, IconPencil, IconTrash, IconBell } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +74,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" } = {})
   const [users, setUsers] = useState<MeetingUser[]>([]);
   const [meId, setMeId] = useState<string>("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [hasMeetingsGrant, setHasMeetingsGrant] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   // The dialog stays mounted so it can animate closed, but it seeds its form
@@ -109,6 +110,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" } = {})
       if (meRes.ok) {
         setMeId(meData.user?.id ?? "");
         setIsAdmin(meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN");
+        setHasMeetingsGrant(!!meData.user?.modulePermissions?.includes("MEETINGS"));
       }
     } finally {
       setLoading(false);
@@ -193,21 +195,36 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" } = {})
     setDialogOpen(true);
   }
 
-  // The organiser and admins can manage a meeting; the API enforces the same.
-  const canManageMeeting = (m: Meeting) => isAdmin || m.organizer.id === meId;
+  // The organiser, admins, and a Meetings module grant can manage a meeting;
+  // the API enforces the same.
+  const fullAccess = isAdmin || hasMeetingsGrant;
+  const canManageMeeting = (m: Meeting) => fullAccess || m.organizer.id === meId;
+
+  async function remindMeeting(m: Meeting) {
+    const res = await fetch(`/api/meetings/${m.id}/remind`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error("Couldn't send the reminder", data.error);
+    toast.success("Reminder sent", `${m.title}`);
+  }
 
   function meetingActions(m: Meeting): RowAction[] {
-    if (!canManageMeeting(m)) return [];
-    return [
-      { key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => openMeeting(m) },
-      {
+    const actions: RowAction[] = [];
+    if (canManageMeeting(m)) {
+      actions.push({ key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => openMeeting(m) });
+    }
+    if (fullAccess) {
+      actions.push({ key: "remind", label: "Send reminder", icon: <IconBell className="h-3.5 w-3.5" />, onSelect: () => remindMeeting(m) });
+    }
+    if (canManageMeeting(m)) {
+      actions.push({
         key: "delete",
         label: "Delete",
         icon: <IconTrash className="h-3.5 w-3.5" />,
         destructive: true,
         onSelect: () => setDeleteTarget(m),
-      },
-    ];
+      });
+    }
+    return actions;
   }
 
   async function deleteMeeting(id: string) {
@@ -357,7 +374,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" } = {})
         open={dialogOpen}
         meeting={editing}
         users={users}
-        canManage={!editing || isAdmin || editing.organizer.id === meId}
+        canManage={!editing || fullAccess || editing.organizer.id === meId}
         onClose={() => setDialogOpen(false)}
         onSaved={() => {
           setDialogOpen(false);

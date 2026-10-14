@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { MessageToaster } from "@/components/layout/message-toaster";
+import type { ManagedModule } from "@/lib/module-permissions";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "aina-sidebar-collapsed";
@@ -20,6 +21,7 @@ export function DashboardShell({
   hasCrmAccess,
   isCrmLead,
   canViewForms,
+  managedModules,
   userId,
   name,
   email,
@@ -31,6 +33,7 @@ export function DashboardShell({
   hasCrmAccess: boolean;
   isCrmLead: boolean;
   canViewForms: boolean;
+  managedModules: ManagedModule[];
   userId: string;
   name: string;
   email: string;
@@ -85,6 +88,7 @@ export function DashboardShell({
         hasCrmAccess={hasCrmAccess}
         isCrmLead={isCrmLead}
         canViewForms={canViewForms}
+        managedModules={managedModules}
         collapsed={collapsed}
         onToggle={toggle}
       />
@@ -114,6 +118,7 @@ export function DashboardShell({
           hasCrmAccess={hasCrmAccess}
           isCrmLead={isCrmLead}
           canViewForms={canViewForms}
+        managedModules={managedModules}
           collapsed={false}
           onToggle={() => setMobileOpen(false)}
           mobile

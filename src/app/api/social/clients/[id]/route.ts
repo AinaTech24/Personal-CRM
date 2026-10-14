@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, getSocialClientForUser, isSocialMediaLead, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { notifyAndPush } from "@/lib/notify";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -107,7 +108,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   // Deletion is a lead/admin action — a regular member managing their own
   // client shouldn't be able to erase the whole record (and everything
   // under it, via cascade) on their own.
-  if (!isSocialMediaLead(user, membership)) {
+  if (!isSocialMediaLead(user, membership) && !(await canManageModule(user, "CLIENTS"))) {
     return NextResponse.json({ error: "Only a Social Media lead or admin can delete a client" }, { status: 403 });
   }
 

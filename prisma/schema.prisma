@@ -31,6 +31,36 @@ model Department {
   formViewers     FormViewerDepartment[]
 }
 
+/// A module an admin can individually grant a user full ("admin-equivalent")
+/// manage access to, on top of whatever their role/department would normally
+/// allow — see src/lib/module-permissions.ts.
+enum ManagedModule {
+  LEAVE
+  ATTENDANCE
+  TASKS
+  MEETINGS
+  LEADS
+  CLIENTS
+  BIRTHDAYS
+  MESSAGES
+  PROJECTS
+}
+
+/// Presence of a row grants `module` to `user`, company-wide — the same shape
+/// as SocialMediaMember/CrmMember (one row per grant) but generic across every
+/// module rather than tied to one team. An Admin/Super Admin already has every
+/// module regardless of what's granted here.
+model UserModulePermission {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module    ManagedModule
+  createdAt DateTime      @default(now())
+
+  @@unique([userId, module])
+  @@index([userId])
+}
+
 model User {
   id                    String      @id @default(cuid())
   email                 String      @unique
@@ -123,6 +153,7 @@ model User {
   pushSubscriptions       PushSubscription[]
   auditLogs               AuditLog[]           @relation("AuditActor")
 
+  modulePermissions                UserModulePermission[]
   crmMembership                    CrmMember?
   callsOwned                       Call[]                      @relation("CallOwner")
   callsCreated                     Call[]                      @relation("CallCreatedBy")

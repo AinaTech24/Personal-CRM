@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, hasSocialMediaAccess } from "@/lib/social-media";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { ClientsPageClient } from "@/components/social-media/clients-page";
 
 /**
@@ -16,7 +17,7 @@ export default async function ClientsPage() {
   if (!user) redirect("/login");
 
   const membership = await getSocialMembership(user.id);
-  if (!hasSocialMediaAccess(user, membership)) redirect("/");
+  if (!hasSocialMediaAccess(user, membership) && !(await canManageModule(user, "CLIENTS"))) redirect("/");
 
   return <ClientsPageClient />;
 }

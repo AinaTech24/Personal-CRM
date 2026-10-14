@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { canManageRecord, isAdmin, isSuperAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
@@ -13,6 +14,7 @@ export async function getLeadForUser(user: PermissionUser, leadId: string) {
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   if (!lead) return null;
   if (canManageRecord(user, lead)) return lead;
+  if (await canManageModule(user, "LEADS")) return lead;
 
   const teamUserIds = await socialMediaTeamScopeFor(user);
   if (teamUserIds && isSocialMediaTeamLead(lead, teamUserIds)) return lead;
@@ -21,12 +23,14 @@ export async function getLeadForUser(user: PermissionUser, leadId: string) {
 }
 
 /**
- * Deletion is more sensitive than editing — restrict it to Admins, the
- * lead's creator, and (matching the same widening getLeadForUser applies to
- * editing) a Social Media lead deleting a lead that belongs to their team.
+ * Deletion is more sensitive than editing — restrict it to Admins, a Leads
+ * module grant, the lead's creator, and (matching the same widening
+ * getLeadForUser applies to editing) a Social Media lead deleting a lead
+ * that belongs to their team.
  */
 export async function canDeleteLead(user: PermissionUser, lead: { createdById: string; assignedToId: string | null }) {
   if (isAdmin(user) || lead.createdById === user.id) return true;
+  if (await canManageModule(user, "LEADS")) return true;
   const teamUserIds = await socialMediaTeamScopeFor(user);
   return !!teamUserIds && isSocialMediaTeamLead(lead, teamUserIds);
 }
@@ -47,11 +51,11 @@ export async function canDeleteLead(user: PermissionUser, lead: { createdById: s
  * an Admin, bypassing their usual `{}` — for the Social Media Team console's
  * Leads tab, which is a narrower, team-only view regardless of who's looking.
  */
-export function leadListWhere(user: PermissionUser, teamUserIds?: string[] | null, teamOnly?: boolean) {
+export function leadListWhere(user: PermissionUser, teamUserIds?: string[] | null, teamOnly?: boolean, fullAccess?: boolean) {
   if (teamOnly && teamUserIds) {
     return { OR: [{ assignedToId: { in: teamUserIds } }, { createdById: { in: teamUserIds } }] };
   }
-  if (isSuperAdmin(user) || isAdmin(user)) return {};
+  if (isSuperAdmin(user) || isAdmin(user) || fullAccess) return {};
   const or: object[] = [
     { departmentId: user.departmentId },
     { departmentId: null },

@@ -6,6 +6,7 @@ import { isAdmin } from "@/lib/permissions";
 import { broadcastLeadChange, canDeleteLead, leadListWhere } from "@/lib/leads";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
+import { canManageModule } from "@/lib/module-permissions-store";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -17,8 +18,10 @@ export async function GET(req: NextRequest) {
   const { teamOnly, teamUserIds } = await resolveTeamScope(user, req.nextUrl.searchParams.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const fullAccess = await canManageModule(user, "LEADS");
+
   const leads = await db.lead.findMany({
-    where: leadListWhere(user, teamUserIds, teamOnly),
+    where: leadListWhere(user, teamUserIds, teamOnly, fullAccess),
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },

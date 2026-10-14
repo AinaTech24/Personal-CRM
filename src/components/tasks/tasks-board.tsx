@@ -14,12 +14,13 @@ import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { HorizontalScrollbar } from "@/components/ui/horizontal-scrollbar";
-import { IconPencil, IconTrash } from "@/components/icons";
+import { IconPencil, IconTrash, IconBell } from "@/components/icons";
 import { NewTaskDialog } from "@/components/tasks/new-task-dialog";
 import { TaskDetailDialog } from "@/components/tasks/task-detail-dialog";
 import { TasksListView } from "@/components/tasks/tasks-list-view";
 import { useSearch } from "@/components/providers/search-provider";
 import { useSocket } from "@/components/providers/socket-provider";
+import { useToast } from "@/components/providers/toast-provider";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
 import {
   PRIORITY_OPTIONS,
@@ -50,6 +51,7 @@ const PRIORITY_VARIANT = {
 export function TasksBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
   const tasksUrl = scope ? `/api/tasks?scope=${scope}` : "/api/tasks";
   const { query } = useSearch();
+  const toast = useToast();
   const { socket } = useSocket();
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
@@ -57,6 +59,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
   const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string | undefined>(undefined);
+  const [hasTasksGrant, setHasTasksGrant] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TaskSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,6 +102,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
         setCurrentUserAvatar(meData.user?.avatarDataUrl ?? null);
         setCurrentUserId(meData.user?.id ?? null);
         setCurrentUserRole(meData.user?.role);
+        setHasTasksGrant(!!meData.user?.modulePermissions?.includes("TASKS"));
       }
     } finally {
       setLoading(false);
@@ -240,16 +244,28 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
   }
 
   const isAdmin = currentUserRole === "SUPER_ADMIN" || currentUserRole === "ADMIN";
+  // A Tasks module grant manages/deletes every task, same as an admin.
+  const fullAccess = isAdmin || hasTasksGrant;
   // Edit is open to the creator and the assignee; deletion is narrower — the
   // creator or an admin. Mirrors the API's own checks; this only decides the UI.
   const canManage = (t: TaskSummary) =>
-    isAdmin || t.createdBy.id === currentUserId || t.assignedTo?.id === currentUserId;
-  const canDelete = (t: TaskSummary) => isAdmin || t.createdBy.id === currentUserId;
+    fullAccess || t.createdBy.id === currentUserId || t.assignedTo?.id === currentUserId;
+  const canDelete = (t: TaskSummary) => fullAccess || t.createdBy.id === currentUserId;
+
+  async function remindTask(task: TaskSummary) {
+    const res = await fetch(`/api/tasks/${task.id}/remind`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error("Couldn't send the reminder", data.error);
+    toast.success("Reminder sent", task.assignedTo?.name);
+  }
 
   function taskActions(task: TaskSummary): RowAction[] {
     const actions: RowAction[] = [];
     if (canManage(task)) {
       actions.push({ key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => setSelectedTask(task) });
+    }
+    if (fullAccess && task.assignedTo && task.assignedTo.id !== currentUserId) {
+      actions.push({ key: "remind", label: "Send reminder", icon: <IconBell className="h-3.5 w-3.5" />, onSelect: () => remindTask(task) });
     }
     if (canDelete(task)) {
       actions.push({

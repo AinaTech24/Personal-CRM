@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { dateFromKey, istDateKey } from "@/lib/attendance";
 import { leaveSummary, leaveWorkingDays } from "@/lib/leave";
 import { leaveRequestInclude, serializeLeaveRequest } from "@/lib/leave-requests";
@@ -21,7 +22,9 @@ export async function GET(req: NextRequest) {
 
   const params = req.nextUrl.searchParams;
   if (params.get("scope") === "all") {
-    if (!isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!isAdmin(user) && !(await canManageModule(user, "LEAVE"))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     const status = STATUSES.find((s) => s === params.get("status"));
     const rows = await db.leaveRequest.findMany({
       where: status ? { status } : {},

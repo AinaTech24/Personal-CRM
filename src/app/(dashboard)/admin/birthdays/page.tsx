@@ -46,7 +46,7 @@ export default function AdminBirthdaysPage() {
   const [historyKey, setHistoryKey] = useState(0);
 
   const load = useCallback(async () => {
-    const [usersRes, birthdaysRes] = await Promise.all([fetch("/api/users"), fetch("/api/birthdays")]);
+    const [usersRes, birthdaysRes] = await Promise.all([fetch("/api/birthdays/roster"), fetch("/api/birthdays")]);
     if (!usersRes.ok) return setRows([]);
     setRows(((await usersRes.json()).users as Row[]).filter((u) => u.isActive));
     if (birthdaysRes.ok) {

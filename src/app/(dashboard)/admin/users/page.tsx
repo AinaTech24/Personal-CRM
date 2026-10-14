@@ -17,10 +17,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import { IconSend, IconPencil, IconTrash, IconX, IconCheck, IconKey } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { useSocket } from "@/components/providers/socket-provider";
+import { MODULE_LABEL, type ManagedModule } from "@/lib/module-permissions";
 import { cn } from "@/lib/utils";
+
+const MODULE_OPTIONS = Object.entries(MODULE_LABEL) as [ManagedModule, string][];
 
 const ROLE_OPTIONS = [
   { value: "DEPARTMENT_USER", label: "Department User" },
@@ -62,6 +66,7 @@ interface UserRow {
   isActive: boolean;
   department: { id: string; name: string } | null;
   socialMediaMembership: { isLead: boolean } | null;
+  modulePermissions: { module: ManagedModule }[];
 }
 
 const SOCIAL_MEDIA_ROLE_OPTIONS = [
@@ -105,6 +110,7 @@ export default function UsersPage() {
   const [editRole, setEditRole] = useState("DEPARTMENT_USER");
   const [editDept, setEditDept] = useState("");
   const [editSocialMediaRole, setEditSocialMediaRole] = useState("NONE");
+  const [editModules, setEditModules] = useState<Set<ManagedModule>>(new Set());
   const [editSaving, setEditSaving] = useState(false);
 
   // Delete confirm state
@@ -192,6 +198,16 @@ export default function UsersPage() {
     setEditRole(u.role);
     setEditDept(u.department?.id ?? "");
     setEditSocialMediaRole(socialMediaRoleOf(u));
+    setEditModules(new Set(u.modulePermissions.map((m) => m.module)));
+  }
+
+  function toggleEditModule(module: ManagedModule) {
+    setEditModules((prev) => {
+      const next = new Set(prev);
+      if (next.has(module)) next.delete(module);
+      else next.add(module);
+      return next;
+    });
   }
 
   async function saveEdit() {
@@ -201,7 +217,12 @@ export default function UsersPage() {
       const res = await fetch(`/api/users/${editUser.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: editRole, departmentId: editDept || null, socialMediaRole: editSocialMediaRole }),
+        body: JSON.stringify({
+          role: editRole,
+          departmentId: editDept || null,
+          socialMediaRole: editSocialMediaRole,
+          modulePermissions: Array.from(editModules),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -479,6 +500,21 @@ export default function UsersPage() {
                   onChange={setEditSocialMediaRole}
                   options={SOCIAL_MEDIA_ROLE_OPTIONS}
                 />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Module permissions</Label>
+                <p className="text-xs text-muted-foreground">
+                  Full manage access to each module checked below — on top of whatever their role and department
+                  already allow. An Admin already has every module regardless of this.
+                </p>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-md border border-border p-3">
+                  {MODULE_OPTIONS.map(([module, label]) => (
+                    <label key={module} className="flex cursor-pointer items-center gap-2 text-sm">
+                      <Checkbox checked={editModules.has(module)} onChange={() => toggleEditModule(module)} aria-label={label} />
+                      {label}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
           </DialogBody>

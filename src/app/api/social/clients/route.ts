@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, hasSocialMediaAccess, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
 import { socialClientListWhere } from "@/lib/social-media-permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { notifyAndPush } from "@/lib/notify";
 
 export async function GET() {
@@ -11,10 +12,12 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const membership = await getSocialMembership(user.id);
-  if (!hasSocialMediaAccess(user, membership)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const clientsGrant = await canManageModule(user, "CLIENTS");
+  if (!hasSocialMediaAccess(user, membership) && !clientsGrant) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const clients = await db.socialClient.findMany({
-    where: socialClientListWhere(user, membership),
+    // A Clients module grant sees and manages every client, same as a lead.
+    where: clientsGrant ? {} : socialClientListWhere(user, membership),
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
@@ -41,7 +44,9 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const membership = await getSocialMembership(user.id);
-  if (!hasSocialMediaAccess(user, membership)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!hasSocialMediaAccess(user, membership) && !(await canManageModule(user, "CLIENTS"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

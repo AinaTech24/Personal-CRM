@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { addUserToAinaFamily, emitToMembers, postSystemMessage } from "@/lib/chat";
 
 // Enough for the in-chat "Info" card — you already share a conversation with them.
@@ -116,7 +117,9 @@ export async function POST(req: NextRequest) {
   const d = parsed.data;
 
   if (d.type === "GROUP") {
-    if (!isAdmin(user)) return NextResponse.json({ error: "Only admins can create groups" }, { status: 403 });
+    if (!isAdmin(user) && !(await canManageModule(user, "MESSAGES"))) {
+      return NextResponse.json({ error: "Only admins can create groups" }, { status: 403 });
+    }
     const memberIds = [...new Set([...d.memberIds, user.id])];
     const conv = await db.conversation.create({
       data: {

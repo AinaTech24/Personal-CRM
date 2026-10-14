@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
+import { canManageModule } from "@/lib/module-permissions-store";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
     if (teamUserIds && teamUserIds.length > 0) {
       or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
     }
-    where = isAdmin(user) ? {} : { OR: or };
+    where = isAdmin(user) || (await canManageModule(user, "MEETINGS")) ? {} : { OR: or };
   }
 
   const meetings = await db.meeting.findMany({
