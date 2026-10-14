@@ -3,7 +3,7 @@ import { jwtVerify } from "jose";
 
 const SESSION_COOKIE = "aina_session";
 
-const PUBLIC_PATHS = ["/login", "/invite", "/onboarding-form", "/f"];
+const PUBLIC_PATHS = ["/login", "/invite", "/f"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

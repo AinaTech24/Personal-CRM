@@ -11,7 +11,7 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
   const { id } = await params;
   const form = await db.form.findUnique({ where: { id }, include: { viewerDepartments: { select: { departmentId: true } } } });
   if (!form) redirect("/forms");
-  if (!canViewFormSubmissions(user, form.viewerDepartments.map((v) => v.departmentId))) redirect("/forms");
+  if (!(await canViewFormSubmissions(user, form.viewerDepartments.map((v) => v.departmentId)))) redirect("/forms");
 
   return <FormSubmissionsView formId={id} />;
 }

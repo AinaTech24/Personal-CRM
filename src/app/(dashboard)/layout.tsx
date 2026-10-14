@@ -3,7 +3,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { getSocialMembership, isSocialMediaLead, isSocialMediaOnlyUser } from "@/lib/social-media";
 import { getCrmMembership, hasCrmAccess, isCrmLead } from "@/lib/crm-team";
-import { canViewOnboardingSubmissions } from "@/lib/onboarding";
 import { hasAnyFormAccess } from "@/lib/forms";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { SocketProvider } from "@/components/providers/socket-provider";
@@ -29,11 +28,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const crmAccess = !isAdmin(user) && hasCrmAccess(user, crmMembership);
   const crmTeamLead = crmAccess && isCrmLead(user, crmMembership);
 
-  // Same gate as the page itself (src/app/(dashboard)/onboarding-submissions),
-  // minus the admin half — an admin already sees this via adminNav.
-  const canViewOnboarding = !isAdmin(user) && canViewOnboardingSubmissions(user);
-  // Same idea for the generic Forms module — checked at the DB since viewer
-  // departments are per-form, not derivable from the user alone.
+  // Same gate as the page itself (src/app/(dashboard)/forms), minus the admin
+  // half — an admin already sees this via adminNav. Checked at the DB since
+  // viewer departments (and department-admin leads) aren't derivable from the
+  // user alone.
   const canViewForms = !isAdmin(user) && (await hasAnyFormAccess(user));
 
   return (
@@ -45,7 +43,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
           isSocialMediaLead={isTeamLead}
           hasCrmAccess={crmAccess}
           isCrmLead={crmTeamLead}
-          canViewOnboarding={canViewOnboarding}
           canViewForms={canViewForms}
           userId={user.id}
           name={user.name}

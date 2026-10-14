@@ -6,7 +6,7 @@ import { FormBuilderView } from "@/components/forms/form-builder-view";
 export default async function FormBuilderPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canManageForms(user)) redirect("/forms");
+  if (!(await canManageForms(user))) redirect("/forms");
 
   const { id } = await params;
   return <FormBuilderView formId={id} />;

@@ -2,21 +2,26 @@ import { randomBytes } from "crypto";
 import { db } from "@/lib/db";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { slugify } from "@/lib/slug";
+import { getSocialMembership } from "@/lib/social-media";
+import { isSocialMediaLead } from "@/lib/social-media-permissions";
+import { getCrmMembership, isCrmLead } from "@/lib/crm-team";
 
-/** Building/editing/deleting forms, and seeing every form that exists. */
-export function canManageForms(user: PermissionUser): boolean {
-  return isAdmin(user);
+/** Company Admins/Super Admins, plus "department admins" — a Social Media or CRM team lead — can build/edit/delete any form and see every form that exists. */
+export async function canManageForms(user: PermissionUser): Promise<boolean> {
+  if (isAdmin(user)) return true;
+  const [socialMembership, crmMembership] = await Promise.all([getSocialMembership(user.id), getCrmMembership(user.id)]);
+  return isSocialMediaLead(user, socialMembership) || isCrmLead(user, crmMembership);
 }
 
-/** Viewing one specific form's submissions — admins, plus whichever departments that form was shared with. */
-export function canViewFormSubmissions(user: PermissionUser, viewerDepartmentIds: string[]): boolean {
-  if (isAdmin(user)) return true;
+/** Viewing one specific form's submissions — admins and department admins (see canManageForms), plus whichever departments that form was shared with. */
+export async function canViewFormSubmissions(user: PermissionUser, viewerDepartmentIds: string[]): Promise<boolean> {
+  if (await canManageForms(user)) return true;
   return !!user.departmentId && viewerDepartmentIds.includes(user.departmentId);
 }
 
-/** Whether this non-admin user's department was shared on at least one form — gates the /forms page and its sidebar link for them. Admins always pass without needing this. */
+/** Whether this non-admin user's department was shared on at least one form — gates the /forms page and its sidebar link for them. Admins and department admins always pass without needing this. */
 export async function hasAnyFormAccess(user: PermissionUser): Promise<boolean> {
-  if (isAdmin(user)) return true;
+  if (await canManageForms(user)) return true;
   if (!user.departmentId) return false;
   const match = await db.formViewerDepartment.findFirst({ where: { departmentId: user.departmentId }, select: { id: true } });
   return !!match;
