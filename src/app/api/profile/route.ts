@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { isValidMobile, isValidPin, normalizeMobile } from "@/lib/credentials";
+import { isAdmin } from "@/lib/permissions";
 
 const MAX_AVATAR = 1_500_000;
 
@@ -46,6 +47,19 @@ export async function PUT(req: NextRequest) {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const data = parsed.data;
+
+  // A birthday can be set once, self-service — changing (or clearing) it
+  // afterward needs an admin (see PATCH /api/users/[id]), so a wrong entry
+  // can't just be quietly edited away. The Settings form always resubmits
+  // whatever the date picker currently shows along with every other profile
+  // field, so this only blocks an actual change, not an unrelated save that
+  // happens to carry the same already-stored value along with it.
+  if (data.birthday !== undefined && user.birthday && !isAdmin(user)) {
+    const current = user.birthday.toISOString().slice(0, 10);
+    if (data.birthday !== current) {
+      return NextResponse.json({ error: "Your birthday is already set. Ask an admin to change it." }, { status: 403 });
+    }
+  }
 
   // Password change requires the current password.
   let passwordHash: string | undefined;

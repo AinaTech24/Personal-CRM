@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useToast } from "@/components/providers/toast-provider";
@@ -210,11 +210,10 @@ function PermissionManager() {
                             <td className="whitespace-nowrap px-2 py-2.5 font-medium">{MODULE_LABEL[module]}</td>
                             {MODULE_ACTIONS.map((action) => (
                               <td key={action} className="px-2 py-2.5 text-center">
-                                <Checkbox
+                                <ToggleSwitch
                                   checked={flags[FLAG_KEY[action]]}
                                   onChange={() => toggle(module, action)}
-                                  aria-label={`${MODULE_ACTION_LABEL[action]} ${MODULE_LABEL[module]}`}
-                                  className="mx-auto"
+                                  label={`${MODULE_ACTION_LABEL[action]} ${MODULE_LABEL[module]}`}
                                 />
                               </td>
                             ))}

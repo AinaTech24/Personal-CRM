@@ -53,5 +53,5 @@ export async function GET() {
     })
     .sort((a, b) => a.daysUntil - b.daysUntil || a.name.localeCompare(b.name));
 
-  return NextResponse.json({ todayKey, birthdays });
+  return NextResponse.json({ todayKey, birthdays, canManageGifts: admin });
 }
