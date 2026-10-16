@@ -30,12 +30,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const user = await db.user.findUnique({ where: { email } });
-    if (!user || !user.isActive) {
-      return NextResponse.json({ error: "No active account found with that email" }, { status: 404 });
+    if (user && user.isActive) {
+      await issuePasswordResetCode(user);
     }
 
-    await issuePasswordResetCode(user);
-
+    // Same response whether or not the account exists (or is active) — a
+    // 404 here would let anyone probe which emails are registered.
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[api/auth/forgot] failed:", err);

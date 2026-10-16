@@ -149,8 +149,12 @@ export async function getTeamDetail(id: string) {
   });
 }
 
+/** A disabled team's membership reads as absent here too — matching getTeamMembershipBySlug — so disabling a custom team actually locks its (former) lead out of managing it, not just shows a badge. */
 export async function getUserTeamMembership(teamId: string, userId: string): Promise<TeamMembership | null> {
-  return db.teamMember.findUnique({ where: { teamId_userId: { teamId, userId } }, select: { isLead: true } });
+  return db.teamMember.findFirst({
+    where: { teamId, userId, team: { disabled: false } },
+    select: { isLead: true },
+  });
 }
 
 /** A brand-new, non-system team — only ever created this way, so `isSystem` never needs to be set true from here. */
@@ -181,4 +185,24 @@ export async function addTeamMember(teamId: string, userId: string, isLead = fal
 
 export async function removeTeamMember(teamId: string, userId: string) {
   await db.teamMember.deleteMany({ where: { teamId, userId } });
+}
+
+/**
+ * Whether `actorId` leads a (non-disabled) team that `targetId` also
+ * belongs to — the team equivalent of canManagePermissionsFor's Department
+ * Admin case, used to let a team lead manage their own team members'
+ * module permissions from the Teams console.
+ */
+export async function sharesLedTeamWith(actorId: string, targetId: string): Promise<boolean> {
+  if (actorId === targetId) return false;
+  const led = await db.teamMember.findMany({
+    where: { userId: actorId, isLead: true, team: { disabled: false } },
+    select: { teamId: true },
+  });
+  if (led.length === 0) return false;
+  const shared = await db.teamMember.findFirst({
+    where: { userId: targetId, teamId: { in: led.map((t) => t.teamId) } },
+    select: { id: true },
+  });
+  return !!shared;
 }
