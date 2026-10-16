@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { hashPassword, createSessionCookie } from "@/lib/auth";
 import { emitToAdmins } from "@/lib/socket-emit";
 import { addUserToAinaFamily } from "@/lib/chat";
+import { isValidMobile, isValidPin, normalizeMobile } from "@/lib/credentials";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -19,8 +20,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
 }
 
 const acceptSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().trim().min(1),
+  surname: z.string().trim().min(1),
+  mobile: z.string().refine(isValidMobile, "Enter a valid 10-digit mobile number"),
   password: z.string().min(8),
+  // Alternate sign-in alongside the password above — mobile + PIN, same as
+  // an already-onboarded user can use; set up front rather than left for a
+  // separate admin step.
+  pin: z.string().refine(isValidPin, "PIN must be exactly 6 digits"),
 });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -41,17 +48,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     return NextResponse.json({ error: "A user with this email already exists" }, { status: 409 });
   }
 
-  const { name, password } = parsed.data;
-  const passwordHash = await hashPassword(password);
+  const { name, surname, password, pin } = parsed.data;
+  const mobile = normalizeMobile(parsed.data.mobile);
+  const existingMobile = await db.user.findUnique({ where: { mobile }, select: { id: true } });
+  if (existingMobile) {
+    return NextResponse.json({ error: "That mobile number is already registered to another account" }, { status: 409 });
+  }
+
+  const [passwordHash, pinHash] = await Promise.all([hashPassword(password), hashPassword(pin)]);
 
   const user = await db.$transaction(async (tx) => {
     const created = await tx.user.create({
       data: {
         email: invite.email,
         name,
+        surname,
+        mobile,
         passwordHash,
+        pinHash,
         role: invite.role,
         departmentId: invite.departmentId,
+        isDepartmentAdmin: invite.inviteeIsDepartmentAdmin,
       },
     });
     await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
