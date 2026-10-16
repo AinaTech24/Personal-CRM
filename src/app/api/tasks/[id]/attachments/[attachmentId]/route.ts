@@ -17,7 +17,7 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id, attachmentId } = await params;
-  const access = await getTaskForUser(user, id);
+  const access = await getTaskForUser(user, id, "UPDATE");
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

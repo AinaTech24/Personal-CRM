@@ -16,8 +16,15 @@ export function isAdmin(user: PermissionUser) {
   return user.role === "ADMIN" || isSuperAdmin(user);
 }
 
+/**
+ * ADMIN and SUPER_ADMIN alike — matching every other admin-gated capability
+ * in the app (Users & Invites, Permission Manager, Teams). The Departments
+ * page's own create/rename/delete controls were already shown to any
+ * `isAdmin(user)`; this used to be Super-Admin-only underneath, so a plain
+ * Admin clicking those controls got a silent 403 despite seeing them.
+ */
 export function canManageDepartments(user: PermissionUser) {
-  return isSuperAdmin(user);
+  return isAdmin(user);
 }
 
 export function canManageUsers(user: PermissionUser) {
