@@ -7,6 +7,7 @@ import {
   parseAttachmentDataUrl,
   sanitizeAttachmentFileName,
 } from "@/lib/uploads";
+import { notifyAndPush } from "@/lib/notify";
 
 interface PickedFile {
   fileName: string;
@@ -20,7 +21,10 @@ function isPickedFile(v: unknown): v is PickedFile {
 /** Public — no login required. Validates and stores one visitor's answers to a live form. */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const form = await db.form.findUnique({ where: { slug }, include: { fields: { orderBy: { order: "asc" } } } });
+  const form = await db.form.findUnique({
+    where: { slug },
+    include: { fields: { orderBy: { order: "asc" } }, viewerDepartments: { select: { departmentId: true } } },
+  });
   if (!form || !form.isActive) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await req.json().catch(() => null);
@@ -80,6 +84,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     data: { formId: form.id, answers: { create: answerRows }, attachments: { create: attachmentRows } },
     select: { id: true },
   });
+
+  // Tell whoever can see this form's submissions — its creator, plus anyone
+  // in a department it was shared with — that a fresh one's waiting.
+  const departmentIds = form.viewerDepartments.map((v) => v.departmentId);
+  const viewers = departmentIds.length
+    ? await db.user.findMany({ where: { isActive: true, departmentId: { in: departmentIds } }, select: { id: true } })
+    : [];
+  const recipientIds = new Set([form.createdById, ...viewers.map((v) => v.id)]);
+  await Promise.all(
+    Array.from(recipientIds).map((userId) =>
+      notifyAndPush(
+        userId,
+        "form_submitted",
+        { formId: form.id, submissionId: submission.id },
+        { title: "New form submission", body: `${form.title} just received a new response`, url: `/forms/${form.id}/submissions`, tag: "form-submitted" }
+      )
+    )
+  );
 
   return NextResponse.json({ id: submission.id }, { status: 201 });
 }

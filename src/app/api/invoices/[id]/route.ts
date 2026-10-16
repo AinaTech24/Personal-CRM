@@ -117,7 +117,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(data.shipToAddress !== undefined && { shipToAddress: data.shipToAddress || null }),
         ...(data.shipToGstin !== undefined && { shipToGstin: data.shipToGstin || null }),
         ...(data.invoiceDate !== undefined && { invoiceDate: data.invoiceDate ? new Date(data.invoiceDate) : new Date() }),
-        ...(data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
+        ...(data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null, overdueReminderSentAt: null }),
         ...(data.terms !== undefined && { terms: data.terms || null }),
         ...(data.poNumber !== undefined && { poNumber: data.poNumber || null }),
         ...(data.placeOfSupply !== undefined && { placeOfSupply: data.placeOfSupply || null }),

@@ -152,6 +152,7 @@ model User {
   formsCreated       Form[]             @relation("FormCreatedBy")
   clientTeamRoles    ClientTeamMember[] @relation("ClientTeamMemberUser")
   birthdayGifts      BirthdayGift[]     @relation("BirthdayGiftFor")
+  birthdayGiftReminders BirthdayGiftReminder[]
   attendance         Attendance[]       @relation("AttendanceUser")
   attendanceApproved Attendance[]       @relation("AttendanceApprover")
   attendanceAudits   AttendanceAudit[]  @relation("AttendanceAuditActor")
@@ -789,6 +790,10 @@ model Invoice {
   gstAmount              Decimal       @default(0) @db.Decimal(12, 2)
   total                  Decimal       @default(0) @db.Decimal(12, 2)
   dueDate                DateTime?
+  /// Set once the overdue reminder sweep has nagged this invoice's creator —
+  /// cleared whenever dueDate is edited, so a new due date gets its own
+  /// chance to be missed before nagging again.
+  overdueReminderSentAt  DateTime?
   createdById            String
   createdBy              User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
   departmentId           String?
@@ -1702,6 +1707,11 @@ model PasswordEntry {
   updatedById String?
   updatedBy   User?   @relation("PasswordEntryUpdatedBy", fields: [updatedById], references: [id])
 
+  /// Set once the rotation reminder sweep has nagged the creator/last editor
+  /// that this entry's password is stale — cleared whenever the password
+  /// value itself is changed, so staying stale again later gets a fresh nag.
+  rotationReminderSentAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1854,6 +1864,21 @@ model BirthdayGift {
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@unique([userId, year])
+}
+
+/// Tracks that the "no gift picked yet" reminder already went out for this
+/// person's upcoming birthday in a given year, so the daily sweep (which
+/// checks every day in the week before a birthday) doesn't nag gift-pickers
+/// more than once per year. Rows aren't cleaned up — same as BirthdayGift,
+/// they're cheap and harmless to keep around.
+model BirthdayGiftReminder {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year   Int
+  sentAt DateTime @default(now())
 
   @@unique([userId, year])
 }

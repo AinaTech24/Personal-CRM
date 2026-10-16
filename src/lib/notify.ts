@@ -3,7 +3,19 @@ import { db } from "@/lib/db";
 import { emitToUser } from "@/lib/socket-emit";
 import { sendPushToUsers, type PushPayload } from "@/lib/push";
 
-export type NotificationCategory = "leads" | "tasks" | "projects" | "quotations" | "meetings" | "attendance" | "social" | "calls";
+export type NotificationCategory =
+  | "leads"
+  | "tasks"
+  | "projects"
+  | "quotations"
+  | "meetings"
+  | "attendance"
+  | "social"
+  | "calls"
+  | "forms"
+  | "billing"
+  | "passwords"
+  | "birthdays";
 
 /** Maps every concrete notification `type` to the user-facing category it's toggled under. */
 const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
@@ -25,6 +37,10 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   call_assigned: "calls",
   leave_requested: "attendance",
   leave_decided: "attendance",
+  form_submitted: "forms",
+  invoice_overdue: "billing",
+  password_rotation_due: "passwords",
+  birthday_gift_due: "birthdays",
 };
 
 export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: string; description: string }[] = [
@@ -36,6 +52,10 @@ export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: stri
   { value: "attendance", label: "Attendance", description: "Reminders to check in or check out before your shift window closes" },
   { value: "social", label: "Social Media", description: "When a social media client is assigned to you" },
   { value: "calls", label: "Calls", description: "When a call is logged with you as the owner" },
+  { value: "forms", label: "Forms", description: "When a form you created or can view gets a new submission" },
+  { value: "billing", label: "Billing", description: "When an invoice you created goes overdue" },
+  { value: "passwords", label: "Passwords", description: "When a password entry you own or last updated hasn't been rotated in a while" },
+  { value: "birthdays", label: "Birthdays", description: "When someone's birthday is coming up and no gift has been picked yet" },
 ];
 
 /**
