@@ -6,6 +6,7 @@ import { canManageModule } from "@/lib/module-permissions-store";
 import { keyFromDate, istDateKey, summarize } from "@/lib/attendance";
 import { STATUS_LABEL, APPROVAL_LABEL, HALF_DAY_REASON_LABEL, formatDuration, formatIstTime } from "@/lib/attendance-ui";
 import { buildAttendanceWhere } from "@/lib/attendance-query";
+import { csvCell, csvResponse } from "@/lib/csv";
 
 /** Maps the report period to a human title and a filename slug. */
 const PERIOD_META: Record<string, { title: string; slug: string }> = {
@@ -15,14 +16,6 @@ const PERIOD_META: Record<string, { title: string; slug: string }> = {
   half_yearly: { title: "Half-Yearly Attendance Report", slug: "half-yearly-attendance-report" },
   annually: { title: "Annual Attendance Report", slug: "annual-attendance-report" },
 };
-
-/** Wraps a value for CSV: quotes it and escapes embedded quotes. Guards against formula injection. */
-function csvCell(value: string | number | null | undefined): string {
-  let s = value == null ? "" : String(value);
-  // A leading =/+/-/@ makes spreadsheets execute the cell as a formula.
-  if (/^[=+\-@]/.test(s)) s = `'${s}`;
-  return `"${s.replace(/"/g, '""')}"`;
-}
 
 /** Admin (or an Attendance module grant): CSV export of the filtered attendance, same filters as the list view. */
 export async function GET(req: NextRequest) {
@@ -97,13 +90,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const csv = "﻿" + lines.join("\r\n"); // BOM so Excel reads UTF-8
   const slug = meta?.slug ?? "attendance";
   const stamp = from && to ? `${from}_${to}` : istDateKey();
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${slug}-${stamp}.csv"`,
-    },
-  });
+  return csvResponse(lines, `${slug}-${stamp}.csv`);
 }

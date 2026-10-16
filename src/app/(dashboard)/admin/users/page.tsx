@@ -12,13 +12,15 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
-import { IconSend, IconPencil, IconTrash, IconX, IconCheck, IconKey, IconShield } from "@/components/icons";
+import { ToggleSwitch } from "@/components/ui/toggle-switch";
+import { IconSend, IconPencil, IconTrash, IconX, IconCheck, IconKey, IconShield, IconDownload } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import { cn } from "@/lib/utils";
@@ -101,6 +103,9 @@ export default function UsersPage() {
   const [departmentId, setDepartmentId] = useState("");
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [bulkInvite, setBulkInvite] = useState(false);
+  const [bulkEmails, setBulkEmails] = useState("");
+  const [bulkResults, setBulkResults] = useState<{ email: string; error: string | null }[] | null>(null);
 
   // Edit dialog state
   const [editUser, setEditUser] = useState<UserRow | null>(null);
@@ -151,39 +156,86 @@ export default function UsersPage() {
     setRole("DEPARTMENT_USER");
     setDepartmentId("");
     setInviteError(null);
+    setBulkInvite(false);
+    setBulkEmails("");
+    setBulkResults(null);
     setInviteOpen(true);
+  }
+
+  /** One invite POST, shared by the single and bulk forms — same body shape either way, just a different source for the email. */
+  async function sendOneInvite(targetEmail: string): Promise<{ error: string | null; emailSent?: boolean; acceptUrl?: string }> {
+    const socialMediaAdmin = role === "SOCIAL_MEDIA_ADMIN";
+    const socialMediaMember = role === "SOCIAL_MEDIA_MEMBER";
+    const res = await fetch("/api/invites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: targetEmail,
+        role: socialMediaAdmin || socialMediaMember ? "DEPARTMENT_USER" : role,
+        departmentId: departmentId || null,
+        socialMediaAdmin,
+        socialMediaMember,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: data.error ?? "Something went wrong" };
+    return { error: null, emailSent: data.emailSent, acceptUrl: data.acceptUrl };
   }
 
   async function submitInvite(e: React.FormEvent) {
     e.preventDefault();
+    if (bulkInvite) return submitBulkInvite();
     setInviteError(null);
     setInviteLoading(true);
     try {
-      const socialMediaAdmin = role === "SOCIAL_MEDIA_ADMIN";
-      const socialMediaMember = role === "SOCIAL_MEDIA_MEMBER";
-      const res = await fetch("/api/invites", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          role: socialMediaAdmin || socialMediaMember ? "DEPARTMENT_USER" : role,
-          departmentId: departmentId || null,
-          socialMediaAdmin,
-          socialMediaMember,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setInviteError(data.error ?? "Something went wrong");
-        toast.error("Couldn't send invite", data.error);
+      const result = await sendOneInvite(email);
+      if (result.error) {
+        setInviteError(result.error);
+        toast.error("Couldn't send invite", result.error);
         return;
       }
       setInviteOpen(false);
-      if (data.emailSent === false) {
+      if (result.emailSent === false) {
         toast.error("Invite created, but the email couldn't be sent", "Copy the link and share it manually.");
-        if (data.acceptUrl) navigator.clipboard.writeText(data.acceptUrl).catch(() => {});
+        if (result.acceptUrl) navigator.clipboard.writeText(result.acceptUrl).catch(() => {});
       } else {
         toast.success(`Invite sent to ${email}`);
+      }
+    } finally {
+      setInviteLoading(false);
+    }
+  }
+
+  /** Parses the textarea (newline/comma/semicolon separated) and sends one invite per address, sequentially so the mail server isn't hit with a burst. */
+  async function submitBulkInvite() {
+    const addresses = Array.from(
+      new Set(
+        bulkEmails
+          .split(/[\n,;]+/)
+          .map((e) => e.trim())
+          .filter(Boolean)
+      )
+    );
+    if (addresses.length === 0) {
+      setInviteError("Paste at least one email address");
+      return;
+    }
+    setInviteError(null);
+    setInviteLoading(true);
+    setBulkResults(null);
+    try {
+      const results: { email: string; error: string | null }[] = [];
+      for (const addr of addresses) {
+        const result = await sendOneInvite(addr);
+        results.push({ email: addr, error: result.error });
+      }
+      setBulkResults(results);
+      const sent = results.filter((r) => !r.error).length;
+      const failed = results.length - sent;
+      if (failed === 0) {
+        toast.success(`Sent ${sent} invite${sent === 1 ? "" : "s"}`);
+      } else {
+        toast.error(`Sent ${sent}, ${failed} failed`, "See the list below for details.");
       }
     } finally {
       setInviteLoading(false);
@@ -290,6 +342,7 @@ export default function UsersPage() {
   }
 
   const deptOptions = departments.map((d) => ({ value: d.id, label: d.name }));
+  const exportUsersUrl = "/api/users/export";
 
   return (
     <div className="flex flex-col gap-6">
@@ -298,9 +351,19 @@ export default function UsersPage() {
           <h1 className="text-xl font-semibold">Users &amp; Invites</h1>
           <p className="text-sm text-muted-foreground">Invite-only access, restricted to @ainatech.in addresses.</p>
         </div>
-        <Button size="sm" className="gap-1.5" onClick={openInvite}>
-          <IconSend className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Tooltip label="Export CSV" side="bottom">
+            {/* Downloads a CSV attachment, not a page — not <Link>, same convention as admin/attendance's export button. */}
+            <a href={exportUsersUrl}>
+              <Button size="icon" variant="outline" aria-label="Export CSV">
+                <IconDownload className="h-4 w-4" />
+              </Button>
+            </a>
+          </Tooltip>
+          <Button size="sm" className="gap-1.5" onClick={openInvite}>
+            <IconSend className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -427,17 +490,44 @@ export default function UsersPage() {
           </DialogHeader>
           <DialogBody>
             <form id="invite-form" onSubmit={submitInvite} className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="invite-email">Email</Label>
-                <Input
-                  id="invite-email"
-                  type="email"
-                  placeholder="name@ainatech.in"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
+              <label className="flex items-center gap-2 text-sm">
+                <ToggleSwitch
+                  checked={bulkInvite}
+                  onChange={(v) => {
+                    setBulkInvite(v);
+                    setBulkResults(null);
+                    setInviteError(null);
+                  }}
+                  label="Invite multiple at once"
                 />
-              </div>
+                Invite multiple at once
+              </label>
+              {bulkInvite ? (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="invite-bulk-emails">Emails</Label>
+                  <Textarea
+                    id="invite-bulk-emails"
+                    placeholder={"One per line, or separated by commas\nname1@ainatech.in\nname2@ainatech.in"}
+                    value={bulkEmails}
+                    onChange={(e) => setBulkEmails(e.target.value)}
+                    rows={5}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">Same role and department below apply to everyone in the list.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="invite-email">Email</Label>
+                  <Input
+                    id="invite-email"
+                    type="email"
+                    placeholder="name@ainatech.in"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="invite-role">Role</Label>
                 <Dropdown id="invite-role" value={role} onChange={setRole} options={INVITE_ROLE_OPTIONS} />
@@ -453,12 +543,24 @@ export default function UsersPage() {
                 />
               </div>
               {inviteError && <p className="text-sm text-destructive">{inviteError}</p>}
+              {bulkResults && (
+                <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border border-border p-2 text-xs">
+                  {bulkResults.map((r) => (
+                    <div key={r.email} className="flex items-center justify-between gap-2">
+                      <span className="truncate">{r.email}</span>
+                      <span className={r.error ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}>
+                        {r.error ?? "Sent"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </form>
           </DialogBody>
           <DialogFooter>
             <Button type="submit" form="invite-form" disabled={inviteLoading} className="gap-1.5">
               <IconSend className="h-4 w-4" />
-              {inviteLoading ? "Sending..." : "Send invite"}
+              {inviteLoading ? "Sending..." : bulkInvite ? "Send invites" : "Send invite"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -7,7 +7,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dropdown } from "@/components/ui/dropdown";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { SkeletonCards } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
@@ -59,6 +62,9 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" } = {})
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassignTo, setReassignTo] = useState("");
+  const [reassigning, setReassigning] = useState(false);
   const [editProject, setEditProject] = useState<ProjectSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
   const [filters, setFilters] = useState<{
@@ -235,6 +241,33 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" } = {})
     }
   }
 
+  async function handleBulkReassign() {
+    if (!reassignTo) return;
+    setReassigning(true);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds), assignedToId: reassignTo }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error("Couldn't reassign", data.error);
+        return;
+      }
+      toast.success(
+        `Reassigned ${data.updated} project${data.updated === 1 ? "" : "s"}`,
+        data.skipped ? `${data.skipped} skipped — no edit access` : undefined
+      );
+      setReassignOpen(false);
+      setReassignTo("");
+      exitSelectionMode();
+      await loadProjects();
+    } finally {
+      setReassigning(false);
+    }
+  }
+
   async function toggleDisabled(project: ProjectSummary) {
     const res = await fetch(`/api/projects/${project.id}`, {
       method: "PATCH",
@@ -292,6 +325,11 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" } = {})
                 }
                 onCancel={exitSelectionMode}
                 onDelete={() => setConfirmOpen(true)}
+                extraActions={
+                  <Button size="sm" variant="outline" onClick={() => setReassignOpen(true)}>
+                    Reassign
+                  </Button>
+                }
               />
             ) : (
               <motion.div
@@ -438,6 +476,36 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" } = {})
         description="This will permanently delete the selected project(s) along with their milestones, tasks, documents, and activity history. This action cannot be undone."
         onConfirm={handleBulkDelete}
       />
+
+      <Dialog open={reassignOpen} onOpenChange={(v) => !reassigning && setReassignOpen(v)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reassign {selectedIds.size} project{selectedIds.size === 1 ? "" : "s"}</DialogTitle>
+            <DialogDescription>Only projects you have edit access to will actually move.</DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <Dropdown
+              value={reassignTo}
+              onChange={setReassignTo}
+              placeholder="Choose a user"
+              options={assignableUsers.map((u) => ({
+                value: u.id,
+                label: userOptionLabel(u),
+                avatarDataUrl: u.avatarDataUrl,
+                showAvatar: true,
+              }))}
+            />
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={reassigning} onClick={() => setReassignOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" disabled={!reassignTo || reassigning} onClick={handleBulkReassign}>
+              {reassigning ? "Reassigning..." : "Reassign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={!!deleteTarget}
