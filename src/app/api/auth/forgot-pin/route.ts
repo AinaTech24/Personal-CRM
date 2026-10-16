@@ -11,7 +11,10 @@ import { rateLimit } from "@/lib/rate-limit";
 const bodySchema = z.object({ mobile: z.string().min(1) });
 
 // Mirrors /api/auth/forgot's 5/15min — this also sends an email per success,
-// so the limit guards against inbox-spamming as much as brute force.
+// so the limit guards against inbox-spamming as much as brute force. Also
+// keyed per-mobile, since an IP-only cap is bypassable by rotating a
+// spoofed/forwarded IP and would otherwise let an attacker spam one
+// victim's inbox indefinitely.
 const LIMIT = 5;
 const WINDOW_MS = 15 * 60 * 1000;
 
@@ -26,8 +29,10 @@ export async function POST(req: NextRequest) {
   const normalizedMobile = normalizeMobile(mobile);
 
   const ip = requestDevice(req).ip ?? "unknown";
-  const { allowed, retryAfterSeconds } = rateLimit(`forgot-pin:${ip}`, LIMIT, WINDOW_MS);
-  if (!allowed) {
+  const ipCheck = rateLimit(`forgot-pin:ip:${ip}`, LIMIT, WINDOW_MS);
+  const mobileCheck = rateLimit(`forgot-pin:mobile:${normalizedMobile}`, LIMIT, WINDOW_MS);
+  if (!ipCheck.allowed || !mobileCheck.allowed) {
+    const retryAfterSeconds = Math.max(ipCheck.retryAfterSeconds, mobileCheck.retryAfterSeconds);
     return NextResponse.json(
       { error: "Too many requests. Try again in a few minutes." },
       { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }

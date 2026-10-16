@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isAdmin } from "@/lib/permissions";
 import { broadcastLeadChange, canDeleteLead, getLeadForUser } from "@/lib/leads";
 import { getSocialMembership, isSocialMediaOnlyUser, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
 import { notifyAndPush } from "@/lib/notify";
@@ -94,7 +95,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }),
       ...(data.meetingStatus !== undefined && { meetingStatus: data.meetingStatus }),
       ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId }),
-      ...(data.departmentId !== undefined && { departmentId: data.departmentId }),
+      // Admin-only, matching POST: a null department makes the lead visible
+      // and editable company-wide, so any editor could otherwise leak it.
+      ...(data.departmentId !== undefined && isAdmin(user) && { departmentId: data.departmentId }),
     },
   });
 

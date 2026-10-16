@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isAdmin } from "@/lib/permissions";
 import {
   broadcastProjectChange,
   canDeleteProject,
@@ -92,7 +93,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.progress !== undefined && { progress: data.progress }),
       ...(data.estimatedHours !== undefined && { estimatedHours: data.estimatedHours }),
       ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId || null }),
-      ...(data.departmentId !== undefined && { departmentId: data.departmentId }),
+      // Admin-only, matching POST: lets any editor otherwise move a project
+      // into a department they don't belong to, or out of its own.
+      ...(data.departmentId !== undefined && isAdmin(user) && { departmentId: data.departmentId }),
       ...(data.isActive !== undefined && { isActive: data.isActive }),
       ...(data.startDate !== undefined && { startDate: data.startDate ? new Date(data.startDate) : null }),
       ...(data.endDate !== undefined && { endDate: data.endDate ? new Date(data.endDate) : null }),
