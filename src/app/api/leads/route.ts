@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { canManageRecord, isAdmin } from "@/lib/permissions";
 import { broadcastLeadChange, canDeleteLead, leadListWhere } from "@/lib/leads";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
@@ -95,6 +95,49 @@ export async function POST(req: NextRequest) {
   broadcastLeadChange("lead_created", lead);
 
   return NextResponse.json({ lead }, { status: 201 });
+}
+
+const bulkReassignSchema = z.object({ ids: z.array(z.string()).min(1), assignedToId: z.string().min(1) });
+
+/** Bulk-reassign a set of leads — same per-lead "can edit this" rule as the single-lead PATCH, not a blanket admin-only action. */
+export async function PATCH(req: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const parsed = bulkReassignSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+
+  const target = await db.user.findUnique({ where: { id: parsed.data.assignedToId }, select: { id: true } });
+  if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+  const leadsGrant = await canManageModule(user, "LEADS", "UPDATE");
+  const leads = await db.lead.findMany({ where: { id: { in: parsed.data.ids } } });
+  const editable = leads.filter((l) => leadsGrant || canManageRecord(user, l));
+
+  if (editable.length > 0) {
+    await db.lead.updateMany({ where: { id: { in: editable.map((l) => l.id) } }, data: { assignedToId: target.id } });
+    for (const lead of editable) {
+      await db.leadActivity.create({
+        data: { leadId: lead.id, actorId: user.id, action: "assigned", meta: { assignedToId: target.id } },
+      });
+      broadcastLeadChange("lead_updated", { ...lead, assignedToId: target.id });
+    }
+    if (target.id !== user.id) {
+      await notifyAndPush(
+        target.id,
+        "lead_assigned",
+        { leadId: editable[0].id, leadName: editable[0].name, actorName: user.name },
+        {
+          title: "Leads assigned",
+          body: `${user.name} assigned you ${editable.length} lead${editable.length === 1 ? "" : "s"}`,
+          url: "/leads",
+          tag: "lead-assigned",
+        }
+      );
+    }
+  }
+
+  return NextResponse.json({ updated: editable.length, skipped: parsed.data.ids.length - editable.length });
 }
 
 const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });

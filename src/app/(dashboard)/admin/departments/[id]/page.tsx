@@ -13,7 +13,7 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/components/providers/toast-provider";
-import { IconSend, IconChevronLeft, IconInfo, IconShield, IconKey } from "@/components/icons";
+import { IconSend, IconChevronLeft, IconInfo, IconShield, IconKey, IconDownload } from "@/components/icons";
 import { ManagePermissionsDialog } from "@/components/permissions/manage-permissions-dialog";
 
 const ROLE_OPTIONS = [
@@ -176,10 +176,19 @@ export default function DepartmentDetailPage() {
             </p>
           </div>
         </div>
-        <Button onClick={openInvite}>
-          <IconSend className="mr-2 h-4 w-4" />
-          Invite
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Tooltip label="Export CSV" side="bottom">
+            <a href={`/api/departments/${params.id}/export`}>
+              <Button size="icon" variant="outline" aria-label="Export CSV">
+                <IconDownload className="h-4 w-4" />
+              </Button>
+            </a>
+          </Tooltip>
+          <Button onClick={openInvite}>
+            <IconSend className="mr-2 h-4 w-4" />
+            Invite
+          </Button>
+        </div>
       </div>
 
       <Card>
