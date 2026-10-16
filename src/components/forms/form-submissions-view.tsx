@@ -15,6 +15,7 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
+import { copyTextFromAsync } from "@/lib/clipboard";
 import { AttachmentPreview } from "@/components/forms/attachment-preview";
 import { parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
 import {
@@ -161,11 +162,30 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
 
   async function copyLink() {
     if (!form) return;
-    await navigator.clipboard.writeText(`${window.location.origin}/f/${form.slug}`);
-    toast.success("Form link copied");
-    setCopied(true);
-    if (copyTimer.current) clearTimeout(copyTimer.current);
-    copyTimer.current = setTimeout(() => setCopied(false), 1500);
+    try {
+      // A read-only department viewer (shared submissions access, not edit
+      // rights) can still grab the current link — just without rotating it,
+      // since the rotate endpoint is edit-only and only someone who can
+      // edit the form should be able to invalidate whatever link is
+      // currently live.
+      const url = form.canEdit
+        ? await copyTextFromAsync(async () => {
+            const res = await fetch(`/api/forms/${formId}/copy-link`, { method: "POST" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || "Couldn't copy the link");
+            return `${window.location.origin}/f/${data.slug}`;
+          })
+        : await copyTextFromAsync(async () => `${window.location.origin}/f/${form.slug}`);
+      // The slug may have just rotated — keep the Preview button (which
+      // opens /f/<slug> directly) pointed at whatever is now actually live.
+      setForm((f) => (f ? { ...f, slug: url.split("/").pop()! } : f));
+      toast.success("Form link copied");
+      setCopied(true);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      toast.error("Couldn't copy the link", err instanceof Error ? err.message : undefined);
+    }
   }
 
   function startEdit() {

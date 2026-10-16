@@ -25,6 +25,7 @@ import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { SkeletonForm } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
+import { copyTextFromAsync } from "@/lib/clipboard";
 import { FIELD_PALETTE, FIELD_TYPE_META, parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
 import {
   IconCheck,
@@ -361,17 +362,23 @@ export function FormBuilderView({ formId }: { formId: string }) {
 
   async function copyLink() {
     if (!form) return;
-    const res = await fetch(`/api/forms/${formId}/copy-link`, { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) return toast.error("Couldn't copy the link", data.error);
-    await navigator.clipboard.writeText(`${window.location.origin}/f/${data.slug}`);
-    // The slug may have just rotated — keep the builder's own Preview/the
-    // displayed link pointed at whatever is now actually live.
-    setForm((f) => (f ? { ...f, slug: data.slug } : f));
-    toast.success("Form link copied");
-    setCopied(true);
-    if (copyTimer.current) clearTimeout(copyTimer.current);
-    copyTimer.current = setTimeout(() => setCopied(false), 1500);
+    try {
+      const url = await copyTextFromAsync(async () => {
+        const res = await fetch(`/api/forms/${formId}/copy-link`, { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Couldn't copy the link");
+        return `${window.location.origin}/f/${data.slug}`;
+      });
+      // The slug may have just rotated — keep the builder's own Preview/the
+      // displayed link pointed at whatever is now actually live.
+      setForm((f) => (f ? { ...f, slug: url.split("/").pop()! } : f));
+      toast.success("Form link copied");
+      setCopied(true);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      toast.error("Couldn't copy the link", err instanceof Error ? err.message : undefined);
+    }
   }
 
   if (!form) return <SkeletonForm fields={6} />;

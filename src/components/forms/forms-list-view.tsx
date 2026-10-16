@@ -11,6 +11,7 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActionsMenu } from "@/components/ui/row-actions";
 import { useToast } from "@/components/providers/toast-provider";
+import { copyTextFromAsync } from "@/lib/clipboard";
 import { IconCopy, IconEye, IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
 
 interface FormRow {
@@ -67,14 +68,21 @@ export function FormsListView() {
   }
 
   async function copyLink(row: FormRow) {
-    const res = await fetch(`/api/forms/${row.id}/copy-link`, { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) return toast.error("Couldn't copy the link", data.error);
-    await navigator.clipboard.writeText(`${window.location.origin}/f/${data.slug}`);
-    toast.success("Form link copied");
-    // The slug may have just rotated — keep the row (and its "View form"
-    // action) pointed at whatever link is now actually live.
-    setRows((prev) => (prev ? prev.map((r) => (r.id === row.id ? { ...r, slug: data.slug } : r)) : prev));
+    try {
+      const url = await copyTextFromAsync(async () => {
+        const res = await fetch(`/api/forms/${row.id}/copy-link`, { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Couldn't copy the link");
+        return `${window.location.origin}/f/${data.slug}`;
+      });
+      toast.success("Form link copied");
+      // The slug may have just rotated — keep the row (and its "View form"
+      // action) pointed at whatever link is now actually live.
+      const slug = url.split("/").pop()!;
+      setRows((prev) => (prev ? prev.map((r) => (r.id === row.id ? { ...r, slug } : r)) : prev));
+    } catch (err) {
+      toast.error("Couldn't copy the link", err instanceof Error ? err.message : undefined);
+    }
   }
 
   async function confirmDelete() {
