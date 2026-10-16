@@ -112,23 +112,19 @@ export function formatDocNumber(prefix: string, year: number, sequence: number) 
 /** Only Admins/Super Admins may approve or reject quotations. */
 export { isAdmin };
 
-/** Department-scoped visibility shared by quotations and invoices. */
+/**
+ * Visibility shared by quotations and invoices. Default (non-admin) access
+ * is limited to records the user created — sharing a department doesn't by
+ * itself grant visibility into a colleague's quotations/invoices (same
+ * reasoning as canManageRecord in src/lib/permissions.ts).
+ */
 export function billingListWhere(user: PermissionUser) {
   if (isAdmin(user)) return {};
-  return {
-    OR: [{ departmentId: user.departmentId ?? "__none__" }, { createdById: user.id }],
-  };
+  return { createdById: user.id };
 }
 
-export function canAccessBillingRecord(
-  user: PermissionUser,
-  record: { createdById: string; departmentId: string | null }
-) {
-  return (
-    isAdmin(user) ||
-    record.createdById === user.id ||
-    (record.departmentId !== null && record.departmentId === user.departmentId)
-  );
+export function canAccessBillingRecord(user: PermissionUser, record: { createdById: string }) {
+  return isAdmin(user) || record.createdById === user.id;
 }
 
 /** Deletion is restricted to Admins and the record's creator. */
