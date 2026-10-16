@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageUsers, isSuperAdmin } from "@/lib/permissions";
-import { canManageModule, setUserModulePermissions } from "@/lib/module-permissions-store";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { emitToAdmins } from "@/lib/socket-emit";
 
 const patchSchema = z.object({
@@ -23,10 +23,8 @@ const patchSchema = z.object({
   /** Social Media team membership — not a real company Role, a separate
    *  SocialMediaMember row. "NONE" removes membership entirely. */
   socialMediaRole: z.enum(["NONE", "MEMBER", "ADMIN"]).optional(),
-  /** Full replacement of this user's individually-granted module permissions. */
-  modulePermissions: z
-    .array(z.enum(["LEAVE", "ATTENDANCE", "TASKS", "MEETINGS", "LEADS", "CLIENTS", "BIRTHDAYS", "MESSAGES", "PROJECTS"]))
-    .optional(),
+  /** Admin of their own department — see src/lib/permissions.ts. Admin-only to set; module grants themselves are edited separately, in the Permission Manager (/admin/permissions). */
+  isDepartmentAdmin: z.boolean().optional(),
 });
 
 /** Blocks the last remaining active Super Admin from being demoted, blocked, or deleted. */
@@ -54,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // crafted payload can't sneak a role/department/isActive change through.
   const touchedKeys = Object.keys(data);
   const isBirthdayOnly = touchedKeys.length > 0 && touchedKeys.every((k) => k === "birthday");
-  const allowed = canManageUsers(user) || (isBirthdayOnly && (await canManageModule(user, "BIRTHDAYS")));
+  const allowed = canManageUsers(user) || (isBirthdayOnly && (await canManageModule(user, "BIRTHDAYS", "UPDATE")));
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // Only Super Admins may create/modify Super Admin or Admin roles.
@@ -79,11 +77,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.departmentId !== undefined && { departmentId: data.departmentId || null }),
       ...(data.isActive !== undefined && { isActive: data.isActive }),
       ...(data.birthday !== undefined && { birthday: data.birthday ? new Date(`${data.birthday}T00:00:00.000Z`) : null }),
+      ...(data.isDepartmentAdmin !== undefined && { isDepartmentAdmin: data.isDepartmentAdmin }),
     },
     include: {
       department: true,
       socialMediaMembership: { select: { isLead: true } },
-      modulePermissions: { select: { module: true } },
     },
     omit: { passwordHash: true, resetCode: true, resetCodeExpiresAt: true, pinHash: true, pinResetCode: true, pinResetCodeExpiresAt: true },
   });
@@ -97,22 +95,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       update: { isLead: data.socialMediaRole === "ADMIN" },
     });
   }
-  // modulePermissions is a full replacement, always admin-initiated (the
-  // narrower Birthdays-only path above never sets this field).
-  if (data.modulePermissions !== undefined) {
-    await setUserModulePermissions(id, data.modulePermissions);
-  }
 
-  // Re-read so the response reflects the membership/permission changes made
-  // just above — the `updated` object was fetched before either of them.
-  const needsRefresh = data.socialMediaRole !== undefined || data.modulePermissions !== undefined;
-  const withExtras = needsRefresh
-    ? {
-        ...updated,
-        socialMediaMembership: await db.socialMediaMember.findUnique({ where: { userId: id }, select: { isLead: true } }),
-        modulePermissions: await db.userModulePermission.findMany({ where: { userId: id }, select: { module: true } }),
-      }
-    : updated;
+  // Re-read so the response reflects the membership change made just above —
+  // the `updated` object was fetched before it.
+  const withExtras =
+    data.socialMediaRole !== undefined
+      ? { ...updated, socialMediaMembership: await db.socialMediaMember.findUnique({ where: { userId: id }, select: { isLead: true } }) }
+      : updated;
 
   emitToAdmins("user_updated", { id: updated.id });
   return NextResponse.json({ user: withExtras });

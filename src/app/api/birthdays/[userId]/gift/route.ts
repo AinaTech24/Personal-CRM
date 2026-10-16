@@ -12,7 +12,7 @@ const bodySchema = z.object({ gift: z.string().trim().min(1).max(MAX_GIFT_LENGTH
 /** Admin (or a Birthdays module grant): choose (or clear, with null) the gift for this person's next birthday. Free text: Hamper/Cake/Plant are only suggestions. */
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "BIRTHDAYS")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "BIRTHDAYS", "UPDATE")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

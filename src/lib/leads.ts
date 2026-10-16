@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { canManageRecord, isAdmin, isSuperAdmin } from "@/lib/permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
+import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
@@ -10,11 +11,12 @@ function isSocialMediaTeamLead(lead: { createdById: string; assignedToId: string
   return teamUserIds.includes(lead.createdById) || (!!lead.assignedToId && teamUserIds.includes(lead.assignedToId));
 }
 
-export async function getLeadForUser(user: PermissionUser, leadId: string) {
+/** `action` is READ for viewing, UPDATE for editing — only which action a Leads module grant must carry to widen access; ownership/team access is unaffected by it. */
+export async function getLeadForUser(user: PermissionUser, leadId: string, action: Extract<ModuleAction, "READ" | "UPDATE"> = "READ") {
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   if (!lead) return null;
   if (canManageRecord(user, lead)) return lead;
-  if (await canManageModule(user, "LEADS")) return lead;
+  if (await canManageModule(user, "LEADS", action)) return lead;
 
   const teamUserIds = await socialMediaTeamScopeFor(user);
   if (teamUserIds && isSocialMediaTeamLead(lead, teamUserIds)) return lead;
@@ -24,13 +26,13 @@ export async function getLeadForUser(user: PermissionUser, leadId: string) {
 
 /**
  * Deletion is more sensitive than editing — restrict it to Admins, a Leads
- * module grant, the lead's creator, and (matching the same widening
- * getLeadForUser applies to editing) a Social Media lead deleting a lead
- * that belongs to their team.
+ * module grant with delete access, the lead's creator, and (matching the
+ * same widening getLeadForUser applies to editing) a Social Media lead
+ * deleting a lead that belongs to their team.
  */
 export async function canDeleteLead(user: PermissionUser, lead: { createdById: string; assignedToId: string | null }) {
   if (isAdmin(user) || lead.createdById === user.id) return true;
-  if (await canManageModule(user, "LEADS")) return true;
+  if (await canManageModule(user, "LEADS", "DELETE")) return true;
   const teamUserIds = await socialMediaTeamScopeFor(user);
   return !!teamUserIds && isSocialMediaTeamLead(lead, teamUserIds);
 }

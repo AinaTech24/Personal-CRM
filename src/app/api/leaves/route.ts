@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");
   const where = {
-    ...((isAdmin(user) || (await canManageModule(user, "ATTENDANCE"))) ? {} : { userId: user.id }),
+    ...((isAdmin(user) || (await canManageModule(user, "ATTENDANCE", "READ"))) ? {} : { userId: user.id }),
     ...(from || to
       ? { date: { ...(from ? { gte: dateFromKey(from) } : {}), ...(to ? { lte: dateFromKey(to) } : {}) } }
       : {}),
@@ -53,7 +53,7 @@ const bodySchema = z.object({
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "CREATE")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

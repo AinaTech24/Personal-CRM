@@ -1,33 +1,64 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { isAdmin } from "@/lib/permissions";
-import type { ManagedModule } from "@/lib/module-permissions";
+import {
+  MANAGED_MODULES,
+  hasModuleAction,
+  NO_MODULE_ACCESS,
+  type ManagedModule,
+  type ModuleAction,
+  type ModulePermissionFlags,
+} from "@/lib/module-permissions";
 
-/** Every module explicitly granted to this user (an Admin has all of them regardless, but isn't included here — callers already check isAdmin separately). */
+/** This user's full grant matrix — every module, defaulting to no access where no row exists. For the Permission Manager UI. */
+export async function getUserModuleMatrix(userId: string): Promise<Record<ManagedModule, ModulePermissionFlags>> {
+  const rows = await db.userModulePermission.findMany({ where: { userId } });
+  const byModule = new Map(rows.map((r) => [r.module, r]));
+  const matrix = {} as Record<ManagedModule, ModulePermissionFlags>;
+  for (const moduleKey of MANAGED_MODULES) {
+    const row = byModule.get(moduleKey);
+    matrix[moduleKey] = row
+      ? { canCreate: row.canCreate, canRead: row.canRead, canUpdate: row.canUpdate, canDelete: row.canDelete }
+      : { ...NO_MODULE_ACCESS };
+  }
+  return matrix;
+}
+
+/** Every module this user holds at least one action on (an Admin has all of them regardless, but isn't included here — callers already check isAdmin separately). */
 export async function getUserModulePermissions(userId: string): Promise<ManagedModule[]> {
-  const rows = await db.userModulePermission.findMany({ where: { userId }, select: { module: true } });
+  const rows = await db.userModulePermission.findMany({
+    where: { userId, OR: [{ canCreate: true }, { canRead: true }, { canUpdate: true }, { canDelete: true }] },
+    select: { module: true },
+  });
   return rows.map((r) => r.module);
 }
 
-/** Admin-equivalent access to one module, granted individually rather than through role or department. */
-export async function canManageModule(user: PermissionUser, module: ManagedModule): Promise<boolean> {
+/** Whether this user may perform `action` on `module`, granted individually rather than through role or department. */
+export async function canManageModule(user: PermissionUser, module: ManagedModule, action: ModuleAction): Promise<boolean> {
   if (isAdmin(user)) return true;
   const row = await db.userModulePermission.findUnique({ where: { userId_module: { userId: user.id, module } } });
-  return !!row;
+  if (!row) return false;
+  return hasModuleAction(row, action);
 }
 
 /** Whether this user holds any module grant at all — the floor for reaching the /admin pages that a grant (not just company-admin) can unlock. */
 export async function hasAnyModulePermission(userId: string): Promise<boolean> {
-  const row = await db.userModulePermission.findFirst({ where: { userId }, select: { id: true } });
+  const row = await db.userModulePermission.findFirst({
+    where: { userId, OR: [{ canCreate: true }, { canRead: true }, { canUpdate: true }, { canDelete: true }] },
+    select: { id: true },
+  });
   return !!row;
 }
 
-/** Replaces this user's full set of granted modules with exactly `modules`. */
-export async function setUserModulePermissions(userId: string, modules: ManagedModule[]) {
-  await db.$transaction([
-    db.userModulePermission.deleteMany({ where: { userId } }),
-    ...(modules.length > 0
-      ? [db.userModulePermission.createMany({ data: modules.map((module) => ({ userId, module })) })]
-      : []),
-  ]);
+/** Replaces this user's full grant matrix with exactly `matrix` — every module gets an explicit row, even an all-false one, so the Permission Manager always reflects exactly what was saved. */
+export async function setUserModuleMatrix(userId: string, matrix: Record<ManagedModule, ModulePermissionFlags>) {
+  await db.$transaction(
+    MANAGED_MODULES.map((module) =>
+      db.userModulePermission.upsert({
+        where: { userId_module: { userId, module } },
+        create: { userId, module, ...matrix[module] },
+        update: { ...matrix[module] },
+      })
+    )
+  );
 }

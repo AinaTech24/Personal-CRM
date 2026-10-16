@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { getSocialMembership, isSocialMediaLead, isSocialMediaOnlyUser } from "@/lib/social-media";
 import { getCrmMembership, hasCrmAccess, isCrmLead } from "@/lib/crm-team";
 import { hasAnyFormAccess } from "@/lib/forms";
@@ -44,6 +44,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <SearchProvider>
         <DashboardShell
           isAdmin={isAdmin(user)}
+          isDepartmentAdmin={isDepartmentAdmin(user)}
           restrictToSocialMedia={restrictToSocialMedia}
           isSocialMediaLead={isTeamLead}
           hasCrmAccess={crmAccess}

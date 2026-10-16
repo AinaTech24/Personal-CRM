@@ -18,13 +18,10 @@ import { Dropdown } from "@/components/ui/dropdown";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
-import { IconSend, IconPencil, IconTrash, IconX, IconCheck, IconKey } from "@/components/icons";
+import { IconSend, IconPencil, IconTrash, IconX, IconCheck, IconKey, IconShield } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { useSocket } from "@/components/providers/socket-provider";
-import { MODULE_LABEL, type ManagedModule } from "@/lib/module-permissions";
 import { cn } from "@/lib/utils";
-
-const MODULE_OPTIONS = Object.entries(MODULE_LABEL) as [ManagedModule, string][];
 
 const ROLE_OPTIONS = [
   { value: "DEPARTMENT_USER", label: "Department User" },
@@ -64,9 +61,9 @@ interface UserRow {
   mobile: string | null;
   role: string;
   isActive: boolean;
+  isDepartmentAdmin: boolean;
   department: { id: string; name: string } | null;
   socialMediaMembership: { isLead: boolean } | null;
-  modulePermissions: { module: ManagedModule }[];
 }
 
 const SOCIAL_MEDIA_ROLE_OPTIONS = [
@@ -110,7 +107,7 @@ export default function UsersPage() {
   const [editRole, setEditRole] = useState("DEPARTMENT_USER");
   const [editDept, setEditDept] = useState("");
   const [editSocialMediaRole, setEditSocialMediaRole] = useState("NONE");
-  const [editModules, setEditModules] = useState<Set<ManagedModule>>(new Set());
+  const [editIsDepartmentAdmin, setEditIsDepartmentAdmin] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
 
   // Delete confirm state
@@ -198,16 +195,7 @@ export default function UsersPage() {
     setEditRole(u.role);
     setEditDept(u.department?.id ?? "");
     setEditSocialMediaRole(socialMediaRoleOf(u));
-    setEditModules(new Set(u.modulePermissions.map((m) => m.module)));
-  }
-
-  function toggleEditModule(module: ManagedModule) {
-    setEditModules((prev) => {
-      const next = new Set(prev);
-      if (next.has(module)) next.delete(module);
-      else next.add(module);
-      return next;
-    });
+    setEditIsDepartmentAdmin(u.isDepartmentAdmin);
   }
 
   async function saveEdit() {
@@ -221,7 +209,7 @@ export default function UsersPage() {
           role: editRole,
           departmentId: editDept || null,
           socialMediaRole: editSocialMediaRole,
-          modulePermissions: Array.from(editModules),
+          isDepartmentAdmin: editIsDepartmentAdmin,
         }),
       });
       const data = await res.json();
@@ -377,6 +365,16 @@ export default function UsersPage() {
                               <IconPencil className="h-4 w-4" />
                             </button>
                           </Tooltip>
+                          <Tooltip label="Module permissions">
+                            <button
+                              type="button"
+                              aria-label="Module permissions"
+                              onClick={() => router.push(`/admin/permissions?userId=${u.id}`)}
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
+                            >
+                              <IconShield className="h-4 w-4" />
+                            </button>
+                          </Tooltip>
                           <Tooltip label={u.isActive ? "Block" : "Unblock"}>
                             <button
                               type="button"
@@ -502,23 +500,28 @@ export default function UsersPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Module permissions</Label>
-                <p className="text-xs text-muted-foreground">
-                  Full manage access to each module checked below — on top of whatever their role and department
-                  already allow. An Admin already has every module regardless of this.
-                </p>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-md border border-border p-3">
-                  {MODULE_OPTIONS.map(([module, label]) => (
-                    <label key={module} className="flex cursor-pointer items-center gap-2 text-sm">
-                      <Checkbox checked={editModules.has(module)} onChange={() => toggleEditModule(module)} aria-label={label} />
-                      {label}
-                    </label>
-                  ))}
-                </div>
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border p-3">
+                  <Checkbox
+                    checked={editIsDepartmentAdmin}
+                    onChange={setEditIsDepartmentAdmin}
+                    aria-label="Department Admin"
+                    className="mt-0.5"
+                  />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Department Admin</span>
+                    <span className="text-xs text-muted-foreground">
+                      Can open the Permission Manager for anyone else in {editDept ? departments.find((d) => d.id === editDept)?.name ?? "this department" : "their department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.
+                    </span>
+                  </span>
+                </label>
               </div>
             </div>
           </DialogBody>
           <DialogFooter>
+            <Button type="button" variant="outline" className="mr-auto gap-1.5" onClick={() => router.push(`/admin/permissions?userId=${editUser?.id}`)}>
+              <IconShield className="h-4 w-4" />
+              Module permissions
+            </Button>
             <Button type="button" variant="outline" onClick={() => setEditUser(null)}>
               Cancel
             </Button>

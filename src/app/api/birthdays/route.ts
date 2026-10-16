@@ -17,7 +17,7 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const admin = isAdmin(user) || (await canManageModule(user, "BIRTHDAYS"));
+  const admin = isAdmin(user) || (await canManageModule(user, "BIRTHDAYS", "READ"));
   const todayKey = istDateKey();
 
   const people = await db.user.findMany({

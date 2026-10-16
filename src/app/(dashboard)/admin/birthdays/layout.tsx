@@ -7,6 +7,6 @@ import { canManageModule } from "@/lib/module-permissions-store";
 export default async function AdminBirthdaysLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/");
-  if (!isAdmin(user) && !(await canManageModule(user, "BIRTHDAYS"))) redirect("/");
+  if (!isAdmin(user) && !(await canManageModule(user, "BIRTHDAYS", "READ"))) redirect("/");
   return <>{children}</>;
 }

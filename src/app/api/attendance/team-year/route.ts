@@ -8,7 +8,7 @@ import { istDateKey, dateFromKey, keyFromDate } from "@/lib/attendance";
 /** Admin (or an Attendance module grant): per-day team attendance counts for a year, for the overview heatmap. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "READ")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

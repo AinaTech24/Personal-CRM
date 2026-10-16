@@ -31,3 +31,50 @@ export const MODULE_LABEL: Record<ManagedModule, string> = {
   MESSAGES: "Messages",
   PROJECTS: "Projects",
 };
+
+/** The four independent actions a module grant can carry. */
+export type ModuleAction = "CREATE" | "READ" | "UPDATE" | "DELETE";
+
+export const MODULE_ACTIONS: ModuleAction[] = ["CREATE", "READ", "UPDATE", "DELETE"];
+
+export const MODULE_ACTION_LABEL: Record<ModuleAction, string> = {
+  CREATE: "Create",
+  READ: "Read",
+  UPDATE: "Update",
+  DELETE: "Delete",
+};
+
+/** One module's four action flags — the shape stored per (user, module) and shown as one row of the Permission Manager's matrix. */
+export interface ModulePermissionFlags {
+  canCreate: boolean;
+  canRead: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+}
+
+export const NO_MODULE_ACCESS: ModulePermissionFlags = {
+  canCreate: false,
+  canRead: false,
+  canUpdate: false,
+  canDelete: false,
+};
+
+export const FULL_MODULE_ACCESS: ModulePermissionFlags = {
+  canCreate: true,
+  canRead: true,
+  canUpdate: true,
+  canDelete: true,
+};
+
+export function hasModuleAction(flags: ModulePermissionFlags, action: ModuleAction): boolean {
+  switch (action) {
+    case "CREATE":
+      return flags.canCreate;
+    case "READ":
+      return flags.canRead;
+    case "UPDATE":
+      return flags.canUpdate;
+    case "DELETE":
+      return flags.canDelete;
+  }
+}

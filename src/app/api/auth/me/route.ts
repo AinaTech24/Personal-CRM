@@ -29,6 +29,7 @@ export async function GET() {
       defaultLandingPage: user.defaultLandingPage,
       density: user.density,
       hasPin: !!user.pinHash,
+      isDepartmentAdmin: user.isDepartmentAdmin,
       modulePermissions,
       socialMedia: {
         hasAccess: hasSocialMediaAccess(user, membership),

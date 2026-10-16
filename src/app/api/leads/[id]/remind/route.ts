@@ -14,7 +14,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const lead = await getLeadForUser(user, id);
+  const lead = await getLeadForUser(user, id, "UPDATE");
   if (lead === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!lead) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

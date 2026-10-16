@@ -12,7 +12,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const membership = await getSocialMembership(user.id);
-  const clientsGrant = await canManageModule(user, "CLIENTS");
+  const clientsGrant = await canManageModule(user, "CLIENTS", "READ");
   if (!hasSocialMediaAccess(user, membership) && !clientsGrant) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const clients = await db.socialClient.findMany({
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const membership = await getSocialMembership(user.id);
-  if (!hasSocialMediaAccess(user, membership) && !(await canManageModule(user, "CLIENTS"))) {
+  if (!hasSocialMediaAccess(user, membership) && !(await canManageModule(user, "CLIENTS", "CREATE"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

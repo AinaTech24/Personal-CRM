@@ -23,7 +23,7 @@ const bodySchema = z.object({
 /** Admin (or an Attendance module grant) adds a holiday. Unique per date — re-adding the same date updates its name. */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "CREATE")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

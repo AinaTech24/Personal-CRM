@@ -17,7 +17,7 @@ export default async function ClientsPage() {
   if (!user) redirect("/login");
 
   const membership = await getSocialMembership(user.id);
-  if (!hasSocialMediaAccess(user, membership) && !(await canManageModule(user, "CLIENTS"))) redirect("/");
+  if (!hasSocialMediaAccess(user, membership) && !(await canManageModule(user, "CLIENTS", "READ"))) redirect("/");
 
   return <ClientsPageClient />;
 }

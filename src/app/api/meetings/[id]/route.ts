@@ -6,6 +6,7 @@ import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 import { combinedTeamScopeFor } from "@/lib/team-scope";
 import { canManageModule } from "@/lib/module-permissions-store";
+import type { ModuleAction } from "@/lib/module-permissions";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -28,8 +29,8 @@ const patchSchema = z.object({
  * meeting organized by (or attended by) someone on their team may change or
  * remove a meeting.
  */
-async function canManage(user: PermissionUser, meetingId: string) {
-  if (isAdmin(user) || (await canManageModule(user, "MEETINGS"))) return true;
+async function canManage(user: PermissionUser, meetingId: string, action: Extract<ModuleAction, "UPDATE" | "DELETE">) {
+  if (isAdmin(user) || (await canManageModule(user, "MEETINGS", action))) return true;
   const m = await db.meeting.findUnique({
     where: { id: meetingId },
     select: { organizerId: true, attendees: { select: { id: true } } },
@@ -54,7 +55,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     isAdmin(user) ||
     meeting.organizer.id === user.id ||
     meeting.attendees.some((a) => a.id === user.id) ||
-    (await canManageModule(user, "MEETINGS"));
+    (await canManageModule(user, "MEETINGS", "READ"));
   if (!visible) {
     const teamUserIds = await combinedTeamScopeFor(user);
     visible =
@@ -71,7 +72,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  if (!(await canManage(user, id))) {
+  if (!(await canManage(user, id, "UPDATE"))) {
     return NextResponse.json({ error: "Only the organizer can edit this meeting" }, { status: 403 });
   }
 
@@ -139,7 +140,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  if (!(await canManage(user, id))) {
+  if (!(await canManage(user, id, "DELETE"))) {
     return NextResponse.json({ error: "Only the organizer can delete this meeting" }, { status: 403 });
   }
 

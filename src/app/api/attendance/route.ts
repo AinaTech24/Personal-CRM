@@ -9,7 +9,7 @@ import { canManageModule } from "@/lib/module-permissions-store";
 /** Admin (or an Attendance module grant): attendance across all users, filterable by user, date range, status, approval, and free-text name/email. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "READ")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

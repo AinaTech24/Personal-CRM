@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   const params = req.nextUrl.searchParams;
   if (params.get("scope") === "all") {
-    if (!isAdmin(user) && !(await canManageModule(user, "LEAVE"))) {
+    if (!isAdmin(user) && !(await canManageModule(user, "LEAVE", "READ"))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const status = STATUSES.find((s) => s === params.get("status"));
