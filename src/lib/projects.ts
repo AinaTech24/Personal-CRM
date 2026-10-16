@@ -31,7 +31,6 @@ export async function getProjectForUser(
     isAdmin(user) ||
     project.createdById === user.id ||
     isMember ||
-    project.departmentId === user.departmentId ||
     (await canManageModule(user, "PROJECTS", action));
 
   if (allowed) return project;
@@ -43,10 +42,14 @@ export async function getProjectForUser(
 }
 
 /**
- * A project is visible if it's in the user's department, they created it, or
- * they're a member. `teamUserIds`, when given (a Social Media lead's own
- * team, from socialMediaTeamScopeFor), additionally widens this to every
- * project created by, or with a member from, that team.
+ * A project is visible by default only if the user created it or is a
+ * member — being in the same department no longer grants visibility into
+ * every project in it on its own (see `canManageRecord`'s note for why).
+ * `teamUserIds`, when given (a Social Media lead's own team, from
+ * socialMediaTeamScopeFor), additionally widens this to every project
+ * created by, or with a member from, that team. A Projects module grant
+ * from the Permission Manager (`fullAccess`), or being an Admin, widens this
+ * company-wide.
  *
  * `teamOnly` forces the team-scoped clause even for an Admin, bypassing
  * their usual `{}` — for the Social Media Team console's Projects tab, a
@@ -58,7 +61,6 @@ export function projectListWhere(user: PermissionUser, teamUserIds?: string[] | 
   }
   if (isAdmin(user) || fullAccess) return {};
   const or: object[] = [
-    { departmentId: user.departmentId ?? "__none__" },
     { createdById: user.id },
     { members: { some: { userId: user.id } } },
   ];
