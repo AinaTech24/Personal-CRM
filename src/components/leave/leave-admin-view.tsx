@@ -35,7 +35,7 @@ const FILTERS = [
   { value: "ALL", label: "All requests" },
 ];
 
-export function LeaveAdminView() {
+export function LeaveAdminView({ canEditDelete = true }: { canEditDelete?: boolean }) {
   const toast = useToast();
   const { socket } = useSocket();
   const [requests, setRequests] = useState<LeaveRequestRow[] | null>(null);
@@ -236,19 +236,21 @@ export function LeaveAdminView() {
                               </Button>
                             </>
                           )}
-                          <RowActionsMenu
-                            label={`Actions for ${r.user.name}'s leave request`}
-                            actions={[
-                              { key: "edit", label: "Edit", icon: <IconPencil className="h-4 w-4" />, onSelect: () => openEdit(r) },
-                              {
-                                key: "delete",
-                                label: "Delete",
-                                icon: <IconTrash className="h-4 w-4" />,
-                                destructive: true,
-                                onSelect: () => setDeletingRequest(r),
-                              },
-                            ]}
-                          />
+                          {canEditDelete && (
+                            <RowActionsMenu
+                              label={`Actions for ${r.user.name}'s leave request`}
+                              actions={[
+                                { key: "edit", label: "Edit", icon: <IconPencil className="h-4 w-4" />, onSelect: () => openEdit(r) },
+                                {
+                                  key: "delete",
+                                  label: "Delete",
+                                  icon: <IconTrash className="h-4 w-4" />,
+                                  destructive: true,
+                                  onSelect: () => setDeletingRequest(r),
+                                },
+                              ]}
+                            />
+                          )}
                         </div>
                       </td>
                     </tr>

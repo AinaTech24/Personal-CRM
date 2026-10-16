@@ -30,9 +30,10 @@ import { LeadsBoard } from "@/components/leads/leads-board";
 import { TasksBoard } from "@/components/tasks/tasks-board";
 import { MeetingsView } from "@/components/meetings/meetings-view";
 import { ProjectsList } from "@/components/projects/projects-list";
+import { LeaveAdminView } from "@/components/leave/leave-admin-view";
 import { CallsView } from "@/components/calls/calls-view";
 
-type TabKey = "members" | "leads" | "tasks" | "meetings" | "calls" | "projects" | "attendance" | "activity";
+type TabKey = "members" | "leads" | "tasks" | "meetings" | "calls" | "projects" | "attendance" | "leave" | "activity";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "members", label: "Members" },
@@ -42,6 +43,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "calls", label: "Calls" },
   { key: "projects", label: "Projects" },
   { key: "attendance", label: "Attendance" },
+  { key: "leave", label: "Leave" },
   { key: "activity", label: "Activity" },
 ];
 
@@ -119,6 +121,7 @@ export function CrmTeamConsole() {
           {tab === "calls" && <CallsView scope="crm" />}
           {tab === "projects" && <ProjectsList scope="crm" />}
           {tab === "attendance" && <AttendanceTab />}
+          {tab === "leave" && <LeaveAdminView canEditDelete={false} />}
           {tab === "activity" && <ActivityTab />}
         </>
       )}

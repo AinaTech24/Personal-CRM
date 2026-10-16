@@ -31,8 +31,9 @@ import { LeadsBoard } from "@/components/leads/leads-board";
 import { TasksBoard } from "@/components/tasks/tasks-board";
 import { MeetingsView } from "@/components/meetings/meetings-view";
 import { ProjectsList } from "@/components/projects/projects-list";
+import { LeaveAdminView } from "@/components/leave/leave-admin-view";
 
-type TabKey = "members" | "pipeline" | "leads" | "tasks" | "meetings" | "projects" | "attendance" | "activity";
+type TabKey = "members" | "pipeline" | "leads" | "tasks" | "meetings" | "projects" | "attendance" | "leave" | "activity";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "members", label: "Members" },
@@ -42,6 +43,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "meetings", label: "Meetings" },
   { key: "projects", label: "Projects" },
   { key: "attendance", label: "Attendance" },
+  { key: "leave", label: "Leave" },
   { key: "activity", label: "Activity" },
 ];
 
@@ -117,6 +119,7 @@ export function SocialMediaTeamConsole() {
           {tab === "meetings" && <MeetingsView scope="social-media" />}
           {tab === "projects" && <ProjectsList scope="social-media" />}
           {tab === "attendance" && <AttendanceTab />}
+          {tab === "leave" && <LeaveAdminView canEditDelete={false} />}
           {tab === "activity" && <ActivityTab />}
         </>
       )}
