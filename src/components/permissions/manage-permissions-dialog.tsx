@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
+import { Dropdown } from "@/components/ui/dropdown";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/components/providers/toast-provider";
@@ -52,6 +53,9 @@ export function ManagePermissionsDialog({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [candidates, setCandidates] = useState<{ id: string; name: string; surname: string | null }[]>([]);
+  const [copyFromId, setCopyFromId] = useState("");
+  const [copying, setCopying] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -68,8 +72,32 @@ export function ManagePermissionsDialog({
         setDirty(false);
       })
       .finally(() => setLoading(false));
+    fetch("/api/admin/permissions/users")
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) setCandidates(data.users);
+      })
+      .catch(() => {});
+    setCopyFromId("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  async function copyFrom(sourceId: string) {
+    if (!sourceId) return;
+    setCopying(true);
+    try {
+      const res = await fetch(`/api/admin/permissions/${sourceId}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't load their permissions", data.error);
+      setMatrix(data.matrix);
+      setDirty(true);
+      const source = candidates.find((c) => c.id === sourceId);
+      toast.success("Copied", source ? `From ${[source.name, source.surname].filter(Boolean).join(" ")} — remember to save` : undefined);
+    } finally {
+      setCopying(false);
+      setCopyFromId("");
+    }
+  }
 
   function toggle(module: ManagedModule, action: ModuleAction) {
     const key = FLAG_KEY[action];
@@ -111,6 +139,26 @@ export function ManagePermissionsDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
+          {!loading && candidates.length > 0 && (
+            <div className="mb-3 flex items-center justify-end gap-2">
+              <span className="text-xs text-muted-foreground">Copy from</span>
+              <div className="w-48">
+                <Dropdown
+                  size="sm"
+                  value={copyFromId}
+                  onChange={(v) => {
+                    setCopyFromId(v);
+                    copyFrom(v);
+                  }}
+                  placeholder="Select person…"
+                  disabled={copying || saving}
+                  options={candidates
+                    .filter((c) => c.id !== user?.id)
+                    .map((c) => ({ value: c.id, label: [c.name, c.surname].filter(Boolean).join(" ") }))}
+                />
+              </div>
+            </div>
+          )}
           {loading ? (
             <SkeletonTable rows={MANAGED_MODULES.length} columns={5} />
           ) : (
