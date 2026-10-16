@@ -240,6 +240,11 @@ model Invite {
   /// CrmMember row on acceptance instead — the CRM Team's equivalent.
   crmAdmin          Boolean     @default(false)
   crmMember         Boolean     @default(false)
+  /// Grants Department Admin (see User.isDepartmentAdmin) for `departmentId`
+  /// the moment this invite is accepted. Only a company Admin/Super Admin
+  /// can set this when creating the invite — a Department Admin inviting
+  /// into their own department can't mint another one.
+  inviteeIsDepartmentAdmin Boolean @default(false)
   token             String      @unique
   invitedById       String
   invitedBy         User        @relation("InvitedBy", fields: [invitedById], references: [id])
