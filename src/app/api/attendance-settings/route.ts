@@ -9,7 +9,7 @@ import { parseShifts } from "@/lib/attendance-settings";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "READ")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -61,7 +61,7 @@ const bodySchema = z
 
 export async function PUT(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "UPDATE")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

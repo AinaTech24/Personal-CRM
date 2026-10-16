@@ -16,6 +16,7 @@ const STORAGE_KEY = "aina-sidebar-collapsed";
  */
 export function DashboardShell({
   isAdmin,
+  isDepartmentAdmin,
   restrictToSocialMedia,
   isSocialMediaLead,
   hasCrmAccess,
@@ -28,6 +29,7 @@ export function DashboardShell({
   children,
 }: {
   isAdmin: boolean;
+  isDepartmentAdmin: boolean;
   restrictToSocialMedia: boolean;
   isSocialMediaLead: boolean;
   hasCrmAccess: boolean;
@@ -83,6 +85,7 @@ export function DashboardShell({
 
       <Sidebar
         isAdmin={isAdmin}
+        isDepartmentAdmin={isDepartmentAdmin}
         restrictToSocialMedia={restrictToSocialMedia}
         isSocialMediaLead={isSocialMediaLead}
         hasCrmAccess={hasCrmAccess}
@@ -113,12 +116,13 @@ export function DashboardShell({
       >
         <Sidebar
           isAdmin={isAdmin}
+          isDepartmentAdmin={isDepartmentAdmin}
           restrictToSocialMedia={restrictToSocialMedia}
           isSocialMediaLead={isSocialMediaLead}
           hasCrmAccess={hasCrmAccess}
           isCrmLead={isCrmLead}
           canViewForms={canViewForms}
-        managedModules={managedModules}
+          managedModules={managedModules}
           collapsed={false}
           onToggle={() => setMobileOpen(false)}
           mobile

@@ -51,7 +51,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const membership = await getSocialMembership(user.id);
-  const access = await getSocialClientForUser(user, membership, id);
+  const access = await getSocialClientForUser(user, membership, id, "UPDATE");
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -108,7 +108,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   // Deletion is a lead/admin action — a regular member managing their own
   // client shouldn't be able to erase the whole record (and everything
   // under it, via cascade) on their own.
-  if (!isSocialMediaLead(user, membership) && !(await canManageModule(user, "CLIENTS"))) {
+  if (!isSocialMediaLead(user, membership) && !(await canManageModule(user, "CLIENTS", "DELETE"))) {
     return NextResponse.json({ error: "Only a Social Media lead or admin can delete a client" }, { status: 403 });
   }
 

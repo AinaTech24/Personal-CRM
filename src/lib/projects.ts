@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { isAdmin } from "@/lib/permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
+import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
@@ -13,7 +14,12 @@ function isSocialMediaTeamProject(
   return teamUserIds.includes(project.createdById) || project.members.some((m) => teamUserIds.includes(m.userId));
 }
 
-export async function getProjectForUser(user: PermissionUser, projectId: string) {
+/** `action` is READ for viewing, UPDATE for editing — only which action a Projects module grant must carry to widen access; ownership/department/team access is unaffected by it. */
+export async function getProjectForUser(
+  user: PermissionUser,
+  projectId: string,
+  action: Extract<ModuleAction, "READ" | "UPDATE"> = "READ"
+) {
   const project = await db.project.findUnique({
     where: { id: projectId },
     include: { members: { select: { userId: true } } },
@@ -26,7 +32,7 @@ export async function getProjectForUser(user: PermissionUser, projectId: string)
     project.createdById === user.id ||
     isMember ||
     project.departmentId === user.departmentId ||
-    (await canManageModule(user, "PROJECTS"));
+    (await canManageModule(user, "PROJECTS", action));
 
   if (allowed) return project;
 
@@ -72,7 +78,7 @@ export async function canDeleteProject(
   project: { createdById: string; members: { userId: string }[] }
 ) {
   if (isAdmin(user) || project.createdById === user.id) return true;
-  if (await canManageModule(user, "PROJECTS")) return true;
+  if (await canManageModule(user, "PROJECTS", "DELETE")) return true;
   const teamUserIds = await socialMediaTeamScopeFor(user);
   return !!teamUserIds && isSocialMediaTeamProject(project, teamUserIds);
 }

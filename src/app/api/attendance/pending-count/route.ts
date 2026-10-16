@@ -7,7 +7,7 @@ import { canManageModule } from "@/lib/module-permissions-store";
 /** How many attendance records are awaiting attention (checked in / pending approval). Drives the sidebar dot. */
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "READ")))) {
     return NextResponse.json({ count: 0 }, { status: 403 });
   }
 

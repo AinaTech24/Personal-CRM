@@ -46,15 +46,23 @@ enum ManagedModule {
   PROJECTS
 }
 
-/// Presence of a row grants `module` to `user`, company-wide — the same shape
-/// as SocialMediaMember/CrmMember (one row per grant) but generic across every
-/// module rather than tied to one team. An Admin/Super Admin already has every
-/// module regardless of what's granted here.
+/// One row per (user, module), company-wide — the same shape as
+/// SocialMediaMember/CrmMember (one row per grant) but generic across every
+/// module rather than tied to one team. The four booleans are independent:
+/// a user can be granted, say, read+update on Tasks without create or
+/// delete. A row with every flag false is equivalent to no row at all —
+/// see hasAnyModulePermission in module-permissions-store.ts. An
+/// Admin/Super Admin already has every action on every module regardless
+/// of what's granted here.
 model UserModulePermission {
   id        String        @id @default(cuid())
   userId    String
   user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   module    ManagedModule
+  canCreate Boolean       @default(false)
+  canRead   Boolean       @default(false)
+  canUpdate Boolean       @default(false)
+  canDelete Boolean       @default(false)
   createdAt DateTime      @default(now())
 
   @@unique([userId, module])
@@ -77,6 +85,11 @@ model User {
   role                  Role        @default(DEPARTMENT_USER)
   departmentId          String?
   department            Department? @relation(fields: [departmentId], references: [id])
+  // Admin of their own department (departmentId above) — can grant module
+  // permissions to anyone else in that same department, but not change
+  // anyone's role/department or create more department admins. Settable by
+  // a company Admin/Super Admin only, via Admin > Users.
+  isDepartmentAdmin     Boolean     @default(false)
   isActive              Boolean     @default(true)
   resetCode             String? // bcrypt hash of the email login/reset code
   resetCodeExpiresAt    DateTime?

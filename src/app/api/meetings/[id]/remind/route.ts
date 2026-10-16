@@ -23,7 +23,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   });
   if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  let allowed = isAdmin(user) || meeting.organizerId === user.id || (await canManageModule(user, "MEETINGS"));
+  let allowed = isAdmin(user) || meeting.organizerId === user.id || (await canManageModule(user, "MEETINGS", "UPDATE"));
   if (!allowed) {
     const teamUserIds = await combinedTeamScopeFor(user);
     allowed = !!teamUserIds && (teamUserIds.includes(meeting.organizerId) || meeting.attendees.some((a) => teamUserIds.includes(a.id)));

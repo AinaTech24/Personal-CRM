@@ -14,7 +14,6 @@ export async function GET() {
     include: {
       department: true,
       socialMediaMembership: { select: { isLead: true } },
-      modulePermissions: { select: { module: true } },
     },
     // Never ship secrets to the client — not the password hash, and not the
     // reset-code hash or its expiry, which the admin console would otherwise

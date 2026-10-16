@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     if (teamUserIds && teamUserIds.length > 0) {
       or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
     }
-    where = isAdmin(user) || (await canManageModule(user, "MEETINGS")) ? {} : { OR: or };
+    where = isAdmin(user) || (await canManageModule(user, "MEETINGS", "READ")) ? {} : { OR: or };
   }
 
   const meetings = await db.meeting.findMany({

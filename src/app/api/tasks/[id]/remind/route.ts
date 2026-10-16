@@ -15,7 +15,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const task = await getTaskForUser(user, id);
+  const task = await getTaskForUser(user, id, "UPDATE");
   if (task === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!task.assignedToId) return NextResponse.json({ error: "This task has no assignee to remind." }, { status: 400 });

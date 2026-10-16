@@ -6,7 +6,7 @@ import { canManageModule } from "@/lib/module-permissions-store";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "LEAVE")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "LEAVE", "READ")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const count = await db.leaveRequest.count({ where: { status: "PENDING" } });

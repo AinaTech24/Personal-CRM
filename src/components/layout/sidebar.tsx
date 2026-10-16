@@ -21,6 +21,7 @@ import {
   IconCake,
   IconCalendar,
   IconLayoutGrid,
+  IconShield,
 } from "@/components/icons";
 import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -109,6 +110,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/logs", label: "View logs", icon: staticNavIcon(IconHistory) },
   { href: "/admin/departments", label: "Departments", icon: staticNavIcon(IconBuilding) },
   { href: "/admin/users", label: "Users & Invites", icon: LottieUsersInvites },
+  { href: "/admin/permissions", label: "Permission Manager", icon: staticNavIcon(IconShield) },
   { href: "/admin/birthdays", label: "Birthday Settings", icon: staticNavIcon(IconCake) },
   { href: "/social-media/team", label: "Social Media Team", icon: staticNavIcon(IconUsers) },
   { href: "/crm/team", label: "CRM Team", icon: staticNavIcon(IconUsers) },
@@ -257,6 +259,7 @@ function NavLinkItem({
  */
 export function Sidebar({
   isAdmin,
+  isDepartmentAdmin,
   restrictToSocialMedia,
   isSocialMediaLead,
   hasCrmAccess,
@@ -270,6 +273,7 @@ export function Sidebar({
   onNavigate,
 }: {
   isAdmin: boolean;
+  isDepartmentAdmin: boolean;
   restrictToSocialMedia: boolean;
   isSocialMediaLead: boolean;
   hasCrmAccess: boolean;
@@ -361,10 +365,13 @@ export function Sidebar({
   // Leave/Attendance/Birthdays each have an /admin page a module grant can
   // unlock without making the holder a full Admin — everything else granted
   // (Tasks, Meetings, Leads, Projects, Messages) already has its own
-  // always-visible top-level nav entry above.
+  // always-visible top-level nav entry above. A Department Admin additionally
+  // gets the Permission Manager link, the one /admin page their own flag
+  // (not a module grant) unlocks.
   const grantedAdminNav = isAdmin
     ? adminNav
     : adminNav.filter((item) => {
+        if (item.href === "/admin/permissions") return isDepartmentAdmin;
         const grantedModule = ADMIN_HREF_MODULE.get(item.href);
         return !!grantedModule && managedModuleSet.has(grantedModule);
       });

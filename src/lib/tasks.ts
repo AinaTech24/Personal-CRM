@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { isAdmin } from "@/lib/permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
+import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 
@@ -17,11 +18,12 @@ export function canManageTask(
   return isAdmin(user) || task.createdById === user.id || task.assignedToId === user.id;
 }
 
-export async function getTaskForUser(user: PermissionUser, taskId: string) {
+/** `action` is READ for viewing, UPDATE for editing — only which action a Tasks module grant must carry to widen access; ownership/team access is unaffected by it. */
+export async function getTaskForUser(user: PermissionUser, taskId: string, action: Extract<ModuleAction, "READ" | "UPDATE"> = "READ") {
   const task = await db.task.findUnique({ where: { id: taskId } });
   if (!task) return null;
   if (canManageTask(user, task)) return task;
-  if (await canManageModule(user, "TASKS")) return task;
+  if (await canManageModule(user, "TASKS", action)) return task;
 
   const teamUserIds = await socialMediaTeamScopeFor(user);
   if (teamUserIds && isSocialMediaTeamTask(task, teamUserIds)) return task;
@@ -31,13 +33,13 @@ export async function getTaskForUser(user: PermissionUser, taskId: string) {
 
 /**
  * Deletion is more sensitive than editing — restrict it to Admins, a Tasks
- * module grant, the task's creator, and a Social Media lead deleting a task
- * belonging to their team (matching the same widening getTaskForUser applies
- * to editing).
+ * module grant with delete access, the task's creator, and a Social Media
+ * lead deleting a task belonging to their team (matching the same widening
+ * getTaskForUser applies to editing).
  */
 export async function canDeleteTask(user: PermissionUser, task: { createdById: string; assignedToId?: string | null }) {
   if (isAdmin(user) || task.createdById === user.id) return true;
-  if (await canManageModule(user, "TASKS")) return true;
+  if (await canManageModule(user, "TASKS", "DELETE")) return true;
   const teamUserIds = await socialMediaTeamScopeFor(user);
   return !!teamUserIds && isSocialMediaTeamTask(task, teamUserIds);
 }

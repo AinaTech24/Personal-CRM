@@ -41,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (
     !(await canManageAttendanceFor(actor, record.userId)) &&
     !(await canManageCrmAttendanceFor(actor, record.userId)) &&
-    !(await canManageModule(actor, "ATTENDANCE"))
+    !(await canManageModule(actor, "ATTENDANCE", "UPDATE"))
   ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

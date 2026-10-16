@@ -3,6 +3,7 @@ import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
 import { canAccessSocialClient, isSocialMediaLead, isSocialMediaOnlyUser, type SocialMembership } from "@/lib/social-media-permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
+import type { ModuleAction } from "@/lib/module-permissions";
 
 export type { SocialMembership };
 export {
@@ -120,11 +121,22 @@ export async function isRestrictedFromModule(user: PermissionUser): Promise<bool
  * three-way return so callers can distinguish a real 404 from a visibility
  * block without a second query.
  */
-export async function getSocialClientForUser(user: PermissionUser, membership: SocialMembership | null, clientId: string) {
+/**
+ * `action` is READ for viewing (the default — also what every client
+ * sub-resource route, content/ads/platforms/folders/reports, checks through
+ * here, since they don't separately distinguish their own CRUD level yet)
+ * or UPDATE for editing the client record itself.
+ */
+export async function getSocialClientForUser(
+  user: PermissionUser,
+  membership: SocialMembership | null,
+  clientId: string,
+  action: Extract<ModuleAction, "READ" | "UPDATE"> = "READ"
+) {
   const client = await db.socialClient.findUnique({ where: { id: clientId } });
   if (!client) return null;
   if (canAccessSocialClient(user, membership, client)) return client;
-  if (await canManageModule(user, "CLIENTS")) return client;
+  if (await canManageModule(user, "CLIENTS", action)) return client;
   return "forbidden" as const;
 }
 

@@ -27,7 +27,7 @@ function csvCell(value: string | number | null | undefined): string {
 /** Admin (or an Attendance module grant): CSV export of the filtered attendance, same filters as the list view. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "READ")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

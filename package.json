@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node server.js",
-    "build": "prisma generate && prisma db push --accept-data-loss && next build && tsx scripts/migrate-onboarding-to-forms.ts && tsx scripts/hash-form-slugs.ts",
+    "build": "prisma generate && prisma db push --accept-data-loss && next build && tsx scripts/migrate-onboarding-to-forms.ts && tsx scripts/hash-form-slugs.ts && tsx scripts/upgrade-module-permissions-to-crud.ts",
     "start": "cross-env NODE_ENV=production node server.js",
     "lint": "eslint",
     "test": "vitest run",

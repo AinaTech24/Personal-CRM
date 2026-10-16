@@ -12,7 +12,7 @@ import { canManageModule } from "@/lib/module-permissions-store";
  */
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "BIRTHDAYS")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "BIRTHDAYS", "READ")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const { teamOnly, teamUserIds } = await resolveTeamScope(user, req.nextUrl.searchParams.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const fullAccess = await canManageModule(user, "TASKS");
+  const fullAccess = await canManageModule(user, "TASKS", "READ");
 
   const tasks = await db.task.findMany({
     where: taskListWhere(user, teamUserIds, teamOnly, fullAccess),

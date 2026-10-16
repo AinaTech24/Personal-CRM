@@ -44,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const request = await db.leaveRequest.findUnique({ where: { id } });
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const canManageLeave = isAdmin(user) || (await canManageModule(user, "LEAVE"));
+  const canManageLeave = isAdmin(user) || (await canManageModule(user, "LEAVE", "UPDATE"));
 
   if (action === "edit") {
     if (!canManageLeave) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -158,7 +158,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 /** Admin only. An approved request's attendance stamp is undone first, so nothing is left stuck marked as leave. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "LEAVE")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "LEAVE", "DELETE")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

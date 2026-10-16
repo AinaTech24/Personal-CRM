@@ -7,7 +7,7 @@ import { canManageModule } from "@/lib/module-permissions-store";
 /** Admin (or an Attendance module grant) removes a holiday. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE")))) {
+  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "DELETE")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

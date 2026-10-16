@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
   const d = parsed.data;
 
   if (d.type === "GROUP") {
-    if (!isAdmin(user) && !(await canManageModule(user, "MESSAGES"))) {
+    if (!isAdmin(user) && !(await canManageModule(user, "MESSAGES", "CREATE"))) {
       return NextResponse.json({ error: "Only admins can create groups" }, { status: 403 });
     }
     const memberIds = [...new Set([...d.memberIds, user.id])];

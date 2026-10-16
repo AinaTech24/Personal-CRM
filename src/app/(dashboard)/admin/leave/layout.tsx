@@ -7,6 +7,6 @@ import { canManageModule } from "@/lib/module-permissions-store";
 export default async function AdminLeaveLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/");
-  if (!isAdmin(user) && !(await canManageModule(user, "LEAVE"))) redirect("/");
+  if (!isAdmin(user) && !(await canManageModule(user, "LEAVE", "READ"))) redirect("/");
   return <>{children}</>;
 }
