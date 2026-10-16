@@ -66,29 +66,41 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     needsCrmTeam ? db.team.findUnique({ where: { slug: "crm" }, select: { id: true } }) : null,
   ]);
 
-  const user = await db.$transaction(async (tx) => {
-    const created = await tx.user.create({
-      data: {
-        email: invite.email,
-        name,
-        surname,
-        mobile,
-        passwordHash,
-        pinHash,
-        role: invite.role,
-        departmentId: invite.departmentId,
-        isDepartmentAdmin: invite.inviteeIsDepartmentAdmin,
-      },
+  let user;
+  try {
+    user = await db.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          email: invite.email,
+          name,
+          surname,
+          mobile,
+          passwordHash,
+          pinHash,
+          role: invite.role,
+          departmentId: invite.departmentId,
+          isDepartmentAdmin: invite.inviteeIsDepartmentAdmin,
+        },
+      });
+      await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
+      if (socialTeam && (invite.socialMediaAdmin || invite.socialMediaMember)) {
+        await tx.teamMember.create({ data: { teamId: socialTeam.id, userId: created.id, isLead: invite.socialMediaAdmin } });
+      }
+      if (crmTeam && (invite.crmAdmin || invite.crmMember)) {
+        await tx.teamMember.create({ data: { teamId: crmTeam.id, userId: created.id, isLead: invite.crmAdmin } });
+      }
+      return created;
     });
-    await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
-    if (socialTeam && (invite.socialMediaAdmin || invite.socialMediaMember)) {
-      await tx.teamMember.create({ data: { teamId: socialTeam.id, userId: created.id, isLead: invite.socialMediaAdmin } });
+  } catch (err) {
+    // The findUnique checks above catch the common case, but two people
+    // accepting invites that land on the same email/mobile at the same
+    // instant can both pass those checks before either write lands — the
+    // loser hits the unique constraint here instead of a raw 500.
+    if (err && typeof err === "object" && "code" in err && err.code === "P2002") {
+      return NextResponse.json({ error: "That email or mobile number is already registered to another account" }, { status: 409 });
     }
-    if (crmTeam && (invite.crmAdmin || invite.crmMember)) {
-      await tx.teamMember.create({ data: { teamId: crmTeam.id, userId: created.id, isLead: invite.crmAdmin } });
-    }
-    return created;
-  });
+    throw err;
+  }
 
   // Every new account joins the auto-managed "Aina Family" group.
   await addUserToAinaFamily(user.id).catch(() => {});
