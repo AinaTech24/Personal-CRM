@@ -27,7 +27,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const teamUserIds = await getSocialMediaTeamUserIds();
+  // Prefer the caller's own department when they're a genuine lead (not an
+  // admin peeking in, who has no department-of-the-team of their own) — see
+  // getTeamUserIdsBySlug's comment for why this matters with 2+ leads.
+  const teamUserIds = await getSocialMediaTeamUserIds(membership?.isLead ? user.departmentId : undefined);
   const baseWhere = buildAttendanceWhere(req.nextUrl.searchParams);
   const where: Prisma.AttendanceWhereInput = { AND: [baseWhere, { userId: { in: teamUserIds } }] };
 

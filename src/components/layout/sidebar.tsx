@@ -120,6 +120,23 @@ const ADMIN_HREF_MODULE = new Map<string, ManagedModule>(
   (Object.entries(MODULE_ADMIN_HREFS) as [ManagedModule, string][]).map(([module, href]) => [href, module])
 );
 
+/**
+ * The subset of mainNav hrefs an admin can also globally hide (Admin >
+ * Application's module-visibility toggles) that overlap with a module the
+ * Permission Manager can grant. Without this, hiding "Leads" company-wide
+ * and then granting someone individual Leads access would still never show
+ * them the nav link — the hide would silently win with no indication of why
+ * in either admin screen. An explicit grant now wins, same as Clients
+ * already does below.
+ */
+const MAIN_NAV_HREF_MODULE: Partial<Record<string, ManagedModule>> = {
+  "/leads": "LEADS",
+  "/tasks": "TASKS",
+  "/projects": "PROJECTS",
+  "/meetings": "MEETINGS",
+  "/attendance": "ATTENDANCE",
+};
+
 function NavLinkItem({
   item,
   active,
@@ -253,12 +270,15 @@ export function Sidebar({
 
   let visibleMainNav = isAdmin
     ? [...mainNav]
-    : mainNav.filter(
+    : mainNav.filter((item) => {
         // "My Activity" is a personal record of one's own actions, not a
         // toggleable module — an admin hiding it would just be hiding the
         // one place a regular user can see their own history.
-        (item) => item.href === "/" || item.href === "/activity" || !hiddenModules.includes(item.href.replace(/^\//, ""))
-      );
+        if (item.href === "/" || item.href === "/activity") return true;
+        if (!hiddenModules.includes(item.href.replace(/^\//, ""))) return true;
+        const grantedModule = MAIN_NAV_HREF_MODULE[item.href];
+        return !!grantedModule && managedModuleSet.has(grantedModule);
+      });
 
   // Social Media team members (regular or lead, not a company admin) don't
   // get Quotations — enforced server-side too, independent of the sidebar —

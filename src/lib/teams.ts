@@ -38,12 +38,20 @@ async function getTeamMembersBySlug(slug: string): Promise<{ userId: string; isL
  * review doesn't pull their own unrelated leads/tasks/attendance into this
  * team's aggregate views. Falls back to the unfiltered roster if no lead
  * has a department set.
+ *
+ * `preferredDepartmentId`, when given, wins over the derived one — callers
+ * pass the CALLING lead's own department here (never an admin's, who has no
+ * department-of-the-team to speak of). Without it, a team with leads spread
+ * across two departments would pick whichever lead's department happened to
+ * come back first from the roster query, which could exclude a lead from
+ * their own team's scope (e.g. from approving their own attendance) simply
+ * because a different lead's department "won" that lookup.
  */
-export async function getTeamUserIdsBySlug(slug: string): Promise<string[]> {
+export async function getTeamUserIdsBySlug(slug: string, preferredDepartmentId?: string | null): Promise<string[]> {
   const members = await getTeamMembersBySlug(slug);
-  const leadDepartmentId = members.find((m) => m.isLead && m.departmentId)?.departmentId ?? null;
-  if (!leadDepartmentId) return members.map((m) => m.userId);
-  return members.filter((m) => m.departmentId === leadDepartmentId).map((m) => m.userId);
+  const departmentId = preferredDepartmentId ?? members.find((m) => m.isLead && m.departmentId)?.departmentId ?? null;
+  if (!departmentId) return members.map((m) => m.userId);
+  return members.filter((m) => m.departmentId === departmentId).map((m) => m.userId);
 }
 
 /** Broadcasts to every member of the team identified by `slug`, plus admins — not a global event everyone would receive regardless of access. */

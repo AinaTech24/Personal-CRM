@@ -33,8 +33,8 @@ export async function getSocialMembership(userId: string): Promise<SocialMembers
  * (team-attendance, team-activity, and both scope-widening/narrowing
  * helpers below) actually wants; nothing needs the unfiltered roster.
  */
-export async function getSocialMediaTeamUserIds(): Promise<string[]> {
-  return getTeamUserIdsBySlug(TEAM_SLUG);
+export async function getSocialMediaTeamUserIds(preferredDepartmentId?: string | null): Promise<string[]> {
+  return getTeamUserIdsBySlug(TEAM_SLUG, preferredDepartmentId);
 }
 
 /**
@@ -49,7 +49,10 @@ export async function socialMediaTeamScopeFor(user: PermissionUser): Promise<str
   if (isAdmin(user)) return null;
   const membership = await getSocialMembership(user.id);
   if (!isSocialMediaLead(user, membership)) return null;
-  return getSocialMediaTeamUserIds();
+  // isAdmin already returned above, so passing isSocialMediaLead here means
+  // this is a genuine lead membership row — prefer their own department
+  // over an arbitrary lead's (see getTeamUserIdsBySlug's comment).
+  return getSocialMediaTeamUserIds(user.departmentId);
 }
 
 /**
@@ -70,7 +73,11 @@ export async function socialMediaTeamScopeFor(user: PermissionUser): Promise<str
 export async function socialMediaTeamOnlyScopeFor(user: PermissionUser): Promise<string[] | null> {
   const membership = await getSocialMembership(user.id);
   if (!isSocialMediaLead(user, membership)) return null;
-  return getSocialMediaTeamUserIds();
+  // Unlike socialMediaTeamScopeFor, isSocialMediaLead here can also be true
+  // for a company Admin peeking at the team-only view — an admin has no
+  // department-of-the-team of their own, so only prefer the caller's
+  // department when membership says they're a genuine lead.
+  return getSocialMediaTeamUserIds(membership?.isLead ? user.departmentId : undefined);
 }
 
 /**
