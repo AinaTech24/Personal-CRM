@@ -20,8 +20,8 @@ export async function getCrmMembership(userId: string): Promise<CrmMembership | 
  * one-off reviewer shouldn't pull their own unrelated work into this team's
  * aggregate views.
  */
-export async function getCrmTeamUserIds(): Promise<string[]> {
-  return getTeamUserIdsBySlug(TEAM_SLUG);
+export async function getCrmTeamUserIds(preferredDepartmentId?: string | null): Promise<string[]> {
+  return getTeamUserIdsBySlug(TEAM_SLUG, preferredDepartmentId);
 }
 
 /**
@@ -34,7 +34,9 @@ export async function crmTeamScopeFor(user: PermissionUser): Promise<string[] | 
   if (isAdmin(user)) return null;
   const membership = await getCrmMembership(user.id);
   if (!isCrmLead(user, membership)) return null;
-  return getCrmTeamUserIds();
+  // isAdmin already returned above, so this is a genuine lead membership —
+  // prefer their own department over an arbitrary lead's.
+  return getCrmTeamUserIds(user.departmentId);
 }
 
 /**
@@ -46,7 +48,9 @@ export async function crmTeamScopeFor(user: PermissionUser): Promise<string[] | 
 export async function crmTeamOnlyScopeFor(user: PermissionUser): Promise<string[] | null> {
   const membership = await getCrmMembership(user.id);
   if (!isCrmLead(user, membership)) return null;
-  return getCrmTeamUserIds();
+  // isCrmLead can also be true for an admin with no department-of-the-team
+  // of their own — only prefer the caller's department for a genuine lead.
+  return getCrmTeamUserIds(membership?.isLead ? user.departmentId : undefined);
 }
 
 /**

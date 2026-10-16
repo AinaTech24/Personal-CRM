@@ -485,7 +485,13 @@ export default function UsersPage() {
                 <Dropdown
                   id="edit-dept"
                   value={editDept}
-                  onChange={setEditDept}
+                  onChange={(v) => {
+                    setEditDept(v);
+                    // Department Admin means nothing without a department to
+                    // administer — clearing it would otherwise leave the
+                    // checkbox checked but silently inert.
+                    if (!v && editIsDepartmentAdmin) setEditIsDepartmentAdmin(false);
+                  }}
                   placeholder="None"
                   options={deptOptions}
                 />
@@ -500,17 +506,22 @@ export default function UsersPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border p-3">
+                <label className={cn("flex items-start gap-2.5 rounded-md border border-border p-3", editDept ? "cursor-pointer" : "cursor-not-allowed opacity-60")}>
                   <Checkbox
                     checked={editIsDepartmentAdmin}
-                    onChange={setEditIsDepartmentAdmin}
+                    onChange={(v) => {
+                      if (!editDept) return toast.error("Pick a department first", "Department Admin needs a department to administer.");
+                      setEditIsDepartmentAdmin(v);
+                    }}
                     aria-label="Department Admin"
                     className="mt-0.5"
                   />
                   <span className="flex flex-col gap-0.5">
                     <span className="text-sm font-medium">Department Admin</span>
                     <span className="text-xs text-muted-foreground">
-                      Can open the Permission Manager for anyone else in {editDept ? departments.find((d) => d.id === editDept)?.name ?? "this department" : "their department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.
+                      {editDept
+                        ? `Can open the Permission Manager for anyone else in ${departments.find((d) => d.id === editDept)?.name ?? "this department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.`
+                        : "Pick a department above first — this has nothing to administer without one."}
                     </span>
                   </span>
                 </label>

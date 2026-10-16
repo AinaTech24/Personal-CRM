@@ -135,3 +135,22 @@ export function hasGroupAdmin(member: { isGroupAdmin: boolean; adminUntil: Date 
   if (!member?.isGroupAdmin) return false;
   return !member.adminUntil || member.adminUntil > new Date();
 }
+
+/**
+ * Whether `userId` is a currently-active group admin of `conversationId`,
+ * and whether that conversation is even a group — a DM has no admin concept
+ * at all, so callers moderating group-only actions (pinning, deleting
+ * someone else's message for everyone) should only enforce the admin check
+ * when `isGroup` is true.
+ */
+export async function groupAdminStatus(userId: string, conversationId: string): Promise<{ isGroup: boolean; isGroupAdmin: boolean }> {
+  const conversation = await db.conversation.findUnique({
+    where: { id: conversationId },
+    select: {
+      type: true,
+      members: { where: { userId }, select: { isGroupAdmin: true, adminUntil: true }, take: 1 },
+    },
+  });
+  if (!conversation) return { isGroup: false, isGroupAdmin: false };
+  return { isGroup: conversation.type === "GROUP", isGroupAdmin: hasGroupAdmin(conversation.members[0]) };
+}
