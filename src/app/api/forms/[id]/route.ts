@@ -30,6 +30,8 @@ const patchSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   description: z.string().trim().max(2000).nullable().optional(),
   isActive: z.boolean().optional(),
+  /** When true, copying the link never rotates it — see Form.lockSlug. */
+  lockSlug: z.boolean().optional(),
   /** Replaces the full set of departments (besides Admins) who can view this form's submissions. */
   viewerDepartmentIds: z.array(z.string()).optional(),
 });
@@ -53,6 +55,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(d.title !== undefined && { title: d.title }),
         ...(d.description !== undefined && { description: d.description || null }),
         ...(d.isActive !== undefined && { isActive: d.isActive }),
+        ...(d.lockSlug !== undefined && { lockSlug: d.lockSlug }),
       },
     });
     if (d.viewerDepartmentIds !== undefined) {

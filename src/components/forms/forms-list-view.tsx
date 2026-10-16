@@ -6,16 +6,12 @@ import { useRouter } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActionsMenu } from "@/components/ui/row-actions";
 import { useToast } from "@/components/providers/toast-provider";
-import { IconEye, IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
+import { IconCopy, IconEye, IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
 
 interface FormRow {
   id: string;
@@ -38,9 +34,6 @@ export function FormsListView() {
   // whose first visit found an empty list.
   const [canCreate, setCanCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<FormRow | null>(null);
 
   const load = useCallback(async () => {
@@ -54,21 +47,34 @@ export function FormsListView() {
     load();
   }, [load]);
 
+  // Straight into the editor with a placeholder title, rather than asking for
+  // one in a dialog first — the title field is right there at the top of the
+  // builder to rename immediately.
   async function createForm() {
-    if (!title.trim()) return;
-    setSaving(true);
+    setCreating(true);
     try {
       const res = await fetch("/api/forms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), description: description.trim() || null }),
+        body: JSON.stringify({ title: "Untitled form" }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return toast.error("Couldn't create the form", data.error);
       router.push(`/forms/${data.form.id}/edit`);
     } finally {
-      setSaving(false);
+      setCreating(false);
     }
+  }
+
+  async function copyLink(row: FormRow) {
+    const res = await fetch(`/api/forms/${row.id}/copy-link`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error("Couldn't copy the link", data.error);
+    await navigator.clipboard.writeText(`${window.location.origin}/f/${data.slug}`);
+    toast.success("Form link copied");
+    // The slug may have just rotated — keep the row (and its "View form"
+    // action) pointed at whatever link is now actually live.
+    setRows((prev) => (prev ? prev.map((r) => (r.id === row.id ? { ...r, slug: data.slug } : r)) : prev));
   }
 
   async function confirmDelete() {
@@ -88,9 +94,9 @@ export function FormsListView() {
           <p className="text-sm text-muted-foreground">Build public forms and review what people submit.</p>
         </div>
         {canCreate && (
-          <Button type="button" onClick={() => setCreating(true)}>
+          <Button type="button" onClick={createForm} disabled={creating}>
             <IconPlus className="h-4 w-4" />
-            New Form
+            {creating ? "Creating..." : "New Form"}
           </Button>
         )}
       </div>
@@ -154,6 +160,12 @@ export function FormsListView() {
                                   onSelect: () => router.push(`/forms/${r.id}/edit`),
                                 },
                                 {
+                                  key: "copy-link",
+                                  label: "Copy link",
+                                  icon: <IconCopy className="h-4 w-4" />,
+                                  onSelect: () => copyLink(r),
+                                },
+                                {
                                   key: "delete",
                                   label: "Delete form",
                                   icon: <IconTrash className="h-4 w-4" />,
@@ -173,33 +185,6 @@ export function FormsListView() {
           </CardContent>
         </Card>
       )}
-
-      <Dialog open={creating} onOpenChange={(v) => !saving && setCreating(v)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New form</DialogTitle>
-            <DialogDescription>Give it a title and description — you&apos;ll add fields next.</DialogDescription>
-          </DialogHeader>
-          <DialogBody className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-form-title">Title</Label>
-              <Input id="new-form-title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-form-description">Description (optional)</Label>
-              <Textarea id="new-form-description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-            </div>
-          </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={saving} onClick={() => setCreating(false)}>
-              Cancel
-            </Button>
-            <Button type="button" disabled={saving || !title.trim()} onClick={createForm}>
-              {saving ? "Creating..." : "Create & continue"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <ConfirmDialog
         open={deleting !== null}

@@ -61,6 +61,8 @@ interface FormDetail {
   description: string | null;
   slug: string;
   isActive: boolean;
+  /** When true, Copy link never rotates the slug — for a form whose link needs to stay stable, e.g. embedded on a website. */
+  lockSlug: boolean;
   fields: FieldRow[];
   viewerDepartments: { departmentId: string; department: { id: string; name: string } }[];
 }
@@ -261,7 +263,7 @@ export function FormBuilderView({ formId }: { formId: string }) {
     load();
   }, [load]);
 
-  function patchFormMeta(patch: Partial<Pick<FormDetail, "title" | "description" | "isActive">>) {
+  function patchFormMeta(patch: Partial<Pick<FormDetail, "title" | "description" | "isActive" | "lockSlug">>) {
     setForm((f) => (f ? { ...f, ...patch } : f));
     fetch(`/api/forms/${formId}`, {
       method: "PATCH",
@@ -359,7 +361,13 @@ export function FormBuilderView({ formId }: { formId: string }) {
 
   async function copyLink() {
     if (!form) return;
-    await navigator.clipboard.writeText(`${window.location.origin}/f/${form.slug}`);
+    const res = await fetch(`/api/forms/${formId}/copy-link`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error("Couldn't copy the link", data.error);
+    await navigator.clipboard.writeText(`${window.location.origin}/f/${data.slug}`);
+    // The slug may have just rotated — keep the builder's own Preview/the
+    // displayed link pointed at whatever is now actually live.
+    setForm((f) => (f ? { ...f, slug: data.slug } : f));
     toast.success("Form link copied");
     setCopied(true);
     if (copyTimer.current) clearTimeout(copyTimer.current);
@@ -389,6 +397,12 @@ export function FormBuilderView({ formId }: { formId: string }) {
             <ToggleSwitch checked={form.isActive} onChange={(v) => patchFormMeta({ isActive: v })} />
             {form.isActive ? "Active" : "Inactive"}
           </label>
+          <Tooltip label="Off: copying the link rotates it to a fresh one each time, so an old copy stops working. On: the link stays the same — turn this on for a form embedded on a website.">
+            <label className="mr-2 flex items-center gap-2 text-sm">
+              <ToggleSwitch checked={form.lockSlug} onChange={(v) => patchFormMeta({ lockSlug: v })} />
+              {form.lockSlug ? "Link fixed" : "Link rotates on copy"}
+            </label>
+          </Tooltip>
           <Button type="button" variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
             <IconExternalLink className="h-3.5 w-3.5" />
             Preview
