@@ -8,25 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Tooltip } from "@/components/ui/tooltip";
-import { SkeletonTable } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/components/providers/toast-provider";
 import { IconSend, IconChevronLeft, IconInfo, IconShield, IconKey } from "@/components/icons";
-import {
-  MANAGED_MODULES,
-  MODULE_ACTIONS,
-  MODULE_ACTION_LABEL,
-  MODULE_LABEL,
-  NO_MODULE_ACCESS,
-  FULL_MODULE_ACCESS,
-  type ManagedModule,
-  type ModuleAction,
-  type ModulePermissionFlags,
-} from "@/lib/module-permissions";
+import { ManagePermissionsDialog } from "@/components/permissions/manage-permissions-dialog";
 
 const ROLE_OPTIONS = [
   { value: "DEPARTMENT_USER", label: "Department User" },
@@ -60,19 +48,6 @@ interface DepartmentDetail {
   users: Member[];
 }
 
-type Matrix = Record<ManagedModule, ModulePermissionFlags>;
-
-const FLAG_KEY: Record<ModuleAction, keyof ModulePermissionFlags> = {
-  CREATE: "canCreate",
-  READ: "canRead",
-  UPDATE: "canUpdate",
-  DELETE: "canDelete",
-};
-
-function emptyMatrix(): Matrix {
-  return Object.fromEntries(MANAGED_MODULES.map((m) => [m, { ...NO_MODULE_ACCESS }])) as Matrix;
-}
-
 export default function DepartmentDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -92,10 +67,6 @@ export default function DepartmentDetailPage() {
   const [detailsUser, setDetailsUser] = useState<Member | null>(null);
 
   const [permsUser, setPermsUser] = useState<Member | null>(null);
-  const [permsMatrix, setPermsMatrix] = useState<Matrix>(emptyMatrix());
-  const [permsLoading, setPermsLoading] = useState(false);
-  const [permsSaving, setPermsSaving] = useState(false);
-  const [permsDirty, setPermsDirty] = useState(false);
 
   const [resetUser, setResetUser] = useState<Member | null>(null);
   const [resetSending, setResetSending] = useState(false);
@@ -156,54 +127,6 @@ export default function DepartmentDetailPage() {
       load();
     } finally {
       setSending(false);
-    }
-  }
-
-  async function openPerms(u: Member) {
-    setPermsUser(u);
-    setPermsLoading(true);
-    try {
-      const res = await fetch(`/api/admin/permissions/${u.id}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error("Couldn't load their permissions", data.error);
-        setPermsUser(null);
-        return;
-      }
-      setPermsMatrix(data.matrix);
-      setPermsDirty(false);
-    } finally {
-      setPermsLoading(false);
-    }
-  }
-
-  function togglePerm(module: ManagedModule, action: ModuleAction) {
-    const key = FLAG_KEY[action];
-    setPermsMatrix((prev) => ({ ...prev, [module]: { ...prev[module], [key]: !prev[module][key] } }));
-    setPermsDirty(true);
-  }
-
-  function setModuleAll(module: ManagedModule, flags: ModulePermissionFlags) {
-    setPermsMatrix((prev) => ({ ...prev, [module]: { ...flags } }));
-    setPermsDirty(true);
-  }
-
-  async function savePerms() {
-    if (!permsUser) return;
-    setPermsSaving(true);
-    try {
-      const res = await fetch(`/api/admin/permissions/${permsUser.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matrix: permsMatrix }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) return toast.error("Couldn't save permissions", data.error);
-      setPermsMatrix(data.matrix);
-      setPermsDirty(false);
-      toast.success("Permissions saved", fullName(permsUser));
-    } finally {
-      setPermsSaving(false);
     }
   }
 
@@ -293,7 +216,7 @@ export default function DepartmentDetailPage() {
                     <Tooltip label="Manage permissions" side="bottom">
                       <button
                         type="button"
-                        onClick={() => openPerms(u)}
+                        onClick={() => setPermsUser(u)}
                         aria-label={`Manage permissions for ${fullName(u)}`}
                         className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
                       >
@@ -397,74 +320,7 @@ export default function DepartmentDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!permsUser} onOpenChange={(v) => !permsSaving && !v && setPermsUser(null)}>
-        <DialogContent size="lg">
-          <DialogHeader>
-            <DialogTitle>Permissions {permsUser && `· ${fullName(permsUser)}`}</DialogTitle>
-            <DialogDescription>
-              Grant full create/read/update/delete access to specific modules, on top of whatever their role already allows.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody>
-            {permsLoading ? (
-              <SkeletonTable rows={MANAGED_MODULES.length} columns={5} />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                      <th className="whitespace-nowrap px-2 py-2 font-medium">Module</th>
-                      {MODULE_ACTIONS.map((action) => (
-                        <th key={action} className="whitespace-nowrap px-2 py-2 text-center font-medium">
-                          {MODULE_ACTION_LABEL[action]}
-                        </th>
-                      ))}
-                      <th className="whitespace-nowrap px-2 py-2 text-right font-medium">Quick set</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {MANAGED_MODULES.map((module) => {
-                      const flags = permsMatrix[module];
-                      const allGranted = flags.canCreate && flags.canRead && flags.canUpdate && flags.canDelete;
-                      return (
-                        <tr key={module} className="border-b border-border/50 last:border-0">
-                          <td className="whitespace-nowrap px-2 py-2.5 font-medium">{MODULE_LABEL[module]}</td>
-                          {MODULE_ACTIONS.map((action) => (
-                            <td key={action} className="px-2 py-2.5 text-center">
-                              <ToggleSwitch
-                                checked={flags[FLAG_KEY[action]]}
-                                onChange={() => togglePerm(module, action)}
-                                label={`${MODULE_ACTION_LABEL[action]} ${MODULE_LABEL[module]}`}
-                              />
-                            </td>
-                          ))}
-                          <td className="whitespace-nowrap px-2 py-2.5 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setModuleAll(module, allGranted ? NO_MODULE_ACCESS : FULL_MODULE_ACCESS)}
-                              className="text-xs text-primary hover:underline"
-                            >
-                              {allGranted ? "Clear all" : "Grant all"}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={permsSaving} onClick={() => setPermsUser(null)}>
-              Close
-            </Button>
-            <Button type="button" onClick={savePerms} disabled={!permsDirty || permsSaving || permsLoading}>
-              {permsSaving ? "Saving..." : "Save changes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ManagePermissionsDialog user={permsUser} onOpenChange={(open) => !open && setPermsUser(null)} />
 
       <Dialog open={!!resetUser} onOpenChange={(v) => !resetSending && !v && setResetUser(null)}>
         <DialogContent>
