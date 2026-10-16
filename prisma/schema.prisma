@@ -1919,6 +1919,10 @@ model Form {
   description String?  @db.Text
   slug        String   @unique
   isActive    Boolean  @default(true)
+  /// When false (the default), copying the link rotates it to a fresh
+  /// random slug first — the old link stops working. Set true for a form
+  /// whose link needs to stay stable, e.g. one embedded on a website.
+  lockSlug    Boolean  @default(false)
   createdById String
   createdBy   User     @relation("FormCreatedBy", fields: [createdById], references: [id])
 
