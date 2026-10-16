@@ -5,7 +5,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
+  IconDashboard,
   IconLeads,
+  IconTasks,
+  IconProjects,
+  IconMessage,
   IconQuotations,
   IconInvoices,
   IconBuilding,
@@ -23,7 +27,6 @@ import {
   IconLayoutGrid,
   IconShield,
 } from "@/components/icons";
-import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSocket } from "@/components/providers/socket-provider";
@@ -33,93 +36,40 @@ import { cn } from "@/lib/utils";
 interface NavItem {
   href: string;
   label: string;
-  // `hovering`/`highlighted` are only ever set (and only ever read) by a
-  // Lottie-backed icon — a static Icon* simply ignores props it doesn't
-  // declare; it gets both effects for free via `stroke="currentColor"`.
-  icon: React.ComponentType<{ className?: string; hovering?: boolean; highlighted?: boolean }>;
+  icon: React.ComponentType<{ className?: string }>;
 }
-
-/**
- * Wraps a Lottie animation (see lottie-icon.tsx) so it can slot into
- * NavItem.icon exactly like a static SVG component — static at rest, plays
- * for as long as the row it's part of is hovered, and recolors to match
- * whatever shade the row's own label text is currently in (muted at rest,
- * full foreground once hovered or on the active route) so it "highlights"
- * the same way a static icon's `currentColor` stroke already does. Both are
- * threaded in from the row itself (NavLinkItem below), not tracked here, so
- * hovering anywhere on the row — not just the icon glyph — triggers it.
- * Only the icons an animated replacement has actually been provided for use
- * this; everything else still uses its static Icon*.
- */
-function lottieNavIcon(src: string) {
-  return function NavIcon({
-    className,
-    hovering,
-    highlighted,
-  }: {
-    className?: string;
-    hovering?: boolean;
-    highlighted?: boolean;
-  }) {
-    // Matches the h-5 w-5 (20px) every static Icon* renders at here — Lottie
-    // needs an explicit pixel size rather than relying on the className alone.
-    return <LottieIcon src={src} size={20} className={className} playing={hovering} highlighted={highlighted} />;
-  };
-}
-
-/**
- * Every static Icon* spreads its full props object onto the underlying
- * `<svg>` (see icons/index.tsx's `base()`) so its caller can pass through
- * arbitrary SVG attributes — which means an unwrapped static icon would leak
- * `hovering`/`highlighted` straight onto the DOM as invalid boolean
- * attributes. This strips them before the icon ever sees them, so every
- * NavItem.icon can be called identically regardless of which kind it is.
- */
-function staticNavIcon(Icon: React.ComponentType<{ className?: string }>) {
-  return function NavIcon({ className }: { className?: string; hovering?: boolean; highlighted?: boolean }) {
-    return <Icon className={className} />;
-  };
-}
-
-const LottieDashboard = lottieNavIcon("/icons/Dashboard.json");
-const LottieTasks = lottieNavIcon("/icons/Tasks.json");
-const LottieProjects = lottieNavIcon("/icons/Projects.json");
-const LottieMeetings = lottieNavIcon("/icons/Meetings.json");
-const LottieMessages = lottieNavIcon("/icons/Messages.json");
-const LottieClients = lottieNavIcon("/icons/Clients.json");
-const LottieUsersInvites = lottieNavIcon("/icons/users and invites.json");
 
 const mainNav: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LottieDashboard },
-  { href: "/leads", label: "Leads", icon: staticNavIcon(IconLeads) },
-  { href: "/tasks", label: "Tasks", icon: LottieTasks },
-  { href: "/projects", label: "Projects", icon: LottieProjects },
-  { href: "/meetings", label: "Meetings", icon: LottieMeetings },
-  { href: "/messages", label: "Messages", icon: LottieMessages },
-  { href: "/quotations", label: "Quotations", icon: staticNavIcon(IconQuotations) },
-  { href: "/invoices", label: "Invoices", icon: staticNavIcon(IconInvoices) },
-  { href: "/passwords", label: "Password Manager", icon: staticNavIcon(IconKey) },
-  { href: "/birthdays", label: "Birthdays", icon: staticNavIcon(IconCake) },
-  { href: "/attendance", label: "My Attendance", icon: staticNavIcon(IconClock) },
-  { href: "/leave", label: "My Leave", icon: staticNavIcon(IconCalendar) },
-  { href: "/activity", label: "My Activity", icon: staticNavIcon(IconHistory) },
+  { href: "/", label: "Dashboard", icon: IconDashboard },
+  { href: "/leads", label: "Leads", icon: IconLeads },
+  { href: "/tasks", label: "Tasks", icon: IconTasks },
+  { href: "/projects", label: "Projects", icon: IconProjects },
+  { href: "/meetings", label: "Meetings", icon: IconCalendar },
+  { href: "/messages", label: "Messages", icon: IconMessage },
+  { href: "/quotations", label: "Quotations", icon: IconQuotations },
+  { href: "/invoices", label: "Invoices", icon: IconInvoices },
+  { href: "/passwords", label: "Password Manager", icon: IconKey },
+  { href: "/birthdays", label: "Birthdays", icon: IconCake },
+  { href: "/attendance", label: "My Attendance", icon: IconClock },
+  { href: "/leave", label: "My Leave", icon: IconCalendar },
+  { href: "/activity", label: "My Activity", icon: IconHistory },
 ];
 
 const adminNav: NavItem[] = [
-  { href: "/admin/modules", label: "Modules", icon: staticNavIcon(IconGrid) },
-  { href: "/admin/logs", label: "View logs", icon: staticNavIcon(IconHistory) },
-  { href: "/admin/departments", label: "Departments", icon: staticNavIcon(IconBuilding) },
-  { href: "/admin/users", label: "Users & Invites", icon: LottieUsersInvites },
-  { href: "/admin/permissions", label: "Permission Manager", icon: staticNavIcon(IconShield) },
-  { href: "/admin/birthdays", label: "Birthday Settings", icon: staticNavIcon(IconCake) },
-  { href: "/social-media/team", label: "Social Media Team", icon: staticNavIcon(IconUsers) },
-  { href: "/crm/team", label: "CRM Team", icon: staticNavIcon(IconUsers) },
-  { href: "/admin/attendance", label: "Attendance", icon: staticNavIcon(IconClock) },
-  { href: "/admin/leave", label: "Leave Requests", icon: staticNavIcon(IconCalendar) },
-  { href: "/admin/clients", label: "Client Accounts", icon: staticNavIcon(IconBuilding) },
-  { href: "/forms", label: "Forms", icon: staticNavIcon(IconLayoutGrid) },
-  { href: "/admin/email", label: "Email (SMTP)", icon: staticNavIcon(IconMail) },
-  { href: "/admin/settings", label: "Application", icon: staticNavIcon(IconSettings) },
+  { href: "/admin/modules", label: "Modules", icon: IconGrid },
+  { href: "/admin/logs", label: "View logs", icon: IconHistory },
+  { href: "/admin/departments", label: "Departments", icon: IconBuilding },
+  { href: "/admin/users", label: "Users & Invites", icon: IconUsers },
+  { href: "/admin/permissions", label: "Permission Manager", icon: IconShield },
+  { href: "/admin/birthdays", label: "Birthday Settings", icon: IconCake },
+  { href: "/social-media/team", label: "Social Media Team", icon: IconUsers },
+  { href: "/crm/team", label: "CRM Team", icon: IconUsers },
+  { href: "/admin/attendance", label: "Attendance", icon: IconClock },
+  { href: "/admin/leave", label: "Leave Requests", icon: IconCalendar },
+  { href: "/admin/clients", label: "Client Accounts", icon: IconBuilding },
+  { href: "/forms", label: "Forms", icon: IconLayoutGrid },
+  { href: "/admin/email", label: "Email (SMTP)", icon: IconMail },
+  { href: "/admin/settings", label: "Application", icon: IconSettings },
 ];
 
 /**
@@ -128,14 +78,14 @@ const adminNav: NavItem[] = [
  * "Social Media Team" link above, so this one link survives for them
  * specifically.
  */
-const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: LottieClients };
+const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: IconBuilding };
 
 /**
  * A non-admin lead's own way into the same Team console an Admin/Super Admin
  * reaches via adminNav's "Social Media Team" entry above — a regular
  * (non-lead) team member doesn't manage the team, so they don't get this.
  */
-const teamNavItem: NavItem = { href: "/social-media/team", label: "Social Media Team", icon: staticNavIcon(IconUsers) };
+const teamNavItem: NavItem = { href: "/social-media/team", label: "Social Media Team", icon: IconUsers };
 
 /** Modules a Social Media team member (regular or lead) never sees, even if an admin hasn't globally hidden them. */
 const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
@@ -145,13 +95,13 @@ const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
  * a separate curated line of business (they still need Quotations, Invoices,
  * etc.), so this is purely additive rather than replacing anything.
  */
-const callsNavItem: NavItem = { href: "/calls", label: "Calls", icon: staticNavIcon(IconPhone) };
+const callsNavItem: NavItem = { href: "/calls", label: "Calls", icon: IconPhone };
 
 /** A non-admin CRM lead's own way into the CRM Team console — mirrors teamNavItem above. */
-const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: staticNavIcon(IconUsers) };
+const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: IconUsers };
 
 /** A non-admin user whose department was shared on at least one form — mirrors adminNav's own entry at the same href. */
-const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: staticNavIcon(IconLayoutGrid) };
+const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: IconLayoutGrid };
 
 /**
  * Which adminNav entries an individually-granted module permission (not
@@ -171,17 +121,6 @@ const ADMIN_HREF_MODULE = new Map<string, ManagedModule>(
   (Object.entries(MODULE_ADMIN_HREFS) as [ManagedModule, string][]).map(([module, href]) => [href, module])
 );
 
-/**
- * One sidebar row. Defined at module scope (not inside Sidebar) so its
- * identity is stable across renders — a component recreated every render
- * would remount here, losing the very hover state this exists to hold.
- * Hover is tracked on the whole row and forwarded to item.icon as
- * `hovering`, so a Lottie-backed icon animates the moment the pointer
- * enters anywhere on the link, not just its own glyph. `highlighted`
- * (hovering or the active route) is forwarded alongside it, matching
- * exactly when the row's own label text switches from muted to foreground,
- * so the icon "lights up" the same way the text does.
- */
 function NavLinkItem({
   item,
   active,
@@ -199,7 +138,6 @@ function NavLinkItem({
   labelClass: string;
   onNavigate?: () => void;
 }) {
-  const [hovering, setHovering] = useState(false);
   // Unread messages are a running tally, not something needing triage, so they
   // get a plain count pill rather than the pinging "look at me" dot.
   const isCount = tone === "count";
@@ -212,15 +150,13 @@ function NavLinkItem({
       <Link
         href={item.href}
         onClick={onNavigate}
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
         className={cn(
           "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground",
           active && "bg-accent text-foreground"
         )}
       >
         <span className="relative shrink-0">
-          <item.icon className="h-5 w-5" hovering={hovering} highlighted={hovering || active} />
+          <item.icon className="h-5 w-5" />
           {badgeCount > 0 &&
             (isCount ? (
               // Collapsed, the rail is too narrow for a number, so the icon

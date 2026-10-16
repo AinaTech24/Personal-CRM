@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { IconBell, IconCheck, IconTrash } from "@/components/icons";
-import { LottieIcon } from "@/components/icons/lottie-icon";
 import { AnimatePresence, motion } from "framer-motion";
 import * as Popover from "@radix-ui/react-popover";
 import { useSocket } from "@/components/providers/socket-provider";
@@ -27,7 +26,6 @@ export function NotificationBell() {
   const toast = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
-  const [hovering, setHovering] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.readAt).length;
 
@@ -100,15 +98,8 @@ export function NotificationBell() {
           <button
             className="relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
             aria-label="Notifications"
-            onMouseEnter={() => setHovering(true)}
-            onMouseLeave={() => setHovering(false)}
           >
-            <LottieIcon
-              src="/icons/Notifications.json"
-              size={20}
-              playing={hovering || unreadCount > 0}
-              highlighted={hovering || unreadCount > 0}
-            />
+            <IconBell className="h-5 w-5" />
             <AnimatePresence>
               {unreadCount > 0 && (
                 <motion.span
