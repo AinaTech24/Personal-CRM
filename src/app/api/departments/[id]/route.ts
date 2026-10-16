@@ -19,7 +19,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     where: { id },
     include: {
       users: {
-        select: { id: true, name: true, surname: true, email: true, avatarDataUrl: true, role: true, isDepartmentAdmin: true, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          surname: true,
+          email: true,
+          mobile: true,
+          avatarDataUrl: true,
+          role: true,
+          isDepartmentAdmin: true,
+          isActive: true,
+        },
         orderBy: { name: "asc" },
       },
     },

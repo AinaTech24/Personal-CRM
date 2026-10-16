@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTi
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActionsMenu } from "@/components/ui/row-actions";
 import { useToast } from "@/components/providers/toast-provider";
-import { IconPencil, IconTrash } from "@/components/icons";
+import { Tooltip } from "@/components/ui/tooltip";
+import { IconPencil, IconTrash, IconPlus } from "@/components/icons";
 
 interface Department {
   id: string;
@@ -21,6 +22,7 @@ export default function DepartmentsPage() {
   const router = useRouter();
   const toast = useToast();
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,10 +69,17 @@ export default function DepartmentsPage() {
         return;
       }
       setName("");
+      setCreateOpen(false);
       await load();
     } finally {
       setLoading(false);
     }
+  }
+
+  function openCreate() {
+    setName("");
+    setError(null);
+    setCreateOpen(true);
   }
 
   function openRename(d: Department) {
@@ -114,27 +123,19 @@ export default function DepartmentsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold">Departments</h1>
-        <p className="text-sm text-muted-foreground">Organizational units such as Development, Design, Sales.</p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Departments</h1>
+          <p className="text-sm text-muted-foreground">Organizational units such as Development, Design, Sales.</p>
+        </div>
+        {isAdmin && (
+          <Tooltip label="New department" side="bottom">
+            <Button type="button" size="icon" onClick={openCreate} aria-label="New department">
+              <IconPlus className="h-4 w-4" />
+            </Button>
+          </Tooltip>
+        )}
       </div>
-
-      {isAdmin && (
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle className="text-base">New department</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={onCreate} className="flex gap-2">
-              <Input placeholder="e.g. Development" value={name} onChange={(e) => setName(e.target.value)} required />
-              <Button type="submit" disabled={loading}>
-                Add
-              </Button>
-            </form>
-            {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {departments.map((d) => {
@@ -172,6 +173,28 @@ export default function DepartmentsPage() {
           );
         })}
       </div>
+
+      <Dialog open={createOpen} onOpenChange={(v) => !loading && setCreateOpen(v)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New department</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <form id="create-department-form" onSubmit={onCreate}>
+              <Input placeholder="e.g. Development" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+              {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+            </form>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={loading} onClick={() => setCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="create-department-form" disabled={loading}>
+              {loading ? "Adding..." : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!renaming} onOpenChange={(v) => !renameSaving && !v && setRenaming(null)}>
         <DialogContent>
