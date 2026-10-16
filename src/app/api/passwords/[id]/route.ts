@@ -97,7 +97,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(nextLink !== undefined && { link: nextLink }),
       ...(faviconDataUrl !== undefined && { faviconDataUrl }),
       ...(d.username !== undefined && { username: d.username?.trim() || null }),
-      ...(d.password && { password: d.password }),
+      ...(d.password && { password: d.password, rotationReminderSentAt: null }),
       ...(departmentId !== undefined && { departmentId }),
       updatedById: user.id,
     },

@@ -102,4 +102,21 @@ app.prepare().then(() => {
       headers: { "x-cron-secret": process.env.CRON_SECRET },
     }).catch((err) => console.error("attendance reminder sweep failed:", err));
   }, REMINDER_SWEEP_INTERVAL_MS);
+
+  // Daily sweeps for reminders that only ever change once a day at most
+  // (an invoice going overdue, a password going stale, a birthday coming
+  // up) — unlike the attendance sweep above, there's no tight window to
+  // avoid missing, so once a day is enough. Each route is idempotent on its
+  // own persisted "already sent" state, so firing again after a redeploy
+  // restarts this timer is harmless.
+  const DAILY_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+  const DAILY_SWEEP_ROUTES = ["/api/invoices/send-reminders", "/api/passwords/send-reminders", "/api/birthdays/send-reminders"];
+  setInterval(() => {
+    for (const route of DAILY_SWEEP_ROUTES) {
+      fetch(`http://127.0.0.1:${port}${route}`, {
+        method: "POST",
+        headers: { "x-cron-secret": process.env.CRON_SECRET },
+      }).catch((err) => console.error(`daily reminder sweep failed for ${route}:`, err));
+    }
+  }, DAILY_SWEEP_INTERVAL_MS);
 });
