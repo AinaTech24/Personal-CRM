@@ -3,6 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageUsers, isSuperAdmin } from "@/lib/permissions";
+import { getSocialMembership } from "@/lib/social-media";
+import { upsertTeamMemberBySlug, removeTeamMemberBySlug } from "@/lib/teams";
 import { emitToAdmins } from "@/lib/socket-emit";
 
 const patchSchema = z.object({
@@ -78,27 +80,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     },
     include: {
       department: true,
-      socialMediaMembership: { select: { isLead: true } },
     },
     omit: { passwordHash: true, resetCode: true, resetCodeExpiresAt: true, pinHash: true, pinResetCode: true, pinResetCodeExpiresAt: true },
   });
 
   if (data.socialMediaRole === "NONE") {
-    await db.socialMediaMember.deleteMany({ where: { userId: id } });
+    await removeTeamMemberBySlug("social-media", id);
   } else if (data.socialMediaRole === "MEMBER" || data.socialMediaRole === "ADMIN") {
-    await db.socialMediaMember.upsert({
-      where: { userId: id },
-      create: { userId: id, isLead: data.socialMediaRole === "ADMIN" },
-      update: { isLead: data.socialMediaRole === "ADMIN" },
-    });
+    await upsertTeamMemberBySlug("social-media", id, data.socialMediaRole === "ADMIN");
   }
 
-  // Re-read so the response reflects the membership change made just above —
-  // the `updated` object was fetched before it.
-  const withExtras =
-    data.socialMediaRole !== undefined
-      ? { ...updated, socialMediaMembership: await db.socialMediaMember.findUnique({ where: { userId: id }, select: { isLead: true } }) }
-      : updated;
+  // Always re-read the current membership (reading through the generic Team/
+  // TeamMember tables, not the `updated` object above) so the response is
+  // correct whether or not socialMediaRole was touched this request.
+  const withExtras = { ...updated, socialMediaMembership: await getSocialMembership(id) };
 
   emitToAdmins("user_updated", { id: updated.id });
   return NextResponse.json({ user: withExtras });

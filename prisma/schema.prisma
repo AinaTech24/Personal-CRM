@@ -167,6 +167,7 @@ model User {
   auditLogs               AuditLog[]           @relation("AuditActor")
 
   modulePermissions                UserModulePermission[]
+  teamMemberships                  TeamMember[]
   crmMembership                    CrmMember?
   callsOwned                       Call[]                      @relation("CallOwner")
   callsCreated                     Call[]                      @relation("CallCreatedBy")
@@ -1333,6 +1334,40 @@ model CrmMember {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   isLead    Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+// ---------- Teams (generic) ----------
+
+/// A generic team — Social Media and CRM are seeded as `isSystem` teams
+/// (see scripts/migrate-social-crm-to-teams.ts) that `src/lib/social-media.ts`
+/// and `src/lib/crm-team.ts` read/write through by slug, alongside any
+/// custom team (e.g. "IT") created from the Teams page. `disabled` is
+/// enforced where membership is looked up, so disabling a team cuts off
+/// access everywhere that scopes by it without touching each call site.
+model Team {
+  id        String       @id @default(cuid())
+  name      String
+  /// Fixed at creation — business logic (Forms access, the Social Media
+  /// Quotations exclusion) keys off "social-media"/"crm" specifically, so
+  /// this is never user-editable, unlike `name`.
+  slug      String       @unique
+  isSystem  Boolean      @default(false)
+  disabled  Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  members   TeamMember[]
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isLead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([teamId, userId])
+  @@index([userId])
 }
 
 enum CallType {

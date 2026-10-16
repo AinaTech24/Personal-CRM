@@ -1,0 +1,184 @@
+import { db } from "@/lib/db";
+import { slugify } from "@/lib/slug";
+import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
+import type { TeamMembership } from "@/lib/team-permissions";
+
+export type { TeamMembership };
+
+/**
+ * A user's membership on the team identified by `slug`, or null if they
+ * have none, aren't a member, or the team is disabled (a disabled team's
+ * membership is treated as absent everywhere, which is what cuts off
+ * access downstream without touching every call site individually).
+ *
+ * src/lib/social-media.ts and src/lib/crm-team.ts read/write through here
+ * by slug ("social-media"/"crm") rather than their own dedicated models —
+ * see the Teams unification plan.
+ */
+export async function getTeamMembershipBySlug(userId: string, slug: string): Promise<TeamMembership | null> {
+  return db.teamMember.findFirst({
+    where: { userId, team: { slug, disabled: false } },
+    select: { isLead: true },
+  });
+}
+
+/** Every member of the team identified by `slug` (disabled teams excluded), unfiltered by department — for broadcast and as the source for the department-filtered scope below. */
+async function getTeamMembersBySlug(slug: string): Promise<{ userId: string; isLead: boolean; departmentId: string | null }[]> {
+  const rows = await db.teamMember.findMany({
+    where: { team: { slug, disabled: false } },
+    select: { userId: true, isLead: true, user: { select: { departmentId: true } } },
+  });
+  return rows.map((r) => ({ userId: r.userId, isLead: r.isLead, departmentId: r.user.departmentId }));
+}
+
+/**
+ * Every user id on the team identified by `slug`, restricted to those
+ * actually in the team's own department — derived from the team's lead(s)
+ * rather than a hardcoded id, so a one-off member added for a single
+ * review doesn't pull their own unrelated leads/tasks/attendance into this
+ * team's aggregate views. Falls back to the unfiltered roster if no lead
+ * has a department set.
+ */
+export async function getTeamUserIdsBySlug(slug: string): Promise<string[]> {
+  const members = await getTeamMembersBySlug(slug);
+  const leadDepartmentId = members.find((m) => m.isLead && m.departmentId)?.departmentId ?? null;
+  if (!leadDepartmentId) return members.map((m) => m.userId);
+  return members.filter((m) => m.departmentId === leadDepartmentId).map((m) => m.userId);
+}
+
+/** Broadcasts to every member of the team identified by `slug`, plus admins — not a global event everyone would receive regardless of access. */
+export async function broadcastTeamChangeBySlug(slug: string, event: string, payload: unknown) {
+  emitToAdmins(event, payload);
+  const members = await getTeamMembersBySlug(slug);
+  for (const m of members) emitToUser(m.userId, event, payload);
+}
+
+export interface TeamMemberRow {
+  id: string;
+  userId: string;
+  isLead: boolean;
+  createdAt: Date;
+  user: { id: string; name: string; surname: string | null; email: string };
+}
+
+const MEMBER_ROW_SELECT = {
+  id: true,
+  userId: true,
+  isLead: true,
+  createdAt: true,
+  user: { select: { id: true, name: true, surname: true, email: true } },
+} as const;
+
+export async function getTeamIdBySlug(slug: string): Promise<string | null> {
+  const team = await db.team.findUnique({ where: { slug }, select: { id: true } });
+  return team?.id ?? null;
+}
+
+/** The member roster for src/app/api/social|crm/members's GET — same shape the team console already renders. */
+export async function listTeamMembersBySlug(slug: string): Promise<TeamMemberRow[]> {
+  return db.teamMember.findMany({ where: { team: { slug } }, orderBy: { createdAt: "asc" }, select: MEMBER_ROW_SELECT });
+}
+
+export async function upsertTeamMemberBySlug(slug: string, userId: string, isLead: boolean): Promise<TeamMemberRow> {
+  const teamId = await getTeamIdBySlug(slug);
+  if (!teamId) throw new Error(`No team with slug "${slug}"`);
+  return db.teamMember.upsert({
+    where: { teamId_userId: { teamId, userId } },
+    create: { teamId, userId, isLead },
+    update: { isLead },
+    select: MEMBER_ROW_SELECT,
+  });
+}
+
+export async function updateTeamMemberLeadBySlug(slug: string, userId: string, isLead: boolean): Promise<TeamMemberRow | null> {
+  const teamId = await getTeamIdBySlug(slug);
+  if (!teamId) return null;
+  return db.teamMember
+    .update({ where: { teamId_userId: { teamId, userId } }, data: { isLead }, select: MEMBER_ROW_SELECT })
+    .catch(() => null);
+}
+
+export async function removeTeamMemberBySlug(slug: string, userId: string) {
+  const teamId = await getTeamIdBySlug(slug);
+  if (!teamId) return;
+  await db.teamMember.deleteMany({ where: { teamId, userId } });
+}
+
+export interface TeamSummary {
+  id: string;
+  name: string;
+  slug: string;
+  isSystem: boolean;
+  disabled: boolean;
+  memberCount: number;
+}
+
+function toSummary(t: { id: string; name: string; slug: string; isSystem: boolean; disabled: boolean; _count: { members: number } }): TeamSummary {
+  return { id: t.id, name: t.name, slug: t.slug, isSystem: t.isSystem, disabled: t.disabled, memberCount: t._count.members };
+}
+
+/** Every team — for the Teams page, an Admin sees all of them. */
+export async function listTeams(): Promise<TeamSummary[]> {
+  const teams = await db.team.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { members: true } } } });
+  return teams.map(toSummary);
+}
+
+/** Only the teams this user belongs to — for a non-admin's Teams page. */
+export async function listTeamsForUser(userId: string): Promise<TeamSummary[]> {
+  const teams = await db.team.findMany({
+    where: { members: { some: { userId } } },
+    orderBy: { name: "asc" },
+    include: { _count: { select: { members: true } } },
+  });
+  return teams.map(toSummary);
+}
+
+/** One team plus every member — the team's own console. */
+export async function getTeamDetail(id: string) {
+  return db.team.findUnique({
+    where: { id },
+    include: {
+      members: {
+        select: {
+          isLead: true,
+          user: { select: { id: true, name: true, surname: true, email: true, avatarDataUrl: true, role: true, isActive: true } },
+        },
+        orderBy: { user: { name: "asc" } },
+      },
+    },
+  });
+}
+
+export async function getUserTeamMembership(teamId: string, userId: string): Promise<TeamMembership | null> {
+  return db.teamMember.findUnique({ where: { teamId_userId: { teamId, userId } }, select: { isLead: true } });
+}
+
+/** A brand-new, non-system team — only ever created this way, so `isSystem` never needs to be set true from here. */
+export async function createTeam(name: string) {
+  const slug = slugify(name);
+  if (!slug) throw new Error("Enter a name");
+  const existing = await db.team.findUnique({ where: { slug } });
+  if (existing) throw new Error("A team with that name already exists");
+  return db.team.create({ data: { name, slug } });
+}
+
+/** Renames a team. The slug is fixed at creation — business logic elsewhere keys off it, so it's never user-editable. */
+export async function renameTeam(id: string, name: string) {
+  return db.team.update({ where: { id }, data: { name } });
+}
+
+export async function setTeamDisabled(id: string, disabled: boolean) {
+  return db.team.update({ where: { id }, data: { disabled } });
+}
+
+export async function addTeamMember(teamId: string, userId: string, isLead = false) {
+  return db.teamMember.upsert({
+    where: { teamId_userId: { teamId, userId } },
+    create: { teamId, userId, isLead },
+    update: { isLead },
+  });
+}
+
+export async function removeTeamMember(teamId: string, userId: string) {
+  await db.teamMember.deleteMany({ where: { teamId, userId } });
+}

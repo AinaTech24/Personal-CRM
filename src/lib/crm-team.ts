@@ -1,43 +1,27 @@
-import { db } from "@/lib/db";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
-import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
 import { isCrmLead, isCrmOnlyUser, type CrmMembership } from "@/lib/crm-permissions";
+import { getTeamMembershipBySlug, getTeamUserIdsBySlug, broadcastTeamChangeBySlug } from "@/lib/teams";
 
 export type { CrmMembership };
 export { hasCrmAccess, isCrmLead, isCrmOnlyUser } from "@/lib/crm-permissions";
 
-/** The current user's CRM Team membership row, or null if they have none (and aren't a company admin). */
-export async function getCrmMembership(userId: string): Promise<CrmMembership | null> {
-  return db.crmMember.findUnique({ where: { userId }, select: { isLead: true } });
-}
+/** The "CRM" row in the generic Team table (seeded by scripts/migrate-social-crm-to-teams.ts) that this module reads/writes through — see the Teams unification plan. */
+const TEAM_SLUG = "crm";
 
-/**
- * The department every genuine CRM Team member is expected to belong to —
- * derived from the team's own lead(s) rather than a hardcoded name/slug,
- * same reasoning as socialMediaDepartmentId in social-media.ts. Null only if
- * no lead has a department set at all, in which case callers fall back to
- * the unfiltered roster rather than hiding everyone.
- */
-async function crmDepartmentId(): Promise<string | null> {
-  const lead = await db.crmMember.findFirst({
-    where: { isLead: true, user: { departmentId: { not: null } } },
-    select: { user: { select: { departmentId: true } } },
-  });
-  return lead?.user.departmentId ?? null;
+/** The current user's CRM Team membership, or null if they have none (and aren't a company admin), reading through the generic Team/TeamMember tables. */
+export async function getCrmMembership(userId: string): Promise<CrmMembership | null> {
+  return getTeamMembershipBySlug(userId, TEAM_SLUG);
 }
 
 /**
  * Every user id currently on the CRM Team, restricted to those actually IN
- * the CRM department — not just anyone with a CrmMember row. Same reasoning
- * as getSocialMediaTeamUserIds: adding an existing user as a one-off
- * reviewer shouldn't pull their own unrelated work into this team's
+ * the CRM department — not just anyone with a membership row. Same
+ * reasoning as getSocialMediaTeamUserIds: adding an existing user as a
+ * one-off reviewer shouldn't pull their own unrelated work into this team's
  * aggregate views.
  */
 export async function getCrmTeamUserIds(): Promise<string[]> {
-  const members = await db.crmMember.findMany({ select: { userId: true, user: { select: { departmentId: true } } } });
-  const departmentId = await crmDepartmentId();
-  if (!departmentId) return members.map((m) => m.userId);
-  return members.filter((m) => m.user.departmentId === departmentId).map((m) => m.userId);
+  return getTeamUserIdsBySlug(TEAM_SLUG);
 }
 
 /**
@@ -91,11 +75,9 @@ export async function isRestrictedFromCrmModule(user: PermissionUser): Promise<b
 
 /**
  * Broadcasts to exactly who can see the CRM Team module — every current
- * CrmMember plus admins — rather than a global event every connected client
- * would receive regardless of access.
+ * CRM Team member plus admins — rather than a global event every connected
+ * client would receive regardless of access.
  */
 export async function broadcastCrmChange(event: string, payload: unknown) {
-  emitToAdmins(event, payload);
-  const members = await db.crmMember.findMany({ select: { userId: true } });
-  for (const m of members) emitToUser(m.userId, event, payload);
+  await broadcastTeamChangeBySlug(TEAM_SLUG, event, payload);
 }

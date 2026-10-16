@@ -57,6 +57,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   const [passwordHash, pinHash] = await Promise.all([hashPassword(password), hashPassword(pin)]);
 
+  // Only looked up when actually needed — the invite's own grant flags mean
+  // this is the uncommon path, most invites don't provision team membership.
+  const needsSocialTeam = invite.socialMediaAdmin || invite.socialMediaMember;
+  const needsCrmTeam = invite.crmAdmin || invite.crmMember;
+  const [socialTeam, crmTeam] = await Promise.all([
+    needsSocialTeam ? db.team.findUnique({ where: { slug: "social-media" }, select: { id: true } }) : null,
+    needsCrmTeam ? db.team.findUnique({ where: { slug: "crm" }, select: { id: true } }) : null,
+  ]);
+
   const user = await db.$transaction(async (tx) => {
     const created = await tx.user.create({
       data: {
@@ -72,15 +81,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       },
     });
     await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
-    if (invite.socialMediaAdmin) {
-      await tx.socialMediaMember.create({ data: { userId: created.id, isLead: true } });
-    } else if (invite.socialMediaMember) {
-      await tx.socialMediaMember.create({ data: { userId: created.id, isLead: false } });
+    if (socialTeam && (invite.socialMediaAdmin || invite.socialMediaMember)) {
+      await tx.teamMember.create({ data: { teamId: socialTeam.id, userId: created.id, isLead: invite.socialMediaAdmin } });
     }
-    if (invite.crmAdmin) {
-      await tx.crmMember.create({ data: { userId: created.id, isLead: true } });
-    } else if (invite.crmMember) {
-      await tx.crmMember.create({ data: { userId: created.id, isLead: false } });
+    if (crmTeam && (invite.crmAdmin || invite.crmMember)) {
+      await tx.teamMember.create({ data: { teamId: crmTeam.id, userId: created.id, isLead: invite.crmAdmin } });
     }
     return created;
   });

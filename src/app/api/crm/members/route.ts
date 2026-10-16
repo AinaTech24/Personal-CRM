@@ -3,6 +3,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getCrmMembership, isCrmLead } from "@/lib/crm-team";
+import { listTeamMembersBySlug, upsertTeamMemberBySlug } from "@/lib/teams";
+
+const TEAM_SLUG = "crm";
 
 /** Who's on the CRM team — company admins and the team's own lead can both manage this, not a regular member. */
 export async function GET() {
@@ -11,10 +14,7 @@ export async function GET() {
   const membership = await getCrmMembership(user.id);
   if (!isCrmLead(user, membership)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const members = await db.crmMember.findMany({
-    include: { user: { select: { id: true, name: true, surname: true, email: true } } },
-    orderBy: { createdAt: "asc" },
-  });
+  const members = await listTeamMembersBySlug(TEAM_SLUG);
 
   return NextResponse.json({ members });
 }
@@ -36,12 +36,7 @@ export async function POST(req: NextRequest) {
   const target = await db.user.findUnique({ where: { id: parsed.data.userId } });
   if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  const member = await db.crmMember.upsert({
-    where: { userId: parsed.data.userId },
-    create: { userId: parsed.data.userId, isLead: parsed.data.isLead ?? false },
-    update: { isLead: parsed.data.isLead ?? false },
-    include: { user: { select: { id: true, name: true, surname: true, email: true } } },
-  });
+  const member = await upsertTeamMemberBySlug(TEAM_SLUG, parsed.data.userId, parsed.data.isLead ?? false);
 
   return NextResponse.json({ member }, { status: 201 });
 }
