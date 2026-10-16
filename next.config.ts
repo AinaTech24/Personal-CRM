@@ -26,6 +26,20 @@ const nextConfig: NextConfig = {
           { key: "Permissions-Policy", value: "microphone=(self), camera=(), geolocation=()" },
         ],
       },
+      {
+        // The public Forms pages are meant to be embedded on other AinaTech
+        // sites and their Vercel previews — explicitly allow framing them
+        // there. No X-Frame-Options is set anywhere (for this path or any
+        // other), so there's nothing that would otherwise block it; this
+        // just states the policy rather than leaving it implicit.
+        source: "/f/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'self' https://ainatech.in https://*.ainatech.in https://*.vercel.app;",
+          },
+        ],
+      },
     ];
   },
 };

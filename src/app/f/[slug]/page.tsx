@@ -183,6 +183,21 @@ export default function PublicFormPage() {
   const [form, setForm] = useState<FormDef | null | "not-found">(null);
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [submitting, setSubmitting] = useState(false);
+  // Read directly from the URL rather than useSearchParams(), which needs a
+  // Suspense boundary — not worth adding for two optional query flags. For
+  // an embed to match a light host page: ?theme=light forces light mode
+  // (independent of the visitor's own OS/app preference), and
+  // ?embedded=true drops the Aina CRM logo, since it's redundant chrome
+  // inside someone else's page.
+  const [embedded, setEmbedded] = useState(false);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    setEmbedded(query.get("embedded") === "true");
+    if (query.get("theme") === "light") {
+      document.documentElement.setAttribute("data-theme", "light");
+    }
+  }, []);
 
   useEffect(() => {
     fetch(`/api/forms/by-slug/${params.slug}`)
@@ -232,7 +247,9 @@ export default function PublicFormPage() {
       <div className="w-full max-w-2xl">
         <form onSubmit={onSubmit} className="flex flex-col gap-6 rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
           <div className="border-b border-border pb-4 text-center">
-            <Image src="/logo.png" alt="Aina CRM" width={140} height={58} priority unoptimized className="mx-auto mb-3 h-10 w-auto" />
+            {!embedded && (
+              <Image src="/logo.png" alt="Aina CRM" width={140} height={58} priority unoptimized className="mx-auto mb-3 h-10 w-auto" />
+            )}
             <h1 className="text-xl font-semibold">{form.title}</h1>
             {form.description && <p className="mt-1 text-sm text-muted-foreground">{form.description}</p>}
           </div>
