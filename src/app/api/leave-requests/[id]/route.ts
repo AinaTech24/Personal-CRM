@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
+import { canManageAttendanceFor } from "@/lib/social-media";
+import { canManageCrmAttendanceFor } from "@/lib/crm-team";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
 import { grantLeaveDay, leaveWorkingDays, revokeLeaveDay } from "@/lib/leave";
 import { leaveRequestInclude, serializeLeaveRequest } from "@/lib/leave-requests";
@@ -26,11 +28,12 @@ const patchSchema = z.object({
 const CATEGORY_LABEL: Record<string, string> = { CASUAL: "Casual", SICK: "Sick", EARNED: "Earned", UNPAID: "Unpaid", OTHER: "Other" };
 
 /**
- * Approve / reject (admins) or cancel (the requester) a pending request — a
- * decision is final, so two admins can't overwrite each other and approving
- * can't apply the same days twice. "edit" is separate: admins can edit any
- * request regardless of status, and editing an approved one re-syncs its
- * attendance stamp to the new dates.
+ * Approve / reject (admins, LEAVE grantees, or a Social Media/CRM lead for
+ * their own team) or cancel (the requester) a pending request — a decision
+ * is final, so two deciders can't overwrite each other and approving can't
+ * apply the same days twice. "edit" is separate: admins/grantees can edit
+ * any request regardless of status, and editing an approved one re-syncs
+ * its attendance stamp to the new dates.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -104,7 +107,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (action === "cancel") {
     if (request.userId !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   } else {
-    if (!canManageLeave) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canDecide =
+      canManageLeave ||
+      (await canManageAttendanceFor(user, request.userId)) ||
+      (await canManageCrmAttendanceFor(user, request.userId));
+    if (!canDecide) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     if (request.userId === user.id) {
       return NextResponse.json({ error: "You can't decide your own leave request." }, { status: 403 });
     }
