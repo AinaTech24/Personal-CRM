@@ -82,11 +82,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Read the attendee list before the update so newly-added attendees can be
   // told apart from ones already on the meeting — an edit that doesn't touch
-  // the guest list shouldn't re-notify everyone already invited.
+  // the guest list shouldn't re-notify everyone already invited. Also read
+  // the persisted start/end here whenever either is being touched, so
+  // editing just one of the two can still be validated against the other's
+  // actual stored value instead of only against itself.
   let previousAttendeeIds: string[] | null = null;
-  if (d.attendeeIds !== undefined) {
-    const existing = await db.meeting.findUnique({ where: { id }, select: { attendees: { select: { id: true } } } });
-    previousAttendeeIds = existing?.attendees.map((a) => a.id) ?? [];
+  let existingTimes: { startsAt: Date; endsAt: Date | null } | null = null;
+  if (d.attendeeIds !== undefined || d.startsAt !== undefined || d.endsAt !== undefined) {
+    const existing = await db.meeting.findUnique({
+      where: { id },
+      select: { startsAt: true, endsAt: true, attendees: { select: { id: true } } },
+    });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    previousAttendeeIds = existing.attendees.map((a) => a.id);
+    existingTimes = { startsAt: existing.startsAt, endsAt: existing.endsAt };
   }
 
   const data: Record<string, unknown> = {};
@@ -101,6 +110,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (d.endsAt !== undefined) {
     data.endsAt = d.endsAt ? new Date(d.endsAt) : null;
+  }
+  if ((d.startsAt !== undefined || d.endsAt !== undefined) && existingTimes) {
+    const effectiveStart = d.startsAt !== undefined ? (data.startsAt as Date) : existingTimes.startsAt;
+    const effectiveEnd = d.endsAt !== undefined ? (data.endsAt as Date | null) : existingTimes.endsAt;
+    if (effectiveEnd && effectiveEnd < effectiveStart) {
+      return NextResponse.json({ error: "End time must be after the start time" }, { status: 400 });
+    }
   }
   if (d.attendeeIds !== undefined) {
     data.attendees = { set: d.attendeeIds.map((aid) => ({ id: aid })) };

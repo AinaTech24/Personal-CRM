@@ -131,3 +131,8 @@ export function canAccessBillingRecord(user: PermissionUser, record: { createdBy
 export function canDeleteBillingRecord(user: PermissionUser, record: { createdById: string }) {
   return isAdmin(user) || record.createdById === user.id;
 }
+
+/** A Prisma unique-constraint violation (P2002) — same check as src/lib/forms.ts's, duplicated here rather than cross-imported since neither module is the other's dependency. */
+export function isUniqueConstraintError(err: unknown): boolean {
+  return !!err && typeof err === "object" && "code" in err && err.code === "P2002";
+}

@@ -17,6 +17,7 @@ import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -249,6 +250,7 @@ export function FormBuilderView({ formId }: { formId: string }) {
   const [activeDragType, setActiveDragType] = useState<FormFieldType | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [deletingField, setDeletingField] = useState<FieldRow | null>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTitleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -321,7 +323,9 @@ export function FormBuilderView({ formId }: { formId: string }) {
     }).catch(() => toast.error("Couldn't save field"));
   }
 
-  async function deleteField(fieldId: string) {
+  async function confirmDeleteField() {
+    if (!deletingField) return;
+    const fieldId = deletingField.id;
     setForm((f) => (f ? { ...f, fields: f.fields.filter((fl) => fl.id !== fieldId) } : f));
     const res = await fetch(`/api/forms/${formId}/fields/${fieldId}`, { method: "DELETE" });
     if (!res.ok) {
@@ -461,7 +465,7 @@ export function FormBuilderView({ formId }: { formId: string }) {
                     expanded={expandedId === field.id}
                     onToggleExpand={() => setExpandedId((id) => (id === field.id ? null : field.id))}
                     onChange={(patch) => updateField(field.id, patch)}
-                    onDelete={() => deleteField(field.id)}
+                    onDelete={() => setDeletingField(field)}
                   />
                 ))}
               </SortableContext>
@@ -490,6 +494,15 @@ export function FormBuilderView({ formId }: { formId: string }) {
           </DialogBody>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!deletingField}
+        onOpenChange={(v) => !v && setDeletingField(null)}
+        title={`Delete "${deletingField?.label}"?`}
+        description="This can't be undone. Any answers already submitted for this field — across every past response — are permanently deleted too, not just removed from new submissions."
+        confirmLabel="Delete"
+        onConfirm={confirmDeleteField}
+      />
     </div>
   );
 }
