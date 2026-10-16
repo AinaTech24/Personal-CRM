@@ -3,7 +3,6 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageUsers, isSuperAdmin } from "@/lib/permissions";
-import { canManageModule } from "@/lib/module-permissions-store";
 import { emitToAdmins } from "@/lib/socket-emit";
 
 const patchSchema = z.object({
@@ -47,13 +46,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const data = parsed.data;
 
-  // Someone holding the Birthdays module grant (not a company admin) may set
-  // only the birthday field — nothing else in this body's keys, so even a
-  // crafted payload can't sneak a role/department/isActive change through.
-  const touchedKeys = Object.keys(data);
-  const isBirthdayOnly = touchedKeys.length > 0 && touchedKeys.every((k) => k === "birthday");
-  const allowed = canManageUsers(user) || (isBirthdayOnly && (await canManageModule(user, "BIRTHDAYS", "UPDATE")));
-  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Editing anyone's birthday — including a Birthdays-module grant holder's —
+  // is admin-only. A grant still lets a non-admin manage gifts and view the
+  // roster; it no longer lets them overwrite a birth date (see
+  // src/app/api/profile/route.ts for the matching self-service rule).
+  if (!canManageUsers(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // Only Super Admins may create/modify Super Admin or Admin roles.
   if (data.role !== undefined && !isSuperAdmin(user) && (data.role === "SUPER_ADMIN" || target.role === "SUPER_ADMIN")) {

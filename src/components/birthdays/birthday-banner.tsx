@@ -7,7 +7,7 @@ import { useBirthdays } from "@/components/birthdays/use-birthdays";
 
 /** Today's birthday wishes, shown to everyone at the top of the dashboard. Renders nothing on a quiet day. */
 export function BirthdayBanner() {
-  const birthdays = useBirthdays();
+  const { birthdays } = useBirthdays();
   const today = birthdays?.filter((b) => b.isToday) ?? [];
   if (today.length === 0) return null;
 

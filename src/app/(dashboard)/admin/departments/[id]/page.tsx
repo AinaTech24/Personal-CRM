@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -430,11 +431,10 @@ export default function DepartmentDetailPage() {
                           <td className="whitespace-nowrap px-2 py-2.5 font-medium">{MODULE_LABEL[module]}</td>
                           {MODULE_ACTIONS.map((action) => (
                             <td key={action} className="px-2 py-2.5 text-center">
-                              <Checkbox
+                              <ToggleSwitch
                                 checked={flags[FLAG_KEY[action]]}
                                 onChange={() => togglePerm(module, action)}
-                                aria-label={`${MODULE_ACTION_LABEL[action]} ${MODULE_LABEL[module]}`}
-                                className="mx-auto"
+                                label={`${MODULE_ACTION_LABEL[action]} ${MODULE_LABEL[module]}`}
                               />
                             </td>
                           ))}
