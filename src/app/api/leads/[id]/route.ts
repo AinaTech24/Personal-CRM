@@ -102,9 +102,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }),
       ...(data.meetingStatus !== undefined && { meetingStatus: data.meetingStatus }),
       ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId }),
-      // Admin-only, matching POST: a null department makes the lead visible
-      // and editable company-wide, so any editor could otherwise leak it.
-      ...(data.departmentId !== undefined && isAdmin(user) && { departmentId: data.departmentId }),
+      ...(data.departmentId !== undefined && { departmentId: data.departmentId }),
     },
   });
 
