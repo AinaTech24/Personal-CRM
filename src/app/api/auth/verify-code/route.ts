@@ -13,24 +13,29 @@ const bodySchema = z.object({
 // 10 attempts / 10 minutes per IP — the code itself is a 6-digit number that
 // expires in 10 minutes (src/app/api/auth/forgot/route.ts), so the real
 // defense is the expiry; this just stops a fast automated guess-loop from
-// running through many attempts inside that window.
+// running through many attempts inside that window. Also keyed per-email:
+// an IP-only cap is bypassable by rotating a spoofed/forwarded IP, and the
+// per-email bucket is what actually bounds guesses against one victim's
+// 1,000,000-code space within the code's lifetime.
 const LIMIT = 10;
 const WINDOW_MS = 10 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
+  const parsed = bodySchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid code" }, { status: 400 });
+
+  const email = parsed.data.email.toLowerCase();
+
   const ip = requestDevice(req).ip ?? "unknown";
-  const { allowed, retryAfterSeconds } = rateLimit(`verify-code:${ip}`, LIMIT, WINDOW_MS);
-  if (!allowed) {
+  const ipCheck = rateLimit(`verify-code:ip:${ip}`, LIMIT, WINDOW_MS);
+  const emailCheck = rateLimit(`verify-code:email:${email}`, LIMIT, WINDOW_MS);
+  if (!ipCheck.allowed || !emailCheck.allowed) {
+    const retryAfterSeconds = Math.max(ipCheck.retryAfterSeconds, emailCheck.retryAfterSeconds);
     return NextResponse.json(
       { error: "Too many attempts. Try again in a few minutes." },
       { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
     );
   }
-
-  const parsed = bodySchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid code" }, { status: 400 });
-
-  const email = parsed.data.email.toLowerCase();
 
   try {
     const user = await db.user.findUnique({ where: { email } });
