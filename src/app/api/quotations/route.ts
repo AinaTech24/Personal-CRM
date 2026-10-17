@@ -4,7 +4,16 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { isRestrictedFromModule } from "@/lib/social-media";
-import { asJson, billingListWhere, canDeleteBillingRecord, computeTotals, pickSellerData, sellerSchemaFields, toNumber } from "@/lib/billing";
+import {
+  asJson,
+  billingListWhere,
+  canDeleteBillingRecord,
+  computeTotals,
+  isUniqueConstraintError,
+  pickSellerData,
+  sellerSchemaFields,
+  toNumber,
+} from "@/lib/billing";
 import { broadcastQuotationChange, nextQuotationNumber } from "@/lib/quotations";
 
 export async function GET() {
@@ -70,58 +79,70 @@ export async function POST(req: NextRequest) {
   const data = parsed.data;
   const departmentId = isAdmin(user) ? data.departmentId || null : user.departmentId;
   const totals = computeTotals(data.items, data.discount);
-  const quotationNumber = await nextQuotationNumber();
 
-  const quotation = await db.quotation.create({
-    data: {
-      quotationNumber,
-      clientName: data.clientName,
-      clientEmail: data.clientEmail || null,
-      clientAddress: data.clientAddress || null,
-      clientGstin: data.clientGstin || null,
-      shipToAddress: data.shipToAddress || null,
-      shipToGstin: data.shipToGstin || null,
-      placeOfSupply: data.placeOfSupply || null,
-      subject: data.subject || null,
-      notes: data.notes || null,
-      leadId: data.leadId || null,
-      departmentId,
-      validUntil: data.validUntil ? new Date(data.validUntil) : null,
-      ...pickSellerData(data),
-      discount: data.discount,
-      subtotal: totals.subtotal,
-      gstAmount: totals.gstAmount,
-      total: totals.total,
-      currentVersion: 1,
-      createdById: user.id,
-      items: {
-        create: totals.items.map((i, idx) => ({
-          description: i.description,
-          hsnSac: data.items[idx]?.hsnSac || null,
-          qty: i.qty,
-          unitPrice: i.unitPrice,
-          gstRate: i.gstRate,
-          lineTotal: i.lineTotal,
-        })),
-      },
-      versions: {
-        create: {
-          versionNumber: 1,
-          snapshot: asJson({
-            clientName: data.clientName,
-            discount: data.discount,
-            subtotal: totals.subtotal,
-            gstAmount: totals.gstAmount,
-            total: totals.total,
-            items: totals.items,
-          }),
+  // nextQuotationNumber() checks for a collision up front, but two people
+  // creating a quotation at the same instant could still both pass that
+  // check before either write lands — retry with a freshly-generated number
+  // rather than surfacing the database's own unique-constraint error (same
+  // pattern as uniqueFormSlug in src/app/api/forms/route.ts).
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const quotationNumber = await nextQuotationNumber();
+    try {
+      const quotation = await db.quotation.create({
+        data: {
+          quotationNumber,
+          clientName: data.clientName,
+          clientEmail: data.clientEmail || null,
+          clientAddress: data.clientAddress || null,
+          clientGstin: data.clientGstin || null,
+          shipToAddress: data.shipToAddress || null,
+          shipToGstin: data.shipToGstin || null,
+          placeOfSupply: data.placeOfSupply || null,
+          subject: data.subject || null,
+          notes: data.notes || null,
+          leadId: data.leadId || null,
+          departmentId,
+          validUntil: data.validUntil ? new Date(data.validUntil) : null,
+          ...pickSellerData(data),
+          discount: data.discount,
+          subtotal: totals.subtotal,
+          gstAmount: totals.gstAmount,
+          total: totals.total,
+          currentVersion: 1,
+          createdById: user.id,
+          items: {
+            create: totals.items.map((i, idx) => ({
+              description: i.description,
+              hsnSac: data.items[idx]?.hsnSac || null,
+              qty: i.qty,
+              unitPrice: i.unitPrice,
+              gstRate: i.gstRate,
+              lineTotal: i.lineTotal,
+            })),
+          },
+          versions: {
+            create: {
+              versionNumber: 1,
+              snapshot: asJson({
+                clientName: data.clientName,
+                discount: data.discount,
+                subtotal: totals.subtotal,
+                gstAmount: totals.gstAmount,
+                total: totals.total,
+                items: totals.items,
+              }),
+            },
+          },
         },
-      },
-    },
-  });
+      });
 
-  broadcastQuotationChange("quotation_created", quotation);
-  return NextResponse.json({ quotation }, { status: 201 });
+      broadcastQuotationChange("quotation_created", quotation);
+      return NextResponse.json({ quotation }, { status: 201 });
+    } catch (err) {
+      if (!isUniqueConstraintError(err)) throw err;
+    }
+  }
+  return NextResponse.json({ error: "Couldn't generate a unique quotation number — try again" }, { status: 500 });
 }
 
 const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });

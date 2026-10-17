@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
@@ -10,12 +11,15 @@ export function SelectionBar({
   onSelectAll,
   onCancel,
   onDelete,
+  extraActions,
 }: {
   count: number;
   allSelected: boolean;
   onSelectAll: () => void;
   onCancel: () => void;
   onDelete: () => void;
+  /** Extra buttons (e.g. bulk reassign) rendered between Cancel and Delete. */
+  extraActions?: ReactNode;
 }) {
   return (
     <motion.div
@@ -32,6 +36,7 @@ export function SelectionBar({
       <Button size="sm" variant="outline" onClick={onCancel}>
         Cancel
       </Button>
+      {extraActions}
       <Button size="sm" variant="destructive" disabled={count === 0} onClick={onDelete}>
         Delete
       </Button>

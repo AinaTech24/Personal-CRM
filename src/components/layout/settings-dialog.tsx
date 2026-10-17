@@ -704,13 +704,30 @@ export function SettingsDialog({
                         </div>
                         <div className="flex flex-col gap-1.5">
                           <Label htmlFor="set-birthday">Date of birth</Label>
-                          <DatePicker
-                            id="set-birthday"
-                            value={birthday}
-                            onChange={setBirthday}
-                            placeholder="Add your birthday"
-                            yearRange={birthYearRange()}
-                          />
+                          {birthday && !isAdmin ? (
+                            <>
+                              <Input
+                                id="set-birthday"
+                                readOnly
+                                disabled
+                                className="opacity-70"
+                                value={new Date(`${birthday}T00:00:00`).toLocaleDateString(undefined, {
+                                  year: "numeric",
+                                  month: "long",
+                                  day: "numeric",
+                                })}
+                              />
+                              <p className="text-xs text-muted-foreground">Set once — ask an admin to change it.</p>
+                            </>
+                          ) : (
+                            <DatePicker
+                              id="set-birthday"
+                              value={birthday}
+                              onChange={setBirthday}
+                              placeholder="Add your birthday"
+                              yearRange={birthYearRange()}
+                            />
+                          )}
                         </div>
                       </div>
                       <Button type="button" onClick={saveProfile} disabled={savingProfile} className="self-start">

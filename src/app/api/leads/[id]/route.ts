@@ -76,6 +76,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const data = parsed.data;
   const before = access;
 
+  // Moving a lead to a different department is an admin-only action, same as
+  // creating one already is — otherwise its own creator/assignee could move
+  // it out of the department-scoped access this app otherwise enforces.
+  if (data.departmentId !== undefined && !isAdmin(user)) {
+    return NextResponse.json({ error: "Only an admin can change a lead's department" }, { status: 403 });
+  }
+
   const lead = await db.lead.update({
     where: { id },
     data: {

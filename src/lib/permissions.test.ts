@@ -69,11 +69,11 @@ describe("canManageRecord", () => {
     expect(canManageRecord(u, record)).toBe(true);
   });
 
-  it("a non-admin who neither created nor is assigned the record falls back to department scope", () => {
+  it("a non-admin who neither created nor is assigned the record can't manage it, even in their own department", () => {
     const u = user({ id: "u1", departmentId: "dept-a" });
     const sameDept = { createdById: "other", assignedToId: "other2", departmentId: "dept-a" };
     const otherDept = { createdById: "other", assignedToId: "other2", departmentId: "dept-b" };
-    expect(canManageRecord(u, sameDept)).toBe(true);
+    expect(canManageRecord(u, sameDept)).toBe(false);
     expect(canManageRecord(u, otherDept)).toBe(false);
   });
 });

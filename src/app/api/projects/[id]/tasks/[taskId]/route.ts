@@ -26,7 +26,7 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id, taskId } = await params;
-  const access = await getProjectForUser(user, id);
+  const access = await getProjectForUser(user, id, "UPDATE");
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -110,7 +110,7 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id, taskId } = await params;
-  const access = await getProjectForUser(user, id);
+  const access = await getProjectForUser(user, id, "UPDATE");
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

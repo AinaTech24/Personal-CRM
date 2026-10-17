@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomInt } from "crypto";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { hashPassword } from "@/lib/auth";
-import { sendMail, resetCodeEmailHtml } from "@/lib/mailer";
+import { issuePasswordResetCode } from "@/lib/password-reset";
 import { requestDevice } from "@/lib/request-info";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -36,24 +34,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const user = await db.user.findUnique({ where: { email } });
-    if (!user || !user.isActive) {
-      return NextResponse.json({ error: "No active account found with that email" }, { status: 404 });
+    if (user && user.isActive) {
+      await issuePasswordResetCode(user);
     }
 
-    // 6-digit code, stored hashed with a 10-minute expiry.
-    const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
-    const resetCode = await hashPassword(code);
-    await db.user.update({
-      where: { id: user.id },
-      data: { resetCode, resetCodeExpiresAt: new Date(Date.now() + 10 * 60 * 1000) },
-    });
-
-    await sendMail({
-      to: user.email,
-      subject: "Your Aina CRM sign-in code",
-      html: resetCodeEmailHtml({ name: user.name, code }),
-    });
-
+    // Same response whether or not the account exists (or is active) — a
+    // 404 here would let anyone probe which emails are registered.
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[api/auth/forgot] failed:", err);

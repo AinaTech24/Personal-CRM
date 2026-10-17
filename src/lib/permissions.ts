@@ -16,8 +16,15 @@ export function isAdmin(user: PermissionUser) {
   return user.role === "ADMIN" || isSuperAdmin(user);
 }
 
+/**
+ * ADMIN and SUPER_ADMIN alike — matching every other admin-gated capability
+ * in the app (Users & Invites, Permission Manager, Teams). The Departments
+ * page's own create/rename/delete controls were already shown to any
+ * `isAdmin(user)`; this used to be Super-Admin-only underneath, so a plain
+ * Admin clicking those controls got a silent 403 despite seeing them.
+ */
 export function canManageDepartments(user: PermissionUser) {
-  return isSuperAdmin(user);
+  return isAdmin(user);
 }
 
 export function canManageUsers(user: PermissionUser) {
@@ -58,16 +65,21 @@ export function canAccessDepartmentRecord(
   return user.departmentId === recordDepartmentId;
 }
 
+/**
+ * Default (no Permission Manager grant) management rights over a record: an
+ * Admin within their department scope, or the record's own creator/assignee.
+ * Sharing a department is NOT by itself enough — that used to grant every
+ * department member implicit CRUD over everyone else's records, which made
+ * the Permission Manager's per-module grants nearly pointless. Wider,
+ * cross-department or whole-department access now only comes from an
+ * explicit module grant (see canManageModule) or being an Admin.
+ */
 export function canManageRecord(
   user: PermissionUser,
   record: { createdById: string; assignedToId?: string | null; departmentId?: string | null }
 ) {
   if (isAdmin(user)) return canAccessDepartmentRecord(user, record.departmentId);
-  return (
-    record.createdById === user.id ||
-    record.assignedToId === user.id ||
-    canAccessDepartmentRecord(user, record.departmentId)
-  );
+  return record.createdById === user.id || record.assignedToId === user.id;
 }
 
 /** Prisma `where` clause fragment to scope department-owned records to what this user may see. */

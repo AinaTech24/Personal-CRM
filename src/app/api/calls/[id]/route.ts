@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { canManageCall, broadcastCallChange } from "@/lib/calls";
+import { canManageCall, canDeleteCall, broadcastCallChange } from "@/lib/calls";
 import { combinedTeamScopeFor } from "@/lib/team-scope";
 
 const callInclude = {
@@ -91,8 +91,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const teamUserIds = await combinedTeamScopeFor(user);
-  if (!canManageCall(user, existing, teamUserIds)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!canDeleteCall(user, existing, teamUserIds)) {
+    return NextResponse.json({ error: "Only the creator, a CRM lead, or an admin can delete this call" }, { status: 403 });
   }
 
   await db.call.delete({ where: { id } });

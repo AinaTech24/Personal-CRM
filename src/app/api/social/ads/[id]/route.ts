@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { getSocialMembership, getSocialAdForUser, logSocialClientActivity } from "@/lib/social-media";
+import { getSocialMembership, getSocialAdForUser, isSocialMediaLead, logSocialClientActivity } from "@/lib/social-media";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { isValidAdTransition } from "@/lib/social-ad-workflow";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -111,6 +112,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const access = await getSocialAdForUser(user, membership, id);
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Deletion is a lead/admin action, same as deleting the parent client —
+  // a regular member assigned to the client shouldn't be able to erase its
+  // ad campaigns on their own.
+  if (!isSocialMediaLead(user, membership) && !(await canManageModule(user, "CLIENTS", "DELETE"))) {
+    return NextResponse.json({ error: "Only a Social Media lead or admin can delete an ad campaign" }, { status: 403 });
+  }
 
   await db.socialAdCampaign.delete({ where: { id } });
   await logSocialClientActivity(access.clientId, user.id, "ad_campaign_deleted", { adId: id, name: access.name });

@@ -2,19 +2,22 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { canManageModule } from "@/lib/module-permissions-store";
 import { istDateKey, keyFromDate } from "@/lib/attendance";
 import { birthdayDateInYear } from "@/lib/birthdays";
 
 /**
- * Gifts for birthdays that have already passed, newest first. Admins see
- * everyone's; anyone else sees only the gifts given to them — a gift can be
- * free text, so it isn't broadcast to the whole company after the day either.
+ * Gifts for birthdays that have already passed, newest first. Admins and a
+ * Birthdays module grant-holder see everyone's — same "who can manage
+ * gifts" boundary the roster/gift-set routes already use — anyone else sees
+ * only the gifts given to them, since a gift can be free text and isn't
+ * broadcast to the whole company after the day either.
  */
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const admin = isAdmin(user);
+  const admin = isAdmin(user) || (await canManageModule(user, "BIRTHDAYS", "READ"));
   const todayKey = istDateKey();
 
   const rows = await db.birthdayGift.findMany({

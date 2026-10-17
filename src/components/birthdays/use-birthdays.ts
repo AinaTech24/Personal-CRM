@@ -20,13 +20,17 @@ export interface BirthdayEntry {
 
 export function useBirthdays() {
   const [birthdays, setBirthdays] = useState<BirthdayEntry[] | null>(null);
+  const [canManageGifts, setCanManageGifts] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
     fetch("/api/birthdays")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (active) setBirthdays(Array.isArray(d?.birthdays) ? d.birthdays : []);
+        if (!active) return;
+        setBirthdays(Array.isArray(d?.birthdays) ? d.birthdays : []);
+        setCanManageGifts(!!d?.canManageGifts);
       })
       .catch(() => {
         if (active) setBirthdays([]);
@@ -34,7 +38,9 @@ export function useBirthdays() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [reloadKey]);
 
-  return birthdays;
+  const reload = () => setReloadKey((k) => k + 1);
+
+  return { birthdays, canManageGifts, reload };
 }

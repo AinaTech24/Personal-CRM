@@ -152,6 +152,7 @@ model User {
   formsCreated       Form[]             @relation("FormCreatedBy")
   clientTeamRoles    ClientTeamMember[] @relation("ClientTeamMemberUser")
   birthdayGifts      BirthdayGift[]     @relation("BirthdayGiftFor")
+  birthdayGiftReminders BirthdayGiftReminder[]
   attendance         Attendance[]       @relation("AttendanceUser")
   attendanceApproved Attendance[]       @relation("AttendanceApprover")
   attendanceAudits   AttendanceAudit[]  @relation("AttendanceAuditActor")
@@ -167,6 +168,7 @@ model User {
   auditLogs               AuditLog[]           @relation("AuditActor")
 
   modulePermissions                UserModulePermission[]
+  teamMemberships                  TeamMember[]
   crmMembership                    CrmMember?
   callsOwned                       Call[]                      @relation("CallOwner")
   callsCreated                     Call[]                      @relation("CallCreatedBy")
@@ -240,6 +242,11 @@ model Invite {
   /// CrmMember row on acceptance instead — the CRM Team's equivalent.
   crmAdmin          Boolean     @default(false)
   crmMember         Boolean     @default(false)
+  /// Grants Department Admin (see User.isDepartmentAdmin) for `departmentId`
+  /// the moment this invite is accepted. Only a company Admin/Super Admin
+  /// can set this when creating the invite — a Department Admin inviting
+  /// into their own department can't mint another one.
+  inviteeIsDepartmentAdmin Boolean @default(false)
   token             String      @unique
   invitedById       String
   invitedBy         User        @relation("InvitedBy", fields: [invitedById], references: [id])
@@ -783,6 +790,10 @@ model Invoice {
   gstAmount              Decimal       @default(0) @db.Decimal(12, 2)
   total                  Decimal       @default(0) @db.Decimal(12, 2)
   dueDate                DateTime?
+  /// Set once the overdue reminder sweep has nagged this invoice's creator —
+  /// cleared whenever dueDate is edited, so a new due date gets its own
+  /// chance to be missed before nagging again.
+  overdueReminderSentAt  DateTime?
   createdById            String
   createdBy              User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
   departmentId           String?
@@ -1330,6 +1341,40 @@ model CrmMember {
   createdAt DateTime @default(now())
 }
 
+// ---------- Teams (generic) ----------
+
+/// A generic team — Social Media and CRM are seeded as `isSystem` teams
+/// (see scripts/migrate-social-crm-to-teams.ts) that `src/lib/social-media.ts`
+/// and `src/lib/crm-team.ts` read/write through by slug, alongside any
+/// custom team (e.g. "IT") created from the Teams page. `disabled` is
+/// enforced where membership is looked up, so disabling a team cuts off
+/// access everywhere that scopes by it without touching each call site.
+model Team {
+  id        String       @id @default(cuid())
+  name      String
+  /// Fixed at creation — business logic (Forms access, the Social Media
+  /// Quotations exclusion) keys off "social-media"/"crm" specifically, so
+  /// this is never user-editable, unlike `name`.
+  slug      String       @unique
+  isSystem  Boolean      @default(false)
+  disabled  Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  members   TeamMember[]
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isLead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
 enum CallType {
   INCOMING
   OUTGOING
@@ -1662,6 +1707,11 @@ model PasswordEntry {
   updatedById String?
   updatedBy   User?   @relation("PasswordEntryUpdatedBy", fields: [updatedById], references: [id])
 
+  /// Set once the rotation reminder sweep has nagged the creator/last editor
+  /// that this entry's password is stale — cleared whenever the password
+  /// value itself is changed, so staying stale again later gets a fresh nag.
+  rotationReminderSentAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1818,6 +1868,21 @@ model BirthdayGift {
   @@unique([userId, year])
 }
 
+/// Tracks that the "no gift picked yet" reminder already went out for this
+/// person's upcoming birthday in a given year, so the daily sweep (which
+/// checks every day in the week before a birthday) doesn't nag gift-pickers
+/// more than once per year. Rows aren't cleaned up — same as BirthdayGift,
+/// they're cheap and harmless to keep around.
+model BirthdayGiftReminder {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year   Int
+  sentAt DateTime @default(now())
+
+  @@unique([userId, year])
+}
+
 // ---------- Website onboarding form ----------
 
 enum OnboardingAttachmentKind {
@@ -1919,6 +1984,10 @@ model Form {
   description String?  @db.Text
   slug        String   @unique
   isActive    Boolean  @default(true)
+  /// When false (the default), copying the link rotates it to a fresh
+  /// random slug first — the old link stops working. Set true for a form
+  /// whose link needs to stay stable, e.g. one embedded on a website.
+  lockSlug    Boolean  @default(false)
   createdById String
   createdBy   User     @relation("FormCreatedBy", fields: [createdById], references: [id])
 

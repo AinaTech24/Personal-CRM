@@ -3,7 +3,15 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { billingListWhere, canDeleteBillingRecord, computeTotals, pickSellerData, sellerSchemaFields, toNumber } from "@/lib/billing";
+import {
+  billingListWhere,
+  canDeleteBillingRecord,
+  computeTotals,
+  isUniqueConstraintError,
+  pickSellerData,
+  sellerSchemaFields,
+  toNumber,
+} from "@/lib/billing";
 import { broadcastInvoiceChange, nextInvoiceNumber } from "@/lib/invoices";
 
 export async function GET() {
@@ -73,45 +81,54 @@ export async function POST(req: NextRequest) {
   const data = parsed.data;
   const departmentId = isAdmin(user) ? data.departmentId || null : user.departmentId;
   const totals = computeTotals(data.items, 0);
-  const invoiceNumber = await nextInvoiceNumber();
 
-  const invoice = await db.invoice.create({
-    data: {
-      invoiceNumber,
-      clientName: data.clientName,
-      clientEmail: data.clientEmail || null,
-      clientAddress: data.clientAddress || null,
-      clientGstin: data.clientGstin || null,
-      shipToAddress: data.shipToAddress || null,
-      shipToGstin: data.shipToGstin || null,
-      departmentId,
-      invoiceDate: data.invoiceDate ? new Date(data.invoiceDate) : new Date(),
-      dueDate: data.dueDate ? new Date(data.dueDate) : null,
-      terms: data.terms || null,
-      poNumber: data.poNumber || null,
-      placeOfSupply: data.placeOfSupply || null,
-      subject: data.subject || null,
-      notes: data.notes || null,
-      ...pickSellerData(data),
-      subtotal: totals.subtotal,
-      gstAmount: totals.gstAmount,
-      total: totals.total,
-      createdById: user.id,
-      items: {
-        create: totals.items.map((i, idx) => ({
-          description: i.description,
-          hsnSac: data.items[idx]?.hsnSac || null,
-          qty: i.qty,
-          unitPrice: i.unitPrice,
-          gstRate: i.gstRate,
-          lineTotal: i.lineTotal,
-        })),
-      },
-    },
-  });
+  // Same collision-retry reasoning as quotations' POST handler — see its
+  // comment for why nextInvoiceNumber()'s own up-front check isn't enough.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const invoiceNumber = await nextInvoiceNumber();
+    try {
+      const invoice = await db.invoice.create({
+        data: {
+          invoiceNumber,
+          clientName: data.clientName,
+          clientEmail: data.clientEmail || null,
+          clientAddress: data.clientAddress || null,
+          clientGstin: data.clientGstin || null,
+          shipToAddress: data.shipToAddress || null,
+          shipToGstin: data.shipToGstin || null,
+          departmentId,
+          invoiceDate: data.invoiceDate ? new Date(data.invoiceDate) : new Date(),
+          dueDate: data.dueDate ? new Date(data.dueDate) : null,
+          terms: data.terms || null,
+          poNumber: data.poNumber || null,
+          placeOfSupply: data.placeOfSupply || null,
+          subject: data.subject || null,
+          notes: data.notes || null,
+          ...pickSellerData(data),
+          subtotal: totals.subtotal,
+          gstAmount: totals.gstAmount,
+          total: totals.total,
+          createdById: user.id,
+          items: {
+            create: totals.items.map((i, idx) => ({
+              description: i.description,
+              hsnSac: data.items[idx]?.hsnSac || null,
+              qty: i.qty,
+              unitPrice: i.unitPrice,
+              gstRate: i.gstRate,
+              lineTotal: i.lineTotal,
+            })),
+          },
+        },
+      });
 
-  broadcastInvoiceChange("invoice_created", invoice);
-  return NextResponse.json({ invoice }, { status: 201 });
+      broadcastInvoiceChange("invoice_created", invoice);
+      return NextResponse.json({ invoice }, { status: 201 });
+    } catch (err) {
+      if (!isUniqueConstraintError(err)) throw err;
+    }
+  }
+  return NextResponse.json({ error: "Couldn't generate a unique invoice number — try again" }, { status: 500 });
 }
 
 const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });

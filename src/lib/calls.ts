@@ -29,6 +29,19 @@ export function canManageCall(
   return !!teamUserIds && (teamUserIds.includes(call.ownerId) || teamUserIds.includes(call.createdById));
 }
 
+/**
+ * Deletion is narrower than editing, same as Leads/Tasks/Projects: an admin,
+ * a CRM lead over the call's creator, or whoever actually logged it — not
+ * just whoever it's attributed to as "owner" (which can be set to anyone,
+ * e.g. an admin logging a call on a rep's behalf), who could otherwise erase
+ * a call log they never created.
+ */
+export function canDeleteCall(user: PermissionUser, call: { createdById: string }, teamUserIds: string[] | null): boolean {
+  if (isAdmin(user)) return true;
+  if (call.createdById === user.id) return true;
+  return !!teamUserIds && teamUserIds.includes(call.createdById);
+}
+
 export function broadcastCallChange(
   event: "call_created" | "call_updated" | "call_deleted",
   call: { id: string; ownerId: string; createdById: string }

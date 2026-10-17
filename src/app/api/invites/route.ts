@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser, isAllowedInviteEmail } from "@/lib/auth";
-import { canInviteUsers, isAdmin } from "@/lib/permissions";
+import { canInviteUsers, isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { sendMail, inviteEmailHtml } from "@/lib/mailer";
 import { getAppUrl } from "@/lib/app-settings";
 import { getSocialMembership, isSocialMediaLead } from "@/lib/social-media";
@@ -20,6 +20,8 @@ const bodySchema = z.object({
   /** Same idea as socialMediaAdmin/socialMediaMember, for the CRM Team's own invite picker. */
   crmAdmin: z.boolean().optional(),
   crmMember: z.boolean().optional(),
+  /** Grants Department Admin for `departmentId` on acceptance — company Admin only, see the route for why. */
+  inviteeIsDepartmentAdmin: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -41,27 +43,30 @@ export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // A company Admin/Super Admin can invite anyone into anything.
-  // A Social Media or CRM lead who ISN'T also a company admin can
-  // additionally invite — but only into their own team: a plain
-  // DEPARTMENT_USER, no department of their own, and it must actually add
-  // them to that team (as a regular member or as a lead) — otherwise this
-  // would just be a side door into "any non-admin can invite anyone."
-  const socialMembership = await getSocialMembership(user.id);
-  const crmMembership = await getCrmMembership(user.id);
-  const socialLeadInviting = !isAdmin(user) && isSocialMediaLead(user, socialMembership);
-  const crmLeadInviting = !isAdmin(user) && !socialLeadInviting && isCrmLead(user, crmMembership);
-  const leadInviting = socialLeadInviting || crmLeadInviting;
-  if (!canInviteUsers(user) && !leadInviting) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
-
   const { email, role, departmentId, socialMediaAdmin, socialMediaMember, crmAdmin, crmMember } = parsed.data;
+  let { inviteeIsDepartmentAdmin } = parsed.data;
+
+  // A company Admin/Super Admin can invite anyone into anything. Three
+  // non-admin carve-outs, each only into the inviter's own team/department,
+  // each forced to DEPARTMENT_USER — none of them is a side door into "any
+  // non-admin can invite anyone":
+  // - a Social Media or CRM lead, into their own team;
+  // - a Department Admin, into their own department — but they can't also
+  //   grant the new invitee Department Admin; only a company Admin can mint
+  //   another one.
+  const socialMembership = await getSocialMembership(user.id);
+  const crmMembership = await getCrmMembership(user.id);
+  const socialLeadInviting = !isAdmin(user) && isSocialMediaLead(user, socialMembership);
+  const crmLeadInviting = !isAdmin(user) && !socialLeadInviting && isCrmLead(user, crmMembership);
+  const deptAdminInviting = !isAdmin(user) && !socialLeadInviting && !crmLeadInviting && isDepartmentAdmin(user);
+  const leadInviting = socialLeadInviting || crmLeadInviting || deptAdminInviting;
+  if (!canInviteUsers(user) && !leadInviting) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   if (socialLeadInviting) {
     if (role !== "DEPARTMENT_USER") {
@@ -83,7 +88,24 @@ export async function POST(req: NextRequest) {
     if (!crmAdmin && !crmMember) {
       return NextResponse.json({ error: "Choose CRM User or CRM (Admin)" }, { status: 400 });
     }
+  } else if (deptAdminInviting) {
+    if (role !== "DEPARTMENT_USER") {
+      return NextResponse.json({ error: "Only a company Admin can invite as Admin or Super Admin" }, { status: 403 });
+    }
+    if (departmentId !== user.departmentId) {
+      return NextResponse.json({ error: "A Department Admin can only invite into their own department" }, { status: 400 });
+    }
+    // Scoped to exactly one thing — a plain member of their own department.
+    // Not a lead-equivalent grant into any other module.
+    inviteeIsDepartmentAdmin = false;
   }
+
+  // Only a company Admin may grant Social Media / CRM access through a
+  // Department Admin's invite — those modules are unrelated to a department.
+  const grantSocialMediaAdmin = deptAdminInviting ? false : socialMediaAdmin;
+  const grantSocialMediaMember = deptAdminInviting ? false : socialMediaMember;
+  const grantCrmAdmin = deptAdminInviting ? false : crmAdmin;
+  const grantCrmMember = deptAdminInviting ? false : crmMember;
 
   const smtp = await db.smtpSettings.findUnique({ where: { id: "default" }, select: { allowExternalInvites: true } });
   if (!isAllowedInviteEmail(email, smtp?.allowExternalInvites ?? false)) {
@@ -117,10 +139,11 @@ export async function POST(req: NextRequest) {
       email: email.toLowerCase(),
       role,
       departmentId: departmentId || null,
-      socialMediaAdmin: socialMediaAdmin ?? false,
-      socialMediaMember: socialMediaMember ?? false,
-      crmAdmin: crmAdmin ?? false,
-      crmMember: crmMember ?? false,
+      socialMediaAdmin: grantSocialMediaAdmin ?? false,
+      socialMediaMember: grantSocialMediaMember ?? false,
+      crmAdmin: grantCrmAdmin ?? false,
+      crmMember: grantCrmMember ?? false,
+      inviteeIsDepartmentAdmin: inviteeIsDepartmentAdmin ?? false,
       token,
       invitedById: user.id,
       expiresAt,

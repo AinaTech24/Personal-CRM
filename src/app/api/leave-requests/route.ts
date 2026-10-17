@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
+import { socialMediaTeamScopeFor } from "@/lib/social-media";
+import { crmTeamScopeFor } from "@/lib/crm-team";
 import { dateFromKey, istDateKey } from "@/lib/attendance";
 import { leaveSummary, leaveWorkingDays } from "@/lib/leave";
 import { leaveRequestInclude, serializeLeaveRequest } from "@/lib/leave-requests";
@@ -13,8 +15,10 @@ import { emitToAdmins } from "@/lib/socket-emit";
 const STATUSES = ["PENDING", "APPROVED", "REJECTED", "CANCELLED"] as const;
 
 /**
- * Your own requests plus your dashboard numbers. `?scope=all` (admins only)
- * returns everyone's, optionally narrowed with `?status=`.
+ * Your own requests plus your dashboard numbers. `?scope=all` returns
+ * everyone's for a company Admin or a LEAVE-module grantee, or just a
+ * Social Media/CRM lead's own team for them — optionally narrowed further
+ * with `?status=`.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -22,12 +26,20 @@ export async function GET(req: NextRequest) {
 
   const params = req.nextUrl.searchParams;
   if (params.get("scope") === "all") {
-    if (!isAdmin(user) && !(await canManageModule(user, "LEAVE", "READ"))) {
+    const canManageAll = isAdmin(user) || (await canManageModule(user, "LEAVE", "READ"));
+    const socialScope = canManageAll ? null : await socialMediaTeamScopeFor(user);
+    const crmScope = canManageAll ? null : await crmTeamScopeFor(user);
+    if (!canManageAll && !socialScope && !crmScope) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    const teamUserIds = canManageAll ? null : Array.from(new Set([...(socialScope ?? []), ...(crmScope ?? [])]));
+
     const status = STATUSES.find((s) => s === params.get("status"));
     const rows = await db.leaveRequest.findMany({
-      where: status ? { status } : {},
+      where: {
+        ...(status ? { status } : {}),
+        ...(teamUserIds ? { userId: { in: teamUserIds } } : {}),
+      },
       include: leaveRequestInclude,
       orderBy: { createdAt: "desc" },
       take: 500,

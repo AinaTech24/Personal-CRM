@@ -84,6 +84,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const data = parsed.data;
   const before = access;
 
+  // Moving a project to a different department is an admin-only action, same
+  // as creating one already is — otherwise any member could move it out of
+  // the department-scoped access this app otherwise enforces.
+  if (data.departmentId !== undefined && !isAdmin(user)) {
+    return NextResponse.json({ error: "Only an admin can change a project's department" }, { status: 403 });
+  }
+
   const project = await db.project.update({
     where: { id },
     data: {
@@ -107,6 +114,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   if (data.assignedToId !== undefined && data.assignedToId !== before.assignedToId) {
+    if (data.assignedToId) {
+      // A new assignee needs membership too — otherwise they're notified
+      // about a project they then can't open (getProjectForUser only grants
+      // access to the creator, a member, or an explicit module grant, never
+      // just the assignedToId field on its own).
+      await db.projectMember.upsert({
+        where: { projectId_userId: { projectId: id, userId: data.assignedToId } },
+        create: { projectId: id, userId: data.assignedToId, role: "member" },
+        update: {},
+      });
+    }
     if (data.assignedToId && data.assignedToId !== user.id) {
       await notifyAndPush(
         data.assignedToId,

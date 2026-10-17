@@ -1,9 +1,12 @@
 import { db } from "@/lib/db";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
-import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
 import { canAccessSocialClient, isSocialMediaLead, isSocialMediaOnlyUser, type SocialMembership } from "@/lib/social-media-permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
+import { getTeamMembershipBySlug, getTeamUserIdsBySlug, broadcastTeamChangeBySlug } from "@/lib/teams";
+
+/** The "Social Media" row in the generic Team table (seeded by scripts/migrate-social-crm-to-teams.ts) that this module reads/writes through — see the Teams unification plan. */
+const TEAM_SLUG = "social-media";
 
 export type { SocialMembership };
 export {
@@ -14,44 +17,24 @@ export {
   canAccessSocialClient,
 } from "@/lib/social-media-permissions";
 
-/** The current user's Social Media membership row, or null if they have none (and aren't a company admin). */
+/** The current user's Social Media membership, or null if they have none (and aren't a company admin), reading through the generic Team/TeamMember tables. */
 export async function getSocialMembership(userId: string): Promise<SocialMembership | null> {
-  return db.socialMediaMember.findUnique({ where: { userId }, select: { isLead: true } });
-}
-
-/**
- * The department every genuine Social Media team member is expected to
- * belong to — derived from the team's own lead(s) rather than a hardcoded
- * name/slug, so this keeps working if the department ever gets renamed.
- * Null only if no lead has a department set at all (shouldn't normally
- * happen), in which case callers fall back to the unfiltered roster rather
- * than hiding everyone.
- */
-async function socialMediaDepartmentId(): Promise<string | null> {
-  const lead = await db.socialMediaMember.findFirst({
-    where: { isLead: true, user: { departmentId: { not: null } } },
-    select: { user: { select: { departmentId: true } } },
-  });
-  return lead?.user.departmentId ?? null;
+  return getTeamMembershipBySlug(userId, TEAM_SLUG);
 }
 
 /**
  * Every user id currently on the Social Media team, restricted to those
  * actually IN the Social Media department — not just anyone with a
- * SocialMediaMember row. "Add an existing user" on the Members tab lets an
- * admin add literally anyone company-wide, e.g. a Sales rep given one-off
- * access to review a client's content; that person becoming a
- * SocialMediaMember shouldn't mean THEIR OWN unrelated Sales leads/tasks/
- * meetings/attendance start showing up in this team's aggregate views. This
- * is what every current caller (team-attendance, team-activity, and both
- * scope-widening/narrowing helpers below) actually wants; nothing needs the
- * unfiltered roster.
+ * membership row. "Add an existing user" on the Members tab lets an admin
+ * add literally anyone company-wide, e.g. a Sales rep given one-off access
+ * to review a client's content; that person joining the team shouldn't mean
+ * THEIR OWN unrelated Sales leads/tasks/meetings/attendance start showing
+ * up in this team's aggregate views. This is what every current caller
+ * (team-attendance, team-activity, and both scope-widening/narrowing
+ * helpers below) actually wants; nothing needs the unfiltered roster.
  */
-export async function getSocialMediaTeamUserIds(): Promise<string[]> {
-  const members = await db.socialMediaMember.findMany({ select: { userId: true, user: { select: { departmentId: true } } } });
-  const departmentId = await socialMediaDepartmentId();
-  if (!departmentId) return members.map((m) => m.userId);
-  return members.filter((m) => m.user.departmentId === departmentId).map((m) => m.userId);
+export async function getSocialMediaTeamUserIds(preferredDepartmentId?: string | null): Promise<string[]> {
+  return getTeamUserIdsBySlug(TEAM_SLUG, preferredDepartmentId);
 }
 
 /**
@@ -66,7 +49,10 @@ export async function socialMediaTeamScopeFor(user: PermissionUser): Promise<str
   if (isAdmin(user)) return null;
   const membership = await getSocialMembership(user.id);
   if (!isSocialMediaLead(user, membership)) return null;
-  return getSocialMediaTeamUserIds();
+  // isAdmin already returned above, so passing isSocialMediaLead here means
+  // this is a genuine lead membership row — prefer their own department
+  // over an arbitrary lead's (see getTeamUserIdsBySlug's comment).
+  return getSocialMediaTeamUserIds(user.departmentId);
 }
 
 /**
@@ -87,7 +73,11 @@ export async function socialMediaTeamScopeFor(user: PermissionUser): Promise<str
 export async function socialMediaTeamOnlyScopeFor(user: PermissionUser): Promise<string[] | null> {
   const membership = await getSocialMembership(user.id);
   if (!isSocialMediaLead(user, membership)) return null;
-  return getSocialMediaTeamUserIds();
+  // Unlike socialMediaTeamScopeFor, isSocialMediaLead here can also be true
+  // for a company Admin peeking at the team-only view — an admin has no
+  // department-of-the-team of their own, so only prefer the caller's
+  // department when membership says they're a genuine lead.
+  return getSocialMediaTeamUserIds(membership?.isLead ? user.departmentId : undefined);
 }
 
 /**
@@ -201,13 +191,10 @@ export async function logSocialClientActivity(clientId: string, actorId: string,
 }
 
 /**
- * Broadcasts to exactly who can see this module — every current
- * SocialMediaMember plus admins — rather than a global event every
- * connected client would receive regardless of access. Membership is a
- * short list in practice, so one extra query per change is cheap.
+ * Broadcasts to exactly who can see this module — every current Social
+ * Media team member plus admins — rather than a global event every
+ * connected client would receive regardless of access.
  */
 export async function broadcastSocialChange(event: string, payload: unknown) {
-  emitToAdmins(event, payload);
-  const members = await db.socialMediaMember.findMany({ select: { userId: true } });
-  for (const m of members) emitToUser(m.userId, event, payload);
+  await broadcastTeamChangeBySlug(TEAM_SLUG, event, payload);
 }

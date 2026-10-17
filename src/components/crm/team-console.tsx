@@ -20,7 +20,7 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SkeletonForm } from "@/components/ui/skeleton";
-import { IconPencil, IconTrash, IconSend, IconCheck, IconX } from "@/components/icons";
+import { IconPencil, IconTrash, IconSend, IconCheck, IconX, IconPlus } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { userOptionLabel } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
@@ -30,9 +30,10 @@ import { LeadsBoard } from "@/components/leads/leads-board";
 import { TasksBoard } from "@/components/tasks/tasks-board";
 import { MeetingsView } from "@/components/meetings/meetings-view";
 import { ProjectsList } from "@/components/projects/projects-list";
+import { LeaveAdminView } from "@/components/leave/leave-admin-view";
 import { CallsView } from "@/components/calls/calls-view";
 
-type TabKey = "members" | "leads" | "tasks" | "meetings" | "calls" | "projects" | "attendance" | "activity";
+type TabKey = "members" | "leads" | "tasks" | "meetings" | "calls" | "projects" | "attendance" | "leave" | "activity";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "members", label: "Members" },
@@ -42,6 +43,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "calls", label: "Calls" },
   { key: "projects", label: "Projects" },
   { key: "attendance", label: "Attendance" },
+  { key: "leave", label: "Leave" },
   { key: "activity", label: "Activity" },
 ];
 
@@ -119,6 +121,7 @@ export function CrmTeamConsole() {
           {tab === "calls" && <CallsView scope="crm" />}
           {tab === "projects" && <ProjectsList scope="crm" />}
           {tab === "attendance" && <AttendanceTab />}
+          {tab === "leave" && <LeaveAdminView canEditDelete={false} />}
           {tab === "activity" && <ActivityTab />}
         </>
       )}
@@ -266,13 +269,16 @@ function MembersTab({ onForbidden }: { onForbidden: () => void }) {
             </Label>
             <Dropdown id="crm-team-add-existing" value={addUserId} onChange={setAddUserId} placeholder="Choose a user" options={candidateOptions} />
           </div>
-          <Button size="sm" onClick={addMember} disabled={!addUserId || adding}>
-            {adding ? "Adding..." : "Add to team"}
-          </Button>
-          <Button size="sm" variant="outline" className="ml-auto gap-1.5" onClick={openInvite}>
-            <IconSend className="h-4 w-4" />
-            Invite new user
-          </Button>
+          <Tooltip label="Add to team" side="bottom">
+            <Button size="icon" onClick={addMember} disabled={!addUserId || adding} aria-label="Add to team">
+              <IconPlus className="h-4 w-4" />
+            </Button>
+          </Tooltip>
+          <Tooltip label="Invite new user" side="bottom">
+            <Button size="icon" variant="outline" className="ml-auto" onClick={openInvite} aria-label="Invite new user">
+              <IconSend className="h-4 w-4" />
+            </Button>
+          </Tooltip>
         </CardContent>
       </Card>
 

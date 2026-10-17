@@ -38,10 +38,11 @@ export async function canDeleteLead(user: PermissionUser, lead: { createdById: s
 }
 
 /**
- * A lead should be visible to a department user if it's in their department,
- * unassigned to any department, OR they personally created/were assigned it
- * (e.g. a Super Admin assigning across departments) — matching the single-lead
- * access rule in `canManageRecord`, which already accounts for assignment.
+ * A lead is visible by default only if it's unassigned to any department
+ * (shared/unscoped), or the user personally created/was assigned it — being
+ * a member of the same department is no longer enough on its own (see
+ * `canManageRecord`'s note for why). A Leads module grant from the Permission
+ * Manager (`fullAccess`), or being an Admin, widens this company-wide.
  *
  * `teamUserIds`, when given (a Social Media lead's own team, from
  * `socialMediaTeamScopeFor`), additionally widens this to every lead created
@@ -59,7 +60,6 @@ export function leadListWhere(user: PermissionUser, teamUserIds?: string[] | nul
   }
   if (isSuperAdmin(user) || isAdmin(user) || fullAccess) return {};
   const or: object[] = [
-    { departmentId: user.departmentId },
     { departmentId: null },
     { assignedToId: user.id },
     { createdById: user.id },

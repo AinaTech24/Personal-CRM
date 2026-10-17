@@ -95,6 +95,63 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ project }, { status: 201 });
 }
 
+const bulkReassignSchema = z.object({ ids: z.array(z.string()).min(1), assignedToId: z.string().min(1) });
+
+/** Bulk-reassign a set of projects — same per-project "can edit this" rule as the single-project PATCH (creator, member, or a grant), not a blanket admin-only action. */
+export async function PATCH(req: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const parsed = bulkReassignSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+
+  const target = await db.user.findUnique({ where: { id: parsed.data.assignedToId }, select: { id: true } });
+  if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+  const projectsGrant = await canManageModule(user, "PROJECTS", "UPDATE");
+  const projects = await db.project.findMany({
+    where: { id: { in: parsed.data.ids } },
+    include: { members: { select: { userId: true } } },
+  });
+  const editable = projects.filter(
+    (p) => isAdmin(user) || projectsGrant || p.createdById === user.id || p.members.some((m) => m.userId === target.id || m.userId === user.id)
+  );
+
+  for (const project of editable) {
+    await db.project.update({ where: { id: project.id }, data: { assignedToId: target.id } });
+    // Same reasoning as the single-project PATCH: a new assignee needs
+    // membership too, or they can't open what they were just assigned.
+    await db.projectMember.upsert({
+      where: { projectId_userId: { projectId: project.id, userId: target.id } },
+      create: { projectId: project.id, userId: target.id, role: "member" },
+      update: {},
+    });
+    await logProjectActivity(project.id, user.id, "reassigned", { assignedToId: target.id });
+    broadcastProjectChange(
+      "project_updated",
+      project,
+      [...new Set(project.members.map((m) => m.userId).concat(target.id))]
+    );
+  }
+  if (editable.length > 0) {
+    if (target.id !== user.id) {
+      await notifyAndPush(
+        target.id,
+        "project_assigned",
+        { projectId: editable[0].id, projectName: editable[0].name, actorName: user.name },
+        {
+          title: "Projects assigned",
+          body: `${user.name} assigned you ${editable.length} project${editable.length === 1 ? "" : "s"}`,
+          url: "/projects",
+          tag: "project-assigned",
+        }
+      );
+    }
+  }
+
+  return NextResponse.json({ updated: editable.length, skipped: parsed.data.ids.length - editable.length });
+}
+
 const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });
 
 export async function DELETE(req: NextRequest) {

@@ -50,6 +50,22 @@ export async function hasAnyModulePermission(userId: string): Promise<boolean> {
   return !!row;
 }
 
+export interface ModuleGrantee {
+  userId: string;
+  flags: ModulePermissionFlags;
+}
+
+/** Every user holding at least one action on `module`, for the Permission Manager's "by module" view — the reverse of getUserModuleMatrix. Admins aren't included; they implicitly have every module regardless of any row. */
+export async function getModuleGrantees(module: ManagedModule): Promise<ModuleGrantee[]> {
+  const rows = await db.userModulePermission.findMany({
+    where: { module, OR: [{ canCreate: true }, { canRead: true }, { canUpdate: true }, { canDelete: true }] },
+  });
+  return rows.map((r) => ({
+    userId: r.userId,
+    flags: { canCreate: r.canCreate, canRead: r.canRead, canUpdate: r.canUpdate, canDelete: r.canDelete },
+  }));
+}
+
 /** Replaces this user's full grant matrix with exactly `matrix` — every module gets an explicit row, even an all-false one, so the Permission Manager always reflects exactly what was saved. */
 export async function setUserModuleMatrix(userId: string, matrix: Record<ManagedModule, ModulePermissionFlags>) {
   await db.$transaction(

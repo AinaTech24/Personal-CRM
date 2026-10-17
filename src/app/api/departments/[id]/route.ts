@@ -2,8 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { canManageDepartments } from "@/lib/permissions";
+import { canManageDepartments, isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { slugify } from "@/lib/slug";
+
+/** The department itself, plus every member — the department's own admin console. Open to a company Admin for any department, or a Department Admin for their own. */
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  if (!isAdmin(user) && !(isDepartmentAdmin(user) && user.departmentId === id)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const department = await db.department.findUnique({
+    where: { id },
+    include: {
+      users: {
+        select: {
+          id: true,
+          name: true,
+          surname: true,
+          email: true,
+          mobile: true,
+          avatarDataUrl: true,
+          role: true,
+          isDepartmentAdmin: true,
+          isActive: true,
+        },
+        orderBy: { name: "asc" },
+      },
+    },
+  });
+  if (!department) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  return NextResponse.json({ department });
+}
 
 const patchSchema = z.object({ name: z.string().min(1).max(80) });
 
@@ -52,9 +86,25 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     select: {
       id: true,
       // Every relation, not just users: a department also owns leads, projects,
-      // quotations, invoices and open invites, and any one of them left behind
-      // would fail in the database rather than here.
-      _count: { select: { users: true, leads: true, projects: true, quotations: true, invoices: true, invites: true } },
+      // quotations, invoices, open invites, and Password Manager entries
+      // (that one's required, not nullable — leaving it out would fail deep
+      // in the database instead of here), and any one of them left behind
+      // would fail in the database rather than here. formViewerDepartments
+      // is the one relation that *would* actually cascade-delete cleanly,
+      // but silently dropping a department's form-sharing config without
+      // saying so is still worth surfacing rather than doing quietly.
+      _count: {
+        select: {
+          users: true,
+          leads: true,
+          projects: true,
+          quotations: true,
+          invoices: true,
+          invites: true,
+          passwordEntries: true,
+          formViewers: true,
+        },
+      },
     },
   });
   if (!department) return NextResponse.json({ error: "Not found" }, { status: 404 });
