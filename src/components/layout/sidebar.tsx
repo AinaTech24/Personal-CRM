@@ -26,6 +26,7 @@ import {
   IconCalendar,
   IconLayoutGrid,
   IconShield,
+  IconBuildingCog,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -101,6 +102,8 @@ const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: Ic
 
 /** A non-admin user whose department was shared on at least one form — mirrors adminNav's own entry at the same href. */
 const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: IconLayoutGrid };
+
+const consultingNavItem: NavItem = { href: "/consulting", label: "MFD Consulting", icon: IconBuildingCog };
 
 /**
  * Which adminNav entries an individually-granted module permission (not
@@ -315,6 +318,14 @@ export function Sidebar({
   if (!isAdmin && managedModuleSet.has("CLIENTS") && !visibleMainNav.some((item) => item.href === "/clients")) {
     const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
     visibleMainNav.splice(leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1, 0, clientsNavItem);
+  }
+
+  // MFD Consulting is Aina's own client-engagement workspace, not a module
+  // every department uses — it only appears for a company admin or someone
+  // granted it in the Permission Manager, right after Projects.
+  if (isAdmin || managedModuleSet.has("CONSULTING")) {
+    const projectsIndex = visibleMainNav.findIndex((item) => item.href === "/projects");
+    visibleMainNav.splice(projectsIndex === -1 ? visibleMainNav.length : projectsIndex + 1, 0, consultingNavItem);
   }
 
   // Leave/Attendance/Birthdays each have an /admin page a module grant can

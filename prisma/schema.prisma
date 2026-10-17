@@ -44,6 +44,7 @@ enum ManagedModule {
   BIRTHDAYS
   MESSAGES
   PROJECTS
+  CONSULTING
 }
 
 /// One row per (user, module), company-wide — the same shape as
@@ -195,6 +196,13 @@ model User {
   passwordSharesReceived           PasswordEntryShare[]        @relation("PasswordEntrySharedWith")
   passwordSharesGiven              PasswordEntryShare[]        @relation("PasswordEntrySharedBy")
   passwordEntryActivities          PasswordEntryActivity[]
+
+  consultingEngagementsLed     ConsultingEngagement[]   @relation("ConsultingLeadConsultant")
+  consultingEngagementsCreated ConsultingEngagement[]   @relation("ConsultingEngagementCreatedBy")
+  consultingStagesOwned        ConsultingStage[]        @relation("ConsultingStageOwner")
+  consultingItemsOwned         ConsultingRegisterItem[] @relation("ConsultingItemOwner")
+  consultingItemsCreated       ConsultingRegisterItem[] @relation("ConsultingItemCreatedBy")
+  consultingAssessmentsCreated ConsultingAssessment[]   @relation("ConsultingAssessmentCreatedBy")
 }
 
 /// A browser/device push endpoint, so a user can be notified about a new
@@ -2078,4 +2086,174 @@ model FormAttachment {
 
   @@index([submissionId])
   @@index([fieldId])
+}
+
+// ---------- MFD Consulting (Aina MFD Consulting Kit — Control Center) ----------
+// Aina's own consulting engagements with MFD firms. Catalogs (lifecycle
+// stages, qualification criteria, register kinds, diagnostic checkpoints)
+// live in src/lib/consulting.ts; these tables hold only engagement data.
+
+enum ConsultingEngagementStatus {
+  PROSPECT
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  DECLINED
+}
+
+enum ConsultingStageStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  SKIPPED
+}
+
+enum ConsultingRegisterKind {
+  ACTION
+  RISK
+  ISSUE
+  DECISION
+  CHANGE_REQUEST
+  DELIVERABLE
+  MEETING
+  ACCESS
+  COMMERCIAL
+}
+
+model ConsultingEngagement {
+  id                  String    @id @default(cuid())
+  /// The MFD firm being consulted.
+  firmName            String
+  contactPerson       String?
+  contactEmail        String?
+  contactPhone        String?
+  city                String?
+  /// "ARN / Entity Type" on the qualification form.
+  entityType          String?
+  yearsInBusiness     Int?
+  /// Approximate AUM, in ₹ crore.
+  aumCrore            Decimal?  @db.Decimal(14, 2)
+  /// Monthly SIP book, in ₹ lakh.
+  monthlySipLakh      Decimal?  @db.Decimal(14, 2)
+  families            Int?
+  teamSize            Int?
+  branches            Int?
+  products            String?   @db.Text
+  /// Current CRM / software the firm runs on.
+  currentTools        String?   @db.Text
+  /// How the lead came to Aina.
+  leadSource          String?
+  primaryPainPoint    String?   @db.Text
+  whyNow              String?   @db.Text
+  decisionMaker       String?
+  budgetReadiness     String?
+  ownerTimeCommitment String?
+  preferredStart      DateTime? @db.Date
+
+  /// Qualification gate, 0–2 each (src/lib/consulting.ts QUALIFICATION_CRITERIA); null until scored.
+  qOwnerCommitment    Int?
+  qProblemUrgency     Int?
+  qTeamReadiness      Int?
+  qDataVisibility     Int?
+  qTechnologyOpenness Int?
+  qCommercialFit      Int?
+
+  status           ConsultingEngagementStatus @default(PROSPECT)
+  /// Client-side people, by name — they aren't CRM users.
+  executiveSponsor String?
+  programOwner     String?
+  leadConsultantId String?
+  leadConsultant   User?                      @relation("ConsultingLeadConsultant", fields: [leadConsultantId], references: [id], onDelete: SetNull)
+  startDate        DateTime?                  @db.Date
+  contractEndDate  DateTime?                  @db.Date
+  weeklyReviewDay  String?
+  monthlyReviewDay String?
+  repositoryLink   String?                    @db.Text
+  primaryGoals     String?                    @db.Text
+  notes            String?                    @db.Text
+  /// { [checklistKey]: { [itemKey]: boolean } } — fit decision, client readiness, handover.
+  checklists       Json?
+
+  createdById String
+  createdBy   User     @relation("ConsultingEngagementCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stages      ConsultingStage[]
+  items       ConsultingRegisterItem[]
+  assessments ConsultingAssessment[]
+
+  @@index([status])
+  @@index([leadConsultantId])
+}
+
+/// One row per lifecycle stage (0–17), created with the engagement.
+model ConsultingStage {
+  id              String                @id @default(cuid())
+  engagementId    String
+  engagement      ConsultingEngagement  @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  stage           Int
+  status          ConsultingStageStatus @default(NOT_STARTED)
+  ownerId         String?
+  owner           User?                 @relation("ConsultingStageOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  plannedStart    DateTime?             @db.Date
+  plannedEnd      DateTime?             @db.Date
+  actualEnd       DateTime?             @db.Date
+  percentComplete Int                   @default(0)
+  notes           String?               @db.Text
+  updatedAt       DateTime              @updatedAt
+
+  @@unique([engagementId, stage])
+}
+
+/// A row in one of the engagement's registers (actions, risks, issues,
+/// decisions, change requests, deliverables, meetings, access, billing).
+/// Common columns are queryable; kind-specific fields live in `details`,
+/// validated per kind against REGISTER_KIND_DEFS.
+model ConsultingRegisterItem {
+  id           String                 @id @default(cuid())
+  engagementId String
+  engagement   ConsultingEngagement   @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  kind         ConsultingRegisterKind
+  /// Per-engagement, per-kind sequence behind the human ID ("A-007").
+  number       Int
+  title        String                 @db.VarChar(500)
+  description  String?                @db.Text
+  status       String                 @db.VarChar(32)
+  priority     String?                @db.VarChar(16)
+  /// An Aina user owner…
+  ownerId      String?
+  owner        User?                  @relation("ConsultingItemOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  /// …or a client-side owner by name (function owner, program owner).
+  ownerName    String?
+  dueDate      DateTime?              @db.Date
+  closedAt     DateTime?
+  details      Json?
+  createdById  String
+  createdBy    User                   @relation("ConsultingItemCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  @@unique([engagementId, kind, number])
+  @@index([engagementId, kind])
+  @@index([ownerId])
+  @@index([dueDate])
+}
+
+/// A maturity diagnostic — the baseline, then each annual re-score.
+model ConsultingAssessment {
+  id           String               @id @default(cuid())
+  engagementId String
+  engagement   ConsultingEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  label        String
+  assessedOn   DateTime             @db.Date
+  /// AssessmentData from src/lib/consulting.ts: checkpoint scores, targets, owner dependency, systemization.
+  data         Json
+  createdById  String
+  createdBy    User                 @relation("ConsultingAssessmentCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([engagementId])
 }
