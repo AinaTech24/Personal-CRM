@@ -5,6 +5,16 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   IconDashboard,
   IconLeads,
   IconTasks,
@@ -26,6 +36,8 @@ import {
   IconCalendar,
   IconLayoutGrid,
   IconShield,
+  IconSliders,
+  IconCheck,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -205,6 +217,94 @@ function NavLinkItem({
   );
 }
 
+const NAV_ORDER_KEY = "aina-sidebar-nav-order";
+
+/** A per-browser layout preference, same storage mechanism as the collapsed state right below — not synced across devices, nothing to lose by keeping it purely local. */
+function loadNavOrder(): string[] | null {
+  try {
+    const raw = localStorage.getItem(NAV_ORDER_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveNavOrder(order: string[]) {
+  try {
+    localStorage.setItem(NAV_ORDER_KEY, JSON.stringify(order));
+  } catch {
+    // Private browsing / storage blocked — the reorder still works for this
+    // session, it just won't be remembered next time.
+  }
+}
+
+/**
+ * Applies a remembered order (a list of hrefs) to the nav items actually
+ * visible right now. Items from the saved order that are still visible come
+ * first, in that order; anything else (a module just granted, or the
+ * remembered order predating it) falls in afterward, in its natural
+ * position — so a stale or partial preference never hides anything, it just
+ * doesn't get positioned by it.
+ */
+function applyNavOrder(items: NavItem[], order: string[] | null): NavItem[] {
+  if (!order || order.length === 0) return items;
+  const remaining = new Map(items.map((i) => [i.href, i]));
+  const ordered: NavItem[] = [];
+  for (const href of order) {
+    const item = remaining.get(href);
+    if (item) {
+      ordered.push(item);
+      remaining.delete(href);
+    }
+  }
+  for (const item of items) {
+    if (remaining.has(item.href)) ordered.push(item);
+  }
+  return ordered;
+}
+
+/** A nav row with an optional drag handle — the handle only exists (and only then accepts pointer input) while actively rearranging, so the row behaves like a plain link the rest of the time. */
+function SortableNavItem({
+  item,
+  rearranging,
+  ...rest
+}: {
+  item: NavItem;
+  rearranging: boolean;
+  active: boolean;
+  badgeCount?: number;
+  tone?: "attention" | "count";
+  collapsed: boolean;
+  labelClass: string;
+  onNavigate?: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.href,
+    disabled: !rearranging,
+  });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <div ref={setNodeRef} style={style} className={cn("flex items-center gap-1", isDragging && "relative z-10 opacity-60")}>
+      {rearranging && (
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="flex h-7 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
+          aria-label={`Drag to reorder ${item.label}`}
+        >
+          <IconGrid className="h-3.5 w-3.5" />
+        </button>
+      )}
+      <div className="min-w-0 flex-1">
+        <NavLinkItem item={item} {...rest} />
+      </div>
+    </div>
+  );
+}
+
 /**
  * Presentational sidebar rail. Its width is driven by the parent grid column
  * (animated via grid-template-columns), so this only fills and clips its column.
@@ -247,7 +347,20 @@ export function Sidebar({
   // else has to wait for the visibility list — without this the full nav
   // renders and then items vanish as the answer arrives.
   const [navReady, setNavReady] = useState(isAdmin);
+  const [rearranging, setRearranging] = useState(false);
+  const [navOrder, setNavOrder] = useState<string[] | null>(null);
   const { socket } = useSocket();
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  useEffect(() => {
+    setNavOrder(loadNavOrder());
+  }, []);
+
+  // Collapsing mid-rearrange would hide the toggle that turns it back off,
+  // with no room for drag handles anyway — so collapsing always exits it.
+  useEffect(() => {
+    if (collapsed) setRearranging(false);
+  }, [collapsed]);
 
   // Which modules an admin has hidden from regular users. Admins see everything.
   useEffect(() => {
@@ -326,6 +439,11 @@ export function Sidebar({
     const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
     visibleMainNav.splice(leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1, 0, clientsNavItem);
   }
+
+  // The user's own drag-to-reorder preference, applied last so it works on
+  // whatever ended up actually visible for them — never hides or adds
+  // anything, purely repositions.
+  visibleMainNav = applyNavOrder(visibleMainNav, navOrder);
 
   // Leave/Attendance/Birthdays each have an /admin page a module grant can
   // unlock without making the holder a full Admin — everything else granted
@@ -442,6 +560,17 @@ export function Sidebar({
     collapsed ? "opacity-0" : "opacity-100"
   );
 
+  function handleNavDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = visibleMainNav.findIndex((i) => i.href === active.id);
+    const newIndex = visibleMainNav.findIndex((i) => i.href === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(visibleMainNav, oldIndex, newIndex).map((i) => i.href);
+    setNavOrder(reordered);
+    saveNavOrder(reordered);
+  }
+
   return (
     <aside
       className={cn(
@@ -471,6 +600,23 @@ export function Sidebar({
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 py-2">
+        {navReady && !collapsed && (
+          <div className="mb-1 flex items-center justify-end">
+            <Tooltip label={rearranging ? "Done rearranging" : "Rearrange modules"} side="bottom">
+              <button
+                type="button"
+                onClick={() => setRearranging((r) => !r)}
+                aria-label={rearranging ? "Done rearranging" : "Rearrange modules"}
+                className={cn(
+                  "flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground",
+                  rearranging && "bg-accent text-foreground"
+                )}
+              >
+                {rearranging ? <IconCheck className="h-3.5 w-3.5" /> : <IconSliders className="h-3.5 w-3.5" />}
+              </button>
+            </Tooltip>
+          </div>
+        )}
         {!navReady
           ? // Placeholder rows while we learn which modules this user may see.
             Array.from({ length: mainNav.length }, (_, i) => (
@@ -479,21 +625,28 @@ export function Sidebar({
                 {!collapsed && <Skeleton className="h-3.5 flex-1" />}
               </div>
             ))
-          : visibleMainNav.map((item) => {
-              const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
-              return (
-                <NavLinkItem
-                  key={item.href}
-                  item={item}
-                  active={active}
-                  badgeCount={item.href === "/messages" ? unreadMessages : 0}
-                  tone={item.href === "/messages" ? "count" : "attention"}
-                  collapsed={collapsed}
-                  labelClass={labelClass}
-                  onNavigate={onNavigate}
-                />
-              );
-            })}
+          : (
+            <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleNavDragEnd}>
+              <SortableContext items={visibleMainNav.map((i) => i.href)} strategy={verticalListSortingStrategy}>
+                {visibleMainNav.map((item) => {
+                  const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+                  return (
+                    <SortableNavItem
+                      key={item.href}
+                      item={item}
+                      rearranging={rearranging && !collapsed}
+                      active={active}
+                      badgeCount={item.href === "/messages" ? unreadMessages : 0}
+                      tone={item.href === "/messages" ? "count" : "attention"}
+                      collapsed={collapsed}
+                      labelClass={labelClass}
+                      onNavigate={onNavigate}
+                    />
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
+          )}
 
         {(isAdmin || grantedAdminNav.length > 0) && (
           <>
