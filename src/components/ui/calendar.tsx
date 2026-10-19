@@ -13,6 +13,7 @@ import {
   subMonths,
 } from "date-fns";
 import { IconChevronLeft, IconChevronRight } from "@/components/icons";
+import { Dropdown } from "@/components/ui/dropdown";
 import { cn } from "@/lib/utils";
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => format(new Date(2000, i, 1), "MMMM"));
@@ -70,30 +71,25 @@ export function CalendarMonth({
         </button>
         {yearRange ? (
           <div className="flex items-center gap-1">
-            <select
-              aria-label="Month"
-              value={viewMonth.getMonth()}
-              onChange={(e) => onViewMonthChange(new Date(viewMonth.getFullYear(), Number(e.target.value), 1))}
-              className="h-6 rounded border border-input bg-popover px-1 text-xs font-medium text-popover-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              {MONTHS.map((m, i) => (
-                <option key={m} value={i}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Year"
-              value={viewMonth.getFullYear()}
-              onChange={(e) => onViewMonthChange(new Date(Number(e.target.value), viewMonth.getMonth(), 1))}
-              className="h-6 rounded border border-input bg-popover px-1 text-xs font-medium text-popover-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              {Array.from({ length: yearRange.to - yearRange.from + 1 }, (_, i) => yearRange.to - i).map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
+            <div className="w-28">
+              <Dropdown
+                size="sm"
+                value={String(viewMonth.getMonth())}
+                onChange={(v) => onViewMonthChange(new Date(viewMonth.getFullYear(), Number(v), 1))}
+                options={MONTHS.map((m, i) => ({ value: String(i), label: m }))}
+              />
+            </div>
+            <div className="w-20">
+              <Dropdown
+                size="sm"
+                value={String(viewMonth.getFullYear())}
+                onChange={(v) => onViewMonthChange(new Date(Number(v), viewMonth.getMonth(), 1))}
+                options={Array.from({ length: yearRange.to - yearRange.from + 1 }, (_, i) => yearRange.to - i).map((y) => ({
+                  value: String(y),
+                  label: String(y),
+                }))}
+              />
+            </div>
           </div>
         ) : (
           <span className="text-xs font-medium">{format(viewMonth, "MMMM yyyy")}</span>

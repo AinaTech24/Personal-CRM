@@ -10,18 +10,32 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { cn } from "@/lib/utils";
 
+const ROLE_LABEL: Record<string, string> = {
+  SUPER_ADMIN: "Super Admin",
+  ADMIN: "Admin",
+  DEPARTMENT_USER: "Department User",
+};
+
 export function UserMenu({ name, email, isAdmin }: { name: string; email: string; isAdmin: boolean }) {
   const router = useRouter();
   const toast = useToast();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [departmentName, setDepartmentName] = useState<string | null>(null);
+  const [designation, setDesignation] = useState<string | null>(null);
 
-  // Load the current user's avatar for the menu button.
+  // Load the current user's avatar + role/department/designation for the menu.
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((d) => setAvatar(d.user?.avatarDataUrl ?? null))
+      .then((d) => {
+        setAvatar(d.user?.avatarDataUrl ?? null);
+        setRole(d.user?.role ?? null);
+        setDepartmentName(d.user?.department?.name ?? null);
+        setDesignation(d.user?.designation ?? null);
+      })
       .catch(() => {});
   }, []);
 
@@ -42,7 +56,12 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
   function refreshAvatar() {
     fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((d) => setAvatar(d.user?.avatarDataUrl ?? null))
+      .then((d) => {
+        setAvatar(d.user?.avatarDataUrl ?? null);
+        setRole(d.user?.role ?? null);
+        setDepartmentName(d.user?.department?.name ?? null);
+        setDesignation(d.user?.designation ?? null);
+      })
       .catch(() => {});
   }
 
@@ -76,6 +95,13 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
             <div className="px-2 py-1.5">
               <p className="text-sm font-medium">{name}</p>
               <p className="text-xs text-muted-foreground">{email}</p>
+              {(role || departmentName || designation) && (
+                <div className="mt-1.5 flex flex-col gap-0.5 text-xs text-muted-foreground">
+                  {role && <p>{ROLE_LABEL[role] ?? role}</p>}
+                  {departmentName && <p>{departmentName}</p>}
+                  {designation && <p>{designation}</p>}
+                </div>
+              )}
             </div>
             <DropdownMenu.Separator className="my-1 h-px bg-border" />
             <DropdownMenu.Item
