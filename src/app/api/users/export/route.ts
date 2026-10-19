@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { canManageUsers } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { csvRow, csvResponse } from "@/lib/csv";
 import { istDateKey } from "@/lib/attendance";
 
-/** Admin-only: CSV export of every user, same data as the Admin > Users list. */
+/** Admin: CSV export of every user. Department Admin: just their own department's — same scope as the Admin > Users list. */
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || !canManageUsers(user)) {
+  const admin = !!user && isAdmin(user);
+  const deptAdmin = !!user && !admin && isDepartmentAdmin(user);
+  if (!user || (!admin && !deptAdmin)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const users = await db.user.findMany({
+    where: deptAdmin ? { departmentId: user.departmentId } : undefined,
     orderBy: { name: "asc" },
     include: { department: true },
   });
