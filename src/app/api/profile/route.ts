@@ -35,6 +35,15 @@ const bodySchema = z.object({
     }, "Enter a valid date of birth")
     .nullable()
     .optional(),
+  designation: z.string().trim().min(1).max(120).optional(),
+  dateOfJoining: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((v) => {
+      const d = new Date(`${v}T00:00:00.000Z`);
+      return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v && d.getTime() <= Date.now();
+    }, "Enter a valid date of joining")
+    .optional(),
   locale: z.string().max(10).optional(),
   defaultLandingPage: z.enum(LANDING_PAGES).nullable().optional(),
   density: z.enum(["comfortable", "compact"]).optional(),
@@ -58,6 +67,15 @@ export async function PUT(req: NextRequest) {
     const current = user.birthday.toISOString().slice(0, 10);
     if (data.birthday !== current) {
       return NextResponse.json({ error: "Your birthday is already set. Ask an admin to change it." }, { status: 403 });
+    }
+  }
+  if (data.designation !== undefined && user.designation && !isAdmin(user) && data.designation !== user.designation) {
+    return NextResponse.json({ error: "Your designation is already set. Ask an admin to change it." }, { status: 403 });
+  }
+  if (data.dateOfJoining !== undefined && user.dateOfJoining && !isAdmin(user)) {
+    const current = user.dateOfJoining.toISOString().slice(0, 10);
+    if (data.dateOfJoining !== current) {
+      return NextResponse.json({ error: "Your date of joining is already set. Ask an admin to change it." }, { status: 403 });
     }
   }
 
@@ -118,6 +136,8 @@ export async function PUT(req: NextRequest) {
         ...(normalizedMobile !== undefined && { mobile: normalizedMobile }),
         ...(data.avatarDataUrl !== undefined && { avatarDataUrl: data.avatarDataUrl }),
         ...(data.birthday !== undefined && { birthday: data.birthday ? new Date(`${data.birthday}T00:00:00.000Z`) : null }),
+        ...(data.designation !== undefined && { designation: data.designation }),
+        ...(data.dateOfJoining !== undefined && { dateOfJoining: new Date(`${data.dateOfJoining}T00:00:00.000Z`) }),
         ...(data.locale !== undefined && { locale: data.locale }),
         ...(data.defaultLandingPage !== undefined && { defaultLandingPage: data.defaultLandingPage }),
         ...(data.density !== undefined && { density: data.density }),
@@ -131,6 +151,8 @@ export async function PUT(req: NextRequest) {
         mobile: true,
         avatarDataUrl: true,
         birthday: true,
+        designation: true,
+        dateOfJoining: true,
         email: true,
         timezone: true,
         locale: true,

@@ -81,6 +81,14 @@ model User {
   // Date of birth, set by an admin. Only month/day are shown to colleagues
   // (see /api/birthdays); the year stays admin-only.
   birthday              DateTime?   @db.Date
+  // Job title, e.g. "Software Engineer". Self-service once (same rule as
+  // birthday: free to set while empty, admin-only to change afterward) — see
+  // the onboarding-completion prompt that nudges anyone missing it.
+  designation           String?
+  // When they actually joined, which can predate their account's own
+  // createdAt (e.g. historical data entered later). Same self-service-once
+  // rule as designation/birthday.
+  dateOfJoining         DateTime?   @db.Date
   avatarDataUrl         String?     @db.LongText
   role                  Role        @default(DEPARTMENT_USER)
   departmentId          String?

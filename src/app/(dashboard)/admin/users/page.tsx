@@ -16,9 +16,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
+import { DatePicker } from "@/components/ui/date-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { IconSend, IconPencil, IconTrash, IconX, IconCheck, IconKey, IconShield, IconDownload } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
@@ -65,18 +65,8 @@ interface UserRow {
   isActive: boolean;
   isDepartmentAdmin: boolean;
   department: { id: string; name: string } | null;
-  socialMediaMembership: { isLead: boolean } | null;
-}
-
-const SOCIAL_MEDIA_ROLE_OPTIONS = [
-  { value: "NONE", label: "None" },
-  { value: "MEMBER", label: "Social Media User" },
-  { value: "ADMIN", label: "Social Media (Admin)" },
-];
-
-function socialMediaRoleOf(u: Pick<UserRow, "socialMediaMembership">): string {
-  if (!u.socialMediaMembership) return "NONE";
-  return u.socialMediaMembership.isLead ? "ADMIN" : "MEMBER";
+  designation: string | null;
+  dateOfJoining: string | null;
 }
 
 /** Full name = name + surname, falling back to just the name. */
@@ -111,8 +101,9 @@ export default function UsersPage() {
   const [editUser, setEditUser] = useState<UserRow | null>(null);
   const [editRole, setEditRole] = useState("DEPARTMENT_USER");
   const [editDept, setEditDept] = useState("");
-  const [editSocialMediaRole, setEditSocialMediaRole] = useState("NONE");
   const [editIsDepartmentAdmin, setEditIsDepartmentAdmin] = useState(false);
+  const [editDesignation, setEditDesignation] = useState("");
+  const [editDateOfJoining, setEditDateOfJoining] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
   // Delete confirm state
@@ -246,8 +237,9 @@ export default function UsersPage() {
     setEditUser(u);
     setEditRole(u.role);
     setEditDept(u.department?.id ?? "");
-    setEditSocialMediaRole(socialMediaRoleOf(u));
     setEditIsDepartmentAdmin(u.isDepartmentAdmin);
+    setEditDesignation(u.designation ?? "");
+    setEditDateOfJoining(u.dateOfJoining ? String(u.dateOfJoining).slice(0, 10) : "");
   }
 
   async function saveEdit() {
@@ -260,8 +252,9 @@ export default function UsersPage() {
         body: JSON.stringify({
           role: editRole,
           departmentId: editDept || null,
-          socialMediaRole: editSocialMediaRole,
           isDepartmentAdmin: editIsDepartmentAdmin,
+          designation: editDesignation.trim() || null,
+          dateOfJoining: editDateOfJoining || null,
         }),
       });
       const data = await res.json();
@@ -599,34 +592,39 @@ export default function UsersPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="edit-social-media-role">Social Media role</Label>
-                <Dropdown
-                  id="edit-social-media-role"
-                  value={editSocialMediaRole}
-                  onChange={setEditSocialMediaRole}
-                  options={SOCIAL_MEDIA_ROLE_OPTIONS}
+                <Label htmlFor="edit-designation">Designation</Label>
+                <Input
+                  id="edit-designation"
+                  value={editDesignation}
+                  onChange={(e) => setEditDesignation(e.target.value)}
+                  placeholder="e.g. Software Engineer"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className={cn("flex items-start gap-2.5 rounded-md border border-border p-3", editDept ? "cursor-pointer" : "cursor-not-allowed opacity-60")}>
-                  <Checkbox
-                    checked={editIsDepartmentAdmin}
-                    onChange={(v) => {
-                      if (!editDept) return toast.error("Pick a department first", "Department Admin needs a department to administer.");
-                      setEditIsDepartmentAdmin(v);
-                    }}
-                    aria-label="Department Admin"
-                    className="mt-0.5"
-                  />
-                  <span className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Department Admin</span>
-                    <span className="text-xs text-muted-foreground">
-                      {editDept
-                        ? `Can open the Permission Manager for anyone else in ${departments.find((d) => d.id === editDept)?.name ?? "this department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.`
-                        : "Pick a department above first — this has nothing to administer without one."}
-                    </span>
+                <Label htmlFor="edit-doj">Date of joining</Label>
+                <DatePicker
+                  id="edit-doj"
+                  value={editDateOfJoining}
+                  onChange={setEditDateOfJoining}
+                  placeholder="Pick a date"
+                  yearRange={{ from: new Date().getFullYear() - 15, to: new Date().getFullYear() }}
+                />
+              </div>
+              <div className="flex items-start justify-between gap-4 rounded-md border border-border p-3">
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium">Department Admin</span>
+                  <span className="text-xs text-muted-foreground">
+                    {editDept
+                      ? `Can open the Permission Manager for anyone else in ${departments.find((d) => d.id === editDept)?.name ?? "this department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.`
+                      : "Pick a department above first — this has nothing to administer without one."}
                   </span>
-                </label>
+                </span>
+                <ToggleSwitch
+                  checked={editIsDepartmentAdmin}
+                  onChange={setEditIsDepartmentAdmin}
+                  disabled={!editDept}
+                  label="Department Admin"
+                />
               </div>
             </div>
           </DialogBody>

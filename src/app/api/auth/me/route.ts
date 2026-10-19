@@ -21,6 +21,8 @@ export async function GET() {
       mobile: user.mobile,
       avatarDataUrl: user.avatarDataUrl,
       birthday: user.birthday,
+      designation: user.designation,
+      dateOfJoining: user.dateOfJoining,
       role: user.role,
       departmentId: user.departmentId,
       department: user.department,

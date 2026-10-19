@@ -18,7 +18,7 @@ export async function GET() {
   });
 
   const lines: string[] = [
-    csvRow(["Name", "Email", "Mobile", "Role", "Department", "Department Admin", "Status", "Joined"]),
+    csvRow(["Name", "Email", "Mobile", "Role", "Department", "Designation", "Department Admin", "Status", "Joined", "Date of Joining"]),
     ...users.map((u) =>
       csvRow([
         [u.name, u.surname].filter(Boolean).join(" "),
@@ -26,9 +26,11 @@ export async function GET() {
         u.mobile ?? "",
         u.role.replace(/_/g, " "),
         u.department?.name ?? "",
+        u.designation ?? "",
         u.isDepartmentAdmin ? "Yes" : "No",
         u.isActive ? "Active" : "Blocked",
         u.createdAt.toISOString().slice(0, 10),
+        u.dateOfJoining ? u.dateOfJoining.toISOString().slice(0, 10) : "",
       ])
     ),
   ];

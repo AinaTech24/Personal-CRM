@@ -22,15 +22,22 @@ export async function GET(req: NextRequest) {
   // admin peeking in) — see getTeamUserIdsBySlug's comment for why this
   // matters with 2+ leads.
   const teamUserIds = await getCrmTeamUserIds(membership?.isLead ? user.departmentId : undefined);
+  if (teamUserIds.length === 0) return NextResponse.json({ logs: [], models: [] });
+
   const model = req.nextUrl.searchParams.get("model");
 
-  const logs = await db.auditLog.findMany({
-    where: { actorId: { in: teamUserIds }, ...(model ? { model } : {}) },
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
+  try {
+    const logs = await db.auditLog.findMany({
+      where: { actorId: { in: teamUserIds }, ...(model ? { model } : {}) },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
 
-  const models = [...new Set(logs.map((l) => l.model))].sort();
+    const models = [...new Set(logs.map((l) => l.model))].sort();
 
-  return NextResponse.json({ logs, models });
+    return NextResponse.json({ logs, models });
+  } catch (err) {
+    console.error("[crm/team-activity] failed to load:", err);
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to load activity" }, { status: 500 });
+  }
 }
