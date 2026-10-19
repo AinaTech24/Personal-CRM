@@ -39,6 +39,15 @@ const APP_TIMEZONE = "Asia/Kolkata";
 
 const LANGUAGE_OPTIONS = [{ value: "en", label: "English" }];
 
+const ROLE_LABEL: Record<string, string> = {
+  SUPER_ADMIN: "Super Admin",
+  ADMIN: "Admin",
+  DEPARTMENT_USER: "Department User",
+};
+function roleLabel(role: string) {
+  return ROLE_LABEL[role] ?? role;
+}
+
 const DENSITY_OPTIONS = [
   { value: "comfortable", label: "Comfortable" },
   { value: "compact", label: "Compact" },
@@ -289,8 +298,12 @@ export function SettingsDialog({
   const [email, setEmail] = useState("");
   // "YYYY-MM-DD", or "" for none — same convention as DatePicker/the admin birthday editor.
   const [birthday, setBirthday] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [dateOfJoining, setDateOfJoining] = useState("");
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [role, setRole] = useState("");
+  const [departmentName, setDepartmentName] = useState<string | null>(null);
 
   // Preferences
   const [defaultLandingPage, setDefaultLandingPage] = useState("");
@@ -345,6 +358,10 @@ export function SettingsDialog({
           setMobile(u.mobile ?? "");
           setEmail(u.email ?? "");
           setBirthday(u.birthday ? String(u.birthday).slice(0, 10) : "");
+          setDesignation(u.designation ?? "");
+          setDateOfJoining(u.dateOfJoining ? String(u.dateOfJoining).slice(0, 10) : "");
+          setRole(u.role ?? "");
+          setDepartmentName(u.department?.name ?? null);
           setAvatarDataUrl(u.avatarDataUrl ?? null);
           setDefaultLandingPage(u.defaultLandingPage ?? "");
           setDensity(u.density === "compact" ? "compact" : "comfortable");
@@ -418,7 +435,15 @@ export function SettingsDialog({
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, surname: surname || null, mobile: mobile || null, avatarDataUrl, birthday: birthday || null }),
+        body: JSON.stringify({
+          name,
+          surname: surname || null,
+          mobile: mobile || null,
+          avatarDataUrl,
+          birthday: birthday || null,
+          ...(designation && { designation }),
+          ...(dateOfJoining && { dateOfJoining }),
+        }),
       });
       const data = await res.json();
       if (!res.ok) return toast.error("Couldn't save profile", data.error);
@@ -729,7 +754,66 @@ export function SettingsDialog({
                             />
                           )}
                         </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="set-designation">Designation</Label>
+                          {designation && !isAdmin ? (
+                            <>
+                              <Input id="set-designation" readOnly disabled className="opacity-70" value={designation} />
+                              <p className="text-xs text-muted-foreground">Set once — ask an admin to change it.</p>
+                            </>
+                          ) : (
+                            <Input
+                              id="set-designation"
+                              value={designation}
+                              onChange={(e) => setDesignation(e.target.value)}
+                              placeholder="e.g. Software Engineer"
+                            />
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="set-doj">Date of joining</Label>
+                          {dateOfJoining && !isAdmin ? (
+                            <>
+                              <Input
+                                id="set-doj"
+                                readOnly
+                                disabled
+                                className="opacity-70"
+                                value={new Date(`${dateOfJoining}T00:00:00`).toLocaleDateString(undefined, {
+                                  year: "numeric",
+                                  month: "long",
+                                  day: "numeric",
+                                })}
+                              />
+                              <p className="text-xs text-muted-foreground">Set once — ask an admin to change it.</p>
+                            </>
+                          ) : (
+                            <DatePicker
+                              id="set-doj"
+                              value={dateOfJoining}
+                              onChange={setDateOfJoining}
+                              placeholder="Add your date of joining"
+                              yearRange={{ from: new Date().getFullYear() - 15, to: new Date().getFullYear() }}
+                            />
+                          )}
+                        </div>
                       </div>
+
+                      <div className="grid grid-cols-1 gap-3 rounded-md border border-border p-3 sm:grid-cols-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Role</p>
+                          <p className="text-sm font-medium">{roleLabel(role)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Department</p>
+                          <p className="text-sm font-medium">{departmentName ?? "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Designation</p>
+                          <p className="text-sm font-medium">{designation || "—"}</p>
+                        </div>
+                      </div>
+
                       <Button type="button" onClick={saveProfile} disabled={savingProfile} className="self-start">
                         {savingProfile ? "Saving..." : "Save changes"}
                       </Button>

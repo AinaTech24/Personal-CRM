@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { MessageToaster } from "@/components/layout/message-toaster";
+import { OnboardingProfileGate } from "@/components/layout/onboarding-profile-gate";
 import type { ManagedModule } from "@/lib/module-permissions";
 import { cn } from "@/lib/utils";
 
@@ -82,6 +83,7 @@ export function DashboardShell({
       {/* Lives in the shell, not the chat view, so an incoming message still
           surfaces while you're somewhere else in the CRM. */}
       <MessageToaster meId={userId} />
+      <OnboardingProfileGate />
 
       <Sidebar
         isAdmin={isAdmin}

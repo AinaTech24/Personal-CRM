@@ -3,8 +3,6 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageUsers, isSuperAdmin } from "@/lib/permissions";
-import { getSocialMembership } from "@/lib/social-media";
-import { upsertTeamMemberBySlug, removeTeamMemberBySlug } from "@/lib/teams";
 import { emitToAdmins } from "@/lib/socket-emit";
 
 const patchSchema = z.object({
@@ -21,11 +19,15 @@ const patchSchema = z.object({
     })
     .nullable()
     .optional(),
-  /** Social Media team membership — not a real company Role, a separate
-   *  SocialMediaMember row. "NONE" removes membership entirely. */
-  socialMediaRole: z.enum(["NONE", "MEMBER", "ADMIN"]).optional(),
   /** Admin of their own department — see src/lib/permissions.ts. Admin-only to set; module grants themselves are edited separately, in the Permission Manager (/admin/permissions). */
   isDepartmentAdmin: z.boolean().optional(),
+  designation: z.string().trim().min(1).max(120).nullable().optional(),
+  /** "YYYY-MM-DD", or null to clear. */
+  dateOfJoining: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
 });
 
 /** Blocks the last remaining active Super Admin from being demoted, blocked, or deleted. */
@@ -77,6 +79,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.isActive !== undefined && { isActive: data.isActive }),
       ...(data.birthday !== undefined && { birthday: data.birthday ? new Date(`${data.birthday}T00:00:00.000Z`) : null }),
       ...(data.isDepartmentAdmin !== undefined && { isDepartmentAdmin: data.isDepartmentAdmin }),
+      ...(data.designation !== undefined && { designation: data.designation || null }),
+      ...(data.dateOfJoining !== undefined && {
+        dateOfJoining: data.dateOfJoining ? new Date(`${data.dateOfJoining}T00:00:00.000Z`) : null,
+      }),
     },
     include: {
       department: true,
@@ -84,19 +90,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     omit: { passwordHash: true, resetCode: true, resetCodeExpiresAt: true, pinHash: true, pinResetCode: true, pinResetCodeExpiresAt: true },
   });
 
-  if (data.socialMediaRole === "NONE") {
-    await removeTeamMemberBySlug("social-media", id);
-  } else if (data.socialMediaRole === "MEMBER" || data.socialMediaRole === "ADMIN") {
-    await upsertTeamMemberBySlug("social-media", id, data.socialMediaRole === "ADMIN");
-  }
-
-  // Always re-read the current membership (reading through the generic Team/
-  // TeamMember tables, not the `updated` object above) so the response is
-  // correct whether or not socialMediaRole was touched this request.
-  const withExtras = { ...updated, socialMediaMembership: await getSocialMembership(id) };
-
   emitToAdmins("user_updated", { id: updated.id });
-  return NextResponse.json({ user: withExtras });
+  return NextResponse.json({ user: updated });
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
