@@ -85,6 +85,17 @@ export function FormsListView() {
     }
   }
 
+  // Clones straight into the editor, same as creating fresh — the copy
+  // already has its own title, fields and link; nothing left to fill in
+  // before looking at it.
+  async function duplicateForm(row: FormRow) {
+    const res = await fetch(`/api/forms/${row.id}/duplicate`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error("Couldn't duplicate the form", data.error);
+    toast.success("Form duplicated", `${row.title} (Copy)`);
+    router.push(`/forms/${data.form.id}/edit`);
+  }
+
   async function confirmDelete() {
     if (!deleting) return;
     const res = await fetch(`/api/forms/${deleting.id}`, { method: "DELETE" });
@@ -172,6 +183,12 @@ export function FormsListView() {
                                   label: "Copy link",
                                   icon: <IconCopy className="h-4 w-4" />,
                                   onSelect: () => copyLink(r),
+                                },
+                                {
+                                  key: "duplicate",
+                                  label: "Duplicate",
+                                  icon: <IconCopy className="h-4 w-4" />,
+                                  onSelect: () => duplicateForm(r),
                                 },
                                 {
                                   key: "delete",
