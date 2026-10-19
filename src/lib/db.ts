@@ -8,6 +8,7 @@ import {
   humanModel,
   summariseChanges,
 } from "@/lib/audit";
+import { emitToAdmins } from "@/lib/socket-emit";
 
 /** Display names by user id, so attribution costs one query per person. */
 const actorNames = new Map<string, string>();
@@ -76,7 +77,7 @@ function createClient() {
               const noun = humanModel(model);
               const verb = action === "create" ? "created" : action === "delete" ? "deleted" : "updated";
 
-              await base.auditLog.create({
+              const entry = await base.auditLog.create({
                 data: {
                   model,
                   action,
@@ -92,6 +93,15 @@ function createClient() {
                   actorName: actorName ?? null,
                 },
               });
+
+              // Live-updates the admin-only View Logs page without a refresh —
+              // same "admins" room the rest of the app already broadcasts to,
+              // so this reuses the existing admin-only delivery guarantee
+              // rather than adding a new one. Deliberately not a persisted,
+              // per-admin Notification row: every write in the whole app would
+              // otherwise flood every admin's bell, which is exactly the kind
+              // of noise the notification system is meant to avoid.
+              emitToAdmins("audit_log_created", entry);
             } catch {
               // Deliberately silent: a failed log must not surface as a failed save.
             }

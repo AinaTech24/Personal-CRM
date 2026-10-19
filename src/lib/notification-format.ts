@@ -47,8 +47,8 @@ export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?:
   form_submitted: IconFileSpreadsheet,
   invoice_overdue: IconInvoices,
   password_rotation_due: IconKey,
-  password_shared: IconKey,
-  password_access_revoked: IconKey,
+  password_entry_shared: IconKey,
+  password_entry_revoked: IconKey,
   birthday_gift_due: IconCake,
   birthday_today: IconCake,
 };
@@ -76,8 +76,8 @@ export const NOTIFICATION_CATEGORY: Record<string, string> = {
   form_submitted: "forms",
   invoice_overdue: "billing",
   password_rotation_due: "passwords",
-  password_shared: "passwords",
-  password_access_revoked: "passwords",
+  password_entry_shared: "passwords",
+  password_entry_revoked: "passwords",
   birthday_gift_due: "birthdays",
   birthday_today: "birthdays",
 };
@@ -181,11 +181,11 @@ export function notificationMessage(n: NotificationLike): string {
       const label = typeof n.payload.label === "string" ? n.payload.label : "A password";
       return `"${label}" hasn't been rotated in a while`;
     }
-    case "password_shared": {
+    case "password_entry_shared": {
       const label = typeof n.payload.label === "string" ? n.payload.label : "a credential";
       return `${actor} shared the credential "${label}" with you`;
     }
-    case "password_access_revoked": {
+    case "password_entry_revoked": {
       const label = typeof n.payload.label === "string" ? n.payload.label : "a credential";
       return `${actor} revoked your access to "${label}"`;
     }
@@ -264,7 +264,7 @@ export function notificationHref(n: NotificationLike): string | null {
     return typeof n.payload.formId === "string" ? `/forms/${n.payload.formId}/submissions` : "/forms";
   }
   if (n.type === "invoice_overdue") return "/invoices";
-  if (n.type === "password_rotation_due" || n.type === "password_shared" || n.type === "password_access_revoked") {
+  if (n.type === "password_rotation_due" || n.type === "password_entry_shared" || n.type === "password_entry_revoked") {
     return "/passwords";
   }
   if (n.type === "birthday_gift_due" || n.type === "birthday_today") return "/birthdays";
