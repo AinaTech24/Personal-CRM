@@ -294,7 +294,7 @@ export default function ModulesManagementPage() {
       }
       return [...seen].sort();
     },
-    [rows, mod]
+    [rows, columns]
   );
 
   // Search matches the rendered text, so what you type matches what you can
@@ -309,7 +309,7 @@ export default function ModulesManagementPage() {
         return !col || col.get(row) === want;
       });
     });
-  }, [rows, query, filters, mod]);
+  }, [rows, query, filters, columns]);
 
   async function doDelete() {
     if (!pendingDelete) return;
