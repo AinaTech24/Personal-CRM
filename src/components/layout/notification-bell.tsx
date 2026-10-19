@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { IconBell, IconCheck, IconTrash } from "@/components/icons";
@@ -9,7 +10,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { Tooltip } from "@/components/ui/tooltip";
-import { NOTIFICATION_ICON, notificationMessage, notificationHref } from "@/lib/notification-format";
+import { notificationVisual, notificationMessage, notificationHref } from "@/lib/notification-format";
 import { cn } from "@/lib/utils";
 
 interface Notification {
@@ -154,17 +155,20 @@ export function NotificationBell() {
               <p className="px-2 py-6 text-center text-sm text-muted-foreground">No notifications yet</p>
             )}
             {notifications.map((n) => {
-              const Icon = NOTIFICATION_ICON[n.type] ?? IconBell;
+              const { Icon, badgeClassName, accentClassName } = notificationVisual(n);
               return (
                 <button
                   key={n.id}
                   onClick={() => onNotificationClick(n)}
                   className={cn(
                     "flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-primary/5",
-                    !n.readAt && "bg-accent/50"
+                    !n.readAt && "bg-accent/50",
+                    accentClassName
                   )}
                 >
-                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full", badgeClassName)}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
                   <div className="min-w-0 flex-1">
                     <p className="leading-snug">{notificationMessage(n)}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
@@ -175,6 +179,15 @@ export function NotificationBell() {
                 </button>
               );
             })}
+          </div>
+          <div className="mt-1 border-t border-border pt-1">
+            <Link
+              href="/notifications"
+              onClick={() => setOpen(false)}
+              className="block rounded-md px-2 py-1.5 text-center text-sm text-primary hover:bg-primary/5"
+            >
+              View all notifications
+            </Link>
           </div>
         </Popover.Content>
       </Popover.Portal>

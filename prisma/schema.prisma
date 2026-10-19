@@ -153,6 +153,7 @@ model User {
   clientTeamRoles    ClientTeamMember[] @relation("ClientTeamMemberUser")
   birthdayGifts      BirthdayGift[]     @relation("BirthdayGiftFor")
   birthdayGiftReminders BirthdayGiftReminder[]
+  birthdayWishesSent    BirthdayWishSent[]
   attendance         Attendance[]       @relation("AttendanceUser")
   attendanceApproved Attendance[]       @relation("AttendanceApprover")
   attendanceAudits   AttendanceAudit[]  @relation("AttendanceAuditActor")
@@ -1874,6 +1875,20 @@ model BirthdayGift {
 /// more than once per year. Rows aren't cleaned up — same as BirthdayGift,
 /// they're cheap and harmless to keep around.
 model BirthdayGiftReminder {
+  id     String   @id @default(cuid())
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  year   Int
+  sentAt DateTime @default(now())
+
+  @@unique([userId, year])
+}
+
+/// Tracks that the "Happy Birthday" broadcast already went out to the whole
+/// company for this person's birthday this year, so the daily sweep (which
+/// checks every day) only ever sends it once per year even though it keeps
+/// checking daily up to and past the date.
+model BirthdayWishSent {
   id     String   @id @default(cuid())
   userId String
   user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)

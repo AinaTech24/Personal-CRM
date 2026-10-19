@@ -1,4 +1,18 @@
-import { IconLeads, IconTasks, IconProjects, IconQuotations, IconCalendar, IconClock, IconMegaphone } from "@/components/icons";
+import {
+  IconBell,
+  IconLeads,
+  IconTasks,
+  IconProjects,
+  IconQuotations,
+  IconInvoices,
+  IconCalendar,
+  IconClock,
+  IconMegaphone,
+  IconPhone,
+  IconFileSpreadsheet,
+  IconKey,
+  IconCake,
+} from "@/components/icons";
 
 export interface NotificationLike {
   type: string;
@@ -7,13 +21,16 @@ export interface NotificationLike {
 
 /**
  * Message, link and icon for a notification — shared between the bell (which
- * lists them) and the toast that fires the moment one arrives, so the two
- * never drift into describing the same event differently.
+ * lists them), the toast that fires the moment one arrives, and the full
+ * notifications page, so none of the three ever drift into describing the
+ * same event differently.
  */
 export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   lead_assigned: IconLeads,
+  lead_reminder: IconLeads,
   task_assigned: IconTasks,
   task_comment: IconTasks,
+  task_reminder: IconTasks,
   project_assigned: IconProjects,
   project_member_added: IconProjects,
   project_supporter_added: IconProjects,
@@ -21,12 +38,64 @@ export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?:
   quotation_decided: IconQuotations,
   meeting_invited: IconCalendar,
   meeting_reminder: IconCalendar,
-  task_reminder: IconTasks,
   check_in_reminder: IconClock,
   check_out_reminder: IconClock,
   social_client_assigned: IconMegaphone,
+  call_assigned: IconPhone,
   leave_requested: IconCalendar,
   leave_decided: IconCalendar,
+  form_submitted: IconFileSpreadsheet,
+  invoice_overdue: IconInvoices,
+  password_rotation_due: IconKey,
+  password_shared: IconKey,
+  password_access_revoked: IconKey,
+  birthday_gift_due: IconCake,
+  birthday_today: IconCake,
+};
+
+/** The Settings > Notifications category each type is toggled under — mirrors src/lib/notify.ts's TYPE_TO_CATEGORY, duplicated here because that file imports db.ts and can't be used client-side. Used for the full notifications page's category filter. */
+export const NOTIFICATION_CATEGORY: Record<string, string> = {
+  lead_assigned: "leads",
+  lead_reminder: "leads",
+  task_assigned: "tasks",
+  task_comment: "tasks",
+  task_reminder: "tasks",
+  project_assigned: "projects",
+  project_member_added: "projects",
+  project_supporter_added: "projects",
+  project_task_assigned: "projects",
+  quotation_decided: "quotations",
+  meeting_invited: "meetings",
+  meeting_reminder: "meetings",
+  check_in_reminder: "attendance",
+  check_out_reminder: "attendance",
+  social_client_assigned: "social",
+  call_assigned: "calls",
+  leave_requested: "attendance",
+  leave_decided: "attendance",
+  form_submitted: "forms",
+  invoice_overdue: "billing",
+  password_rotation_due: "passwords",
+  password_shared: "passwords",
+  password_access_revoked: "passwords",
+  birthday_gift_due: "birthdays",
+  birthday_today: "birthdays",
+};
+
+/** Mirrors notify.ts's NOTIFICATION_CATEGORIES labels — duplicated for the same client-safety reason as NOTIFICATION_CATEGORY above. */
+export const NOTIFICATION_CATEGORY_LABEL: Record<string, string> = {
+  leads: "Leads",
+  tasks: "Tasks",
+  projects: "Projects",
+  meetings: "Meetings",
+  quotations: "Quotations",
+  attendance: "Attendance",
+  social: "Social Media",
+  calls: "Calls",
+  forms: "Forms",
+  billing: "Billing",
+  passwords: "Passwords",
+  birthdays: "Birthdays",
 };
 
 export function notificationMessage(n: NotificationLike): string {
@@ -35,6 +104,10 @@ export function notificationMessage(n: NotificationLike): string {
     case "lead_assigned": {
       const leadName = typeof n.payload.leadName === "string" ? n.payload.leadName : "a lead";
       return `${actor} assigned you to the lead "${leadName}"`;
+    }
+    case "lead_reminder": {
+      const leadName = typeof n.payload.leadName === "string" ? n.payload.leadName : "a lead";
+      return `Reminder: follow up on the lead "${leadName}"`;
     }
     case "task_assigned": {
       const taskTitle = typeof n.payload.taskTitle === "string" ? n.payload.taskTitle : "a task";
@@ -89,18 +162,87 @@ export function notificationMessage(n: NotificationLike): string {
       const clientName = typeof n.payload.clientName === "string" ? n.payload.clientName : "a client";
       return `${actor} assigned you the social media client "${clientName}"`;
     }
+    case "call_assigned": {
+      const subject = typeof n.payload.callSubject === "string" && n.payload.callSubject ? ` ("${n.payload.callSubject}")` : "";
+      return `${actor} logged a call with you as the owner${subject}`;
+    }
     case "leave_requested":
       return `${actor} applied for leave`;
     case "leave_decided":
       return `${actor} ${n.payload.decision === "APPROVED" ? "approved" : "rejected"} your leave request`;
+    case "form_submitted": {
+      return "A form you manage just received a new response";
+    }
+    case "invoice_overdue": {
+      const number = typeof n.payload.invoiceNumber === "string" ? n.payload.invoiceNumber : "An invoice";
+      return `${number} is now overdue`;
+    }
+    case "password_rotation_due": {
+      const label = typeof n.payload.label === "string" ? n.payload.label : "A password";
+      return `"${label}" hasn't been rotated in a while`;
+    }
+    case "password_shared": {
+      const label = typeof n.payload.label === "string" ? n.payload.label : "a credential";
+      return `${actor} shared the credential "${label}" with you`;
+    }
+    case "password_access_revoked": {
+      const label = typeof n.payload.label === "string" ? n.payload.label : "a credential";
+      return `${actor} revoked your access to "${label}"`;
+    }
+    case "birthday_gift_due": {
+      const name = typeof n.payload.name === "string" ? n.payload.name : "Someone's";
+      return `${name}'s birthday is coming up — no gift picked yet`;
+    }
+    case "birthday_today": {
+      const name = typeof n.payload.name === "string" ? n.payload.name : "Someone";
+      return `🎂 It's ${name}'s birthday today!`;
+    }
     default:
       return "You have a new update";
   }
 }
 
+export interface NotificationVisual {
+  Icon: React.ComponentType<{ className?: string }>;
+  /** Background + icon color for the leading icon circle. */
+  badgeClassName: string;
+  /** Optional left-edge accent on the row/card itself, for the few types that get special treatment. */
+  accentClassName?: string;
+}
+
+/**
+ * Leave and birthday notifications get distinct, meaningful color — blue for
+ * a pending leave request, green for approved, red for rejected (matching
+ * the status at a glance, not just the type), and a celebratory treatment
+ * for a birthday happening today. Everything else keeps the bell's existing
+ * neutral icon-only look.
+ */
+export function notificationVisual(n: NotificationLike): NotificationVisual {
+  if (n.type === "birthday_today") {
+    return {
+      Icon: IconCake,
+      badgeClassName: "bg-gradient-to-br from-pink-500/20 to-amber-400/20 text-pink-500 dark:text-pink-400",
+      accentClassName: "border-l-2 border-pink-400/70",
+    };
+  }
+  if (n.type === "birthday_gift_due") {
+    return { Icon: IconCake, badgeClassName: "bg-pink-500/15 text-pink-500 dark:text-pink-400" };
+  }
+  if (n.type === "leave_requested") {
+    return { Icon: IconCalendar, badgeClassName: "bg-blue-500/15 text-blue-500 dark:text-blue-400", accentClassName: "border-l-2 border-blue-400/70" };
+  }
+  if (n.type === "leave_decided") {
+    const approved = n.payload.decision === "APPROVED";
+    return approved
+      ? { Icon: IconCalendar, badgeClassName: "bg-emerald-500/15 text-emerald-500 dark:text-emerald-400", accentClassName: "border-l-2 border-emerald-400/70" }
+      : { Icon: IconCalendar, badgeClassName: "bg-red-500/15 text-red-500 dark:text-red-400", accentClassName: "border-l-2 border-red-400/70" };
+  }
+  return { Icon: NOTIFICATION_ICON[n.type] ?? IconBell, badgeClassName: "text-muted-foreground" };
+}
+
 export function notificationHref(n: NotificationLike): string | null {
-  if (n.type === "lead_assigned") return "/leads";
-  if (n.type === "task_assigned" || n.type === "task_comment") return "/tasks";
+  if (n.type === "lead_assigned" || n.type === "lead_reminder") return "/leads";
+  if (n.type === "task_assigned" || n.type === "task_comment" || n.type === "task_reminder") return "/tasks";
   if (
     n.type === "project_assigned" ||
     n.type === "project_member_added" ||
@@ -111,12 +253,20 @@ export function notificationHref(n: NotificationLike): string | null {
   }
   if (n.type === "quotation_decided") return "/quotations";
   if (n.type === "meeting_invited" || n.type === "meeting_reminder") return "/meetings";
-  if (n.type === "task_reminder") return "/tasks";
   if (n.type === "check_in_reminder" || n.type === "check_out_reminder") return "/attendance";
-  if (n.type === "leave_requested") return "/admin/leave";
-  if (n.type === "leave_decided") return "/leave";
   if (n.type === "social_client_assigned") {
     return typeof n.payload.clientId === "string" ? `/social-media/${n.payload.clientId}` : "/social-media";
   }
+  if (n.type === "call_assigned") return "/calls";
+  if (n.type === "leave_requested") return "/admin/leave";
+  if (n.type === "leave_decided") return "/leave";
+  if (n.type === "form_submitted") {
+    return typeof n.payload.formId === "string" ? `/forms/${n.payload.formId}/submissions` : "/forms";
+  }
+  if (n.type === "invoice_overdue") return "/invoices";
+  if (n.type === "password_rotation_due" || n.type === "password_shared" || n.type === "password_access_revoked") {
+    return "/passwords";
+  }
+  if (n.type === "birthday_gift_due" || n.type === "birthday_today") return "/birthdays";
   return null;
 }
