@@ -78,8 +78,10 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
 
   const loadTasks = useCallback(async () => {
     const res = await fetch(tasksUrl);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (res.ok) setTasks(data.tasks);
+    else toast.error("Couldn't load tasks", data.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasksUrl]);
 
   const loadAll = useCallback(async () => {
@@ -91,11 +93,12 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
         fetch("/api/auth/me"),
       ]);
       const [tasksData, usersData, meData] = await Promise.all([
-        tasksRes.json(),
-        usersRes.json(),
-        meRes.json(),
+        tasksRes.json().catch(() => ({})),
+        usersRes.json().catch(() => ({})),
+        meRes.json().catch(() => ({})),
       ]);
       if (tasksRes.ok) setTasks(tasksData.tasks);
+      else toast.error("Couldn't load tasks", tasksData.error);
       if (usersRes.ok) setAssignableUsers(usersData.users);
       if (meRes.ok) {
         setCurrentUserName(meData.user?.name);
@@ -104,9 +107,12 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
         setCurrentUserRole(meData.user?.role);
         setHasTasksGrant(!!meData.user?.modulePermissions?.includes("TASKS"));
       }
+    } catch {
+      toast.error("Couldn't load tasks", "Check your connection and try again.");
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasksUrl]);
 
   useEffect(() => {

@@ -3,6 +3,23 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getTaskForUser } from "@/lib/tasks";
 import { saveTaskAttachment, UploadValidationError } from "@/lib/uploads";
+import { notifyAndPush } from "@/lib/notify";
+
+/** The people actually responsible for the task — creator and assignee — hear about a new attachment, not a crowd. */
+async function notifyTaskAttachment(actorId: string, actorName: string, taskId: string, taskTitle: string, fileName: string, createdById: string, assignedToId: string | null) {
+  const recipientIds = new Set([createdById, ...(assignedToId ? [assignedToId] : [])]);
+  recipientIds.delete(actorId);
+  await Promise.all(
+    Array.from(recipientIds).map((recipientId) =>
+      notifyAndPush(
+        recipientId,
+        "task_attachment_added",
+        { taskId, taskTitle, fileName, actorName },
+        { title: "New task attachment", body: `${actorName} added "${fileName}" to "${taskTitle}"`, url: "/tasks", tag: "task-attachment-added" }
+      )
+    )
+  );
+}
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -46,6 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       include: { uploadedBy: { select: { id: true, name: true } } },
       omit: { data: true },
     });
+    await notifyTaskAttachment(user.id, user.name, id, access.title, linkAttachment.fileName, access.createdById, access.assignedToId);
     return NextResponse.json({ attachment: linkAttachment }, { status: 201 });
   }
 
@@ -73,6 +91,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     include: { uploadedBy: { select: { id: true, name: true } } },
     omit: { data: true },
   });
+
+  await notifyTaskAttachment(user.id, user.name, id, access.title, fileName, access.createdById, access.assignedToId);
 
   return NextResponse.json({ attachment }, { status: 201 });
 }

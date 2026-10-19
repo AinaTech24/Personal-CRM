@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isRestrictedFromModule } from "@/lib/social-media";
 import { asJson, canAccessBillingRecord, canDeleteBillingRecord, computeTotals, pickSellerData, sellerSchemaFields, toNumber } from "@/lib/billing";
 import { broadcastQuotationChange } from "@/lib/quotations";
+import { notifyAndPush } from "@/lib/notify";
 
 async function loadQuotation(id: string) {
   return db.quotation.findUnique({
@@ -163,6 +164,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     });
   });
+
+  // Moving a quotation to "Sent" is what actually puts it in front of an
+  // approver — nobody was ever told a quotation existed before this (only
+  // the creator hears about the eventual approve/reject, via
+  // quotation_decided in .../approve/route.ts). Only fires on the genuine
+  // transition, not a re-save of an already-sent quotation.
+  if (data.status === "SENT" && existing.status !== "SENT") {
+    const admins = await db.user.findMany({
+      where: { isActive: true, role: { in: ["ADMIN", "SUPER_ADMIN"] }, NOT: { id: user.id } },
+      select: { id: true },
+    });
+    await Promise.all(
+      admins.map((a) =>
+        notifyAndPush(
+          a.id,
+          "quotation_submitted",
+          { quotationId: id, quotationNumber: quotation.quotationNumber, actorName: user.name },
+          {
+            title: "Quotation awaiting approval",
+            body: `${user.name} sent quotation ${quotation.quotationNumber} for approval`,
+            url: "/quotations",
+            tag: "quotation-submitted",
+          }
+        )
+      )
+    );
+  }
 
   broadcastQuotationChange("quotation_updated", quotation);
   return NextResponse.json({ quotation });

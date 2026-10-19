@@ -43,6 +43,8 @@ interface CurrentUser {
   name: string;
   role: "SUPER_ADMIN" | "ADMIN" | "DEPARTMENT_USER";
   avatarDataUrl?: string | null;
+  departmentId?: string | null;
+  modulePermissions?: string[];
 }
 
 function statusLabel(status: string) {
@@ -76,8 +78,10 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" } = {})
 
   const loadProjects = useCallback(async () => {
     const res = await fetch(projectsUrl);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (res.ok) setProjects(data.projects);
+    else toast.error("Couldn't load projects", data.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectsUrl]);
 
   const loadAll = useCallback(async () => {
@@ -89,23 +93,27 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" } = {})
         fetch("/api/auth/me"),
       ]);
       const [projectsData, usersData, meData] = await Promise.all([
-        projectsRes.json(),
-        usersRes.json(),
-        meRes.json(),
+        projectsRes.json().catch(() => ({})),
+        usersRes.json().catch(() => ({})),
+        meRes.json().catch(() => ({})),
       ]);
       if (projectsRes.ok) setProjects(projectsData.projects);
+      else toast.error("Couldn't load projects", projectsData.error);
       if (usersRes.ok) setAssignableUsers(usersData.users);
       if (meRes.ok) setCurrentUser(meData.user);
 
       const isAdmin = meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN";
       if (isAdmin) {
         const deptRes = await fetch("/api/departments");
-        const deptData = await deptRes.json();
+        const deptData = await deptRes.json().catch(() => ({}));
         if (deptRes.ok) setDepartments(deptData.departments);
       }
+    } catch {
+      toast.error("Couldn't load projects", "Check your connection and try again.");
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectsUrl]);
 
   useEffect(() => {
@@ -126,11 +134,20 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" } = {})
   }, [socket, loadProjects]);
 
   const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
+  // A Projects module grant is scoped to the holder's own department (see
+  // moduleAccessScope in src/lib/module-permissions-store.ts) — mirrors that
+  // scoping here so the Edit/Delete buttons actually show up for the
+  // projects the backend already lets them manage, not just ones they
+  // created themselves.
+  const hasProjectsGrant = !!currentUser?.modulePermissions?.includes("PROJECTS");
 
   // Admins manage any project; everyone else manages the ones they created.
   // Edit, enable/disable and delete are all allowed for a project's creator —
   // the API already enforces the same rule, so this only decides what to show.
-  const canManageProject = (p: ProjectSummary) => isAdmin || p.createdBy.id === currentUser?.id;
+  const canManageProject = (p: ProjectSummary) =>
+    isAdmin ||
+    p.createdBy.id === currentUser?.id ||
+    (hasProjectsGrant && !!currentUser?.departmentId && p.department.id === currentUser.departmentId);
 
   const filteredProjects = useMemo(() => {
     const q = query.trim().toLowerCase();
