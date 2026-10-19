@@ -46,9 +46,9 @@ enum ManagedModule {
   PROJECTS
 }
 
-/// One row per (user, module), company-wide — the same shape as
-/// SocialMediaMember/CrmMember (one row per grant) but generic across every
-/// module rather than tied to one team. The four booleans are independent:
+/// One row per (user, module), company-wide — the same shape as CrmMember
+/// (one row per grant) but generic across every module rather than tied to
+/// one team. The four booleans are independent:
 /// a user can be granted, say, read+update on Tasks without create or
 /// delete. A row with every flag false is equivalent to no row at all —
 /// see hasAnyModulePermission in module-permissions-store.ts. An
@@ -181,7 +181,6 @@ model User {
   crmMembership                    CrmMember?
   callsOwned                       Call[]                      @relation("CallOwner")
   callsCreated                     Call[]                      @relation("CallCreatedBy")
-  socialMediaMembership            SocialMediaMember?
   socialClientsCreated             SocialClient[]              @relation("SocialClientCreatedBy")
   socialClientsAssigned            SocialClient[]              @relation("SocialClientAssignedTo")
   socialContentCreated             SocialContentItem[]         @relation("SocialContentCreatedBy")
@@ -239,16 +238,16 @@ model Invite {
   department        Department? @relation(fields: [departmentId], references: [id])
   /// "Social Media (Admin)" in the invite Role picker isn't a real company
   /// Role — the account is still created as DEPARTMENT_USER, this just tells
-  /// acceptance to also provision a SocialMediaMember(isLead: true) row, so
-  /// full social-media access is granted the moment they accept rather than
-  /// needing a separate admin step afterward.
+  /// acceptance to also provision a Social Media TeamMember(isLead: true) row,
+  /// so full social-media access is granted the moment they accept rather
+  /// than needing a separate admin step afterward.
   socialMediaAdmin  Boolean     @default(false)
   /// Same idea as socialMediaAdmin, but for a regular (non-lead) team member —
-  /// provisions SocialMediaMember(isLead: false) on acceptance instead.
+  /// provisions a Social Media TeamMember(isLead: false) on acceptance instead.
   /// Mutually exclusive with socialMediaAdmin in practice, not enforced here.
   socialMediaMember Boolean     @default(false)
-  /// Same idea as socialMediaAdmin/socialMediaMember, but provisions a
-  /// CrmMember row on acceptance instead — the CRM Team's equivalent.
+  /// Same idea as socialMediaAdmin/socialMediaMember, but provisions a CRM
+  /// TeamMember row on acceptance instead — the CRM Team's equivalent.
   crmAdmin          Boolean     @default(false)
   crmMember         Boolean     @default(false)
   /// Grants Department Admin (see User.isDepartmentAdmin) for `departmentId`
@@ -1234,10 +1233,10 @@ model AuditLog {
 
 // ---------- Social Media Management ----------
 //
-// Restricted to a specific team, not every department user — see
-// SocialMediaMember and src/lib/social-media.ts. Company Admin/Super Admin
-// always have full access without needing a membership row, same as every
-// other module's isAdmin() override.
+// Restricted to a specific team, not every department user — see the
+// "social-media" Team/TeamMember rows and src/lib/social-media.ts. Company
+// Admin/Super Admin always have full access without needing a membership
+// row, same as every other module's isAdmin() override.
 
 enum SocialClientStage {
   ENQUIRY
@@ -1324,24 +1323,12 @@ enum SocialAdStage {
   CANCELLED
 }
 
-/// Grants access to the Social Media module — presence of a row is the
-/// access check itself (src/lib/social-media.ts). `isLead` sees and manages
-/// every client instead of just their own.
-model SocialMediaMember {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  isLead    Boolean  @default(false)
-  createdAt DateTime @default(now())
-}
-
 // ---------- CRM Team ----------
 
-/// The CRM Team's own membership roster — same shape as SocialMediaMember,
-/// kept as a separate model rather than a shared "TeamMember" so each
-/// module's scoping/permission logic stays independently simple, matching
-/// how the rest of this schema already keeps Social Media's own models apart
-/// from everyone else's.
+/// The CRM Team's own membership roster — kept as a separate model rather
+/// than a shared "TeamMember" so this module's scoping/permission logic
+/// stays independently simple, matching how the rest of this schema already
+/// keeps Social Media's own models apart from everyone else's.
 model CrmMember {
   id        String   @id @default(cuid())
   userId    String   @unique
