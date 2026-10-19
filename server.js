@@ -110,7 +110,12 @@ app.prepare().then(() => {
   // own persisted "already sent" state, so firing again after a redeploy
   // restarts this timer is harmless.
   const DAILY_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
-  const DAILY_SWEEP_ROUTES = ["/api/invoices/send-reminders", "/api/passwords/send-reminders", "/api/birthdays/send-reminders"];
+  const DAILY_SWEEP_ROUTES = [
+    "/api/invoices/send-reminders",
+    "/api/passwords/send-reminders",
+    "/api/birthdays/send-reminders",
+    "/api/birthdays/send-wishes",
+  ];
   setInterval(() => {
     for (const route of DAILY_SWEEP_ROUTES) {
       fetch(`http://127.0.0.1:${port}${route}`, {
