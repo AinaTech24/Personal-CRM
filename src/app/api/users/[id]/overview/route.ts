@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { canManageUsers } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { summarize, istDateKey, dateFromKey, keyFromDate } from "@/lib/attendance";
 
-/** Admin: one user's records across every module, for the user detail page. */
+/** Admin: one user's records across every module, for the user detail page. Department Admin: same, but only for someone in their own department. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const me = await getCurrentUser();
-  if (!me || !canManageUsers(me)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!me) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const { id } = await params;
 
   const user = await db.user.findUnique({
@@ -23,6 +23,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
   if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const canView =
+    isAdmin(me) || (isDepartmentAdmin(me) && user.departmentId === me.departmentId && user.role === "DEPARTMENT_USER");
+  if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const year = Number(istDateKey().slice(0, 4));
   const yearStart = dateFromKey(`${year}-01-01`);

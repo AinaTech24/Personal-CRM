@@ -253,18 +253,28 @@ export function Sidebar({
   useEffect(() => {
     if (isAdmin) return;
     let active = true;
-    fetch("/api/module-visibility")
+    // A slow (not failed) response left the nav stuck in skeleton
+    // indefinitely — fetch() only rejects on an actual network error, never
+    // on taking a while, so a sluggish backend (e.g. right after a deploy
+    // restart) had nothing to time it out. Bounding it means the nav always
+    // resolves one way or the other within a few seconds.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    fetch("/api/module-visibility", { signal: controller.signal })
       .then((r) => r.json())
       .then((d) => {
         if (active) setHiddenModules(Array.isArray(d.hiddenModules) ? d.hiddenModules : []);
       })
       .catch(() => {})
       .finally(() => {
-        // Ready either way: a failed fetch shows the full nav rather than none.
+        // Ready either way: a failed or timed-out fetch shows the full nav rather than none.
+        clearTimeout(timeout);
         if (active) setNavReady(true);
       });
     return () => {
       active = false;
+      clearTimeout(timeout);
+      controller.abort();
     };
   }, [isAdmin]);
 

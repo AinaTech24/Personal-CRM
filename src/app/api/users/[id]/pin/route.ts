@@ -3,7 +3,7 @@ import { randomInt } from "crypto";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
-import { canManageUsers } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { isValidPin } from "@/lib/credentials";
 import { sendMail, pinResetByAdminEmailHtml } from "@/lib/mailer";
 
@@ -23,11 +23,16 @@ const patchSchema = z.object({
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getCurrentUser();
-  if (!admin || !canManageUsers(admin)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const target = await db.user.findUnique({ where: { id } });
   if (!target) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const canManage =
+    isAdmin(admin) ||
+    (isDepartmentAdmin(admin) && target.departmentId === admin.departmentId && target.role === "DEPARTMENT_USER");
+  if (!canManage) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

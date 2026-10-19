@@ -85,6 +85,11 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [filter, setFilter] = useState("ALL");
+  // A company Admin manages everyone; a Department Admin reaching this page
+  // (see admin/users/layout.tsx) only sees their own department and can't
+  // invite, change role/department/Department-Admin-status, or delete — the
+  // list itself already comes back pre-scoped from the API either way.
+  const [viewerIsAdmin, setViewerIsAdmin] = useState(true);
 
   // Invite dialog state
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -117,14 +122,20 @@ export default function UsersPage() {
 
   async function load() {
     const [usersRes, deptRes] = await Promise.all([fetch("/api/users"), fetch("/api/departments")]);
-    const usersData = await usersRes.json();
-    const deptData = await deptRes.json();
-    if (usersRes.ok) setUsers(usersData.users);
+    const usersData = await usersRes.json().catch(() => ({}));
+    const deptData = await deptRes.json().catch(() => ({}));
+    if (usersRes.ok) {
+      setUsers(usersData.users);
+      setViewerIsAdmin(!!usersData.viewerIsAdmin);
+    } else {
+      toast.error("Couldn't load users", usersData.error);
+    }
     if (deptRes.ok) setDepartments(deptData.departments);
   }
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Live refresh when users are invited, edited, blocked, or removed anywhere.
@@ -134,6 +145,7 @@ export default function UsersPage() {
     const handler = () => load();
     events.forEach((e) => socket.on(e, handler));
     return () => events.forEach((e) => socket.off(e, handler));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   const filteredUsers = useMemo(() => {
@@ -250,9 +262,11 @@ export default function UsersPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          role: editRole,
-          departmentId: editDept || null,
-          isDepartmentAdmin: editIsDepartmentAdmin,
+          ...(viewerIsAdmin && {
+            role: editRole,
+            departmentId: editDept || null,
+            isDepartmentAdmin: editIsDepartmentAdmin,
+          }),
           designation: editDesignation.trim() || null,
           dateOfJoining: editDateOfJoining || null,
         }),
@@ -353,9 +367,11 @@ export default function UsersPage() {
               </Button>
             </a>
           </Tooltip>
-          <Button size="sm" className="gap-1.5" onClick={openInvite}>
-            <IconSend className="h-4 w-4" />
-          </Button>
+          {viewerIsAdmin && (
+            <Button size="sm" className="gap-1.5" onClick={openInvite}>
+              <IconSend className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -454,16 +470,18 @@ export default function UsersPage() {
                               <IconKey className="h-4 w-4" />
                             </button>
                           </Tooltip>
-                          <Tooltip label="Delete">
-                            <button
-                              type="button"
-                              aria-label="Delete user"
-                              onClick={() => setDeleteUser(u)}
-                              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive"
-                            >
-                              <IconTrash className="h-4 w-4" />
-                            </button>
-                          </Tooltip>
+                          {viewerIsAdmin && (
+                            <Tooltip label="Delete">
+                              <button
+                                type="button"
+                                aria-label="Delete user"
+                                onClick={() => setDeleteUser(u)}
+                                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive"
+                              >
+                                <IconTrash className="h-4 w-4" />
+                              </button>
+                            </Tooltip>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -573,7 +591,8 @@ export default function UsersPage() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="edit-role">Role</Label>
-                <Dropdown id="edit-role" value={editRole} onChange={setEditRole} options={ROLE_OPTIONS} />
+                <Dropdown id="edit-role" value={editRole} onChange={setEditRole} options={ROLE_OPTIONS} disabled={!viewerIsAdmin} />
+                {!viewerIsAdmin && <p className="text-xs text-muted-foreground">Only a company Admin can change this.</p>}
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="edit-dept">Department</Label>
@@ -589,7 +608,9 @@ export default function UsersPage() {
                   }}
                   placeholder="None"
                   options={deptOptions}
+                  disabled={!viewerIsAdmin}
                 />
+                {!viewerIsAdmin && <p className="text-xs text-muted-foreground">Only a company Admin can change this.</p>}
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="edit-designation">Designation</Label>
@@ -614,15 +635,17 @@ export default function UsersPage() {
                 <span className="flex flex-col gap-0.5">
                   <span className="text-sm font-medium">Department Admin</span>
                   <span className="text-xs text-muted-foreground">
-                    {editDept
-                      ? `Can open the Permission Manager for anyone else in ${departments.find((d) => d.id === editDept)?.name ?? "this department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.`
-                      : "Pick a department above first — this has nothing to administer without one."}
+                    {!viewerIsAdmin
+                      ? "Only a company Admin can change this."
+                      : editDept
+                        ? `Can open the Permission Manager for anyone else in ${departments.find((d) => d.id === editDept)?.name ?? "this department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.`
+                        : "Pick a department above first — this has nothing to administer without one."}
                   </span>
                 </span>
                 <ToggleSwitch
                   checked={editIsDepartmentAdmin}
                   onChange={setEditIsDepartmentAdmin}
-                  disabled={!editDept}
+                  disabled={!editDept || !viewerIsAdmin}
                   label="Department Admin"
                 />
               </div>

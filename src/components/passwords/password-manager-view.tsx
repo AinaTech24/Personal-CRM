@@ -113,16 +113,26 @@ export function PasswordManagerView() {
   const [deleteTarget, setDeleteTarget] = useState<EntrySummary | null>(null);
 
   const load = useCallback(async () => {
-    const [entriesRes, meRes] = await Promise.all([fetch("/api/passwords"), fetch("/api/auth/me")]);
-    const [entriesData, meData] = await Promise.all([entriesRes.json().catch(() => ({})), meRes.json().catch(() => ({}))]);
-    setEntries(entriesData.entries ?? []);
-    if (meRes.ok && meData.user) {
-      setMe({
-        id: meData.user.id,
-        isAdmin: meData.user.role === "SUPER_ADMIN" || meData.user.role === "ADMIN",
-        departmentId: meData.user.departmentId ?? null,
-      });
+    try {
+      const [entriesRes, meRes] = await Promise.all([fetch("/api/passwords"), fetch("/api/auth/me")]);
+      const [entriesData, meData] = await Promise.all([entriesRes.json().catch(() => ({})), meRes.json().catch(() => ({}))]);
+      if (entriesRes.ok) setEntries(entriesData.entries ?? []);
+      else {
+        toast.error("Couldn't load passwords", entriesData.error);
+        setEntries([]);
+      }
+      if (meRes.ok && meData.user) {
+        setMe({
+          id: meData.user.id,
+          isAdmin: meData.user.role === "SUPER_ADMIN" || meData.user.role === "ADMIN",
+          departmentId: meData.user.departmentId ?? null,
+        });
+      }
+    } catch {
+      toast.error("Couldn't load passwords", "Check your connection and try again.");
+      setEntries([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

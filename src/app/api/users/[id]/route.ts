@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { canManageUsers, isSuperAdmin } from "@/lib/permissions";
+import { canManageUsers, isAdmin, isDepartmentAdmin, isSuperAdmin } from "@/lib/permissions";
 import { emitToAdmins } from "@/lib/socket-emit";
 
 const patchSchema = z.object({
@@ -50,11 +50,31 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const data = parsed.data;
 
-  // Editing anyone's birthday — including a Birthdays-module grant holder's —
-  // is admin-only. A grant still lets a non-admin manage gifts and view the
-  // roster; it no longer lets them overwrite a birth date (see
-  // src/app/api/profile/route.ts for the matching self-service rule).
-  if (!canManageUsers(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // A company Admin can edit anyone; a Department Admin can edit people in
+  // their own department only, and only a restricted field set (see below)
+  // — never role, department, Department Admin status, or birthday. Editing
+  // anyone's birthday specifically is admin-only even for those fields a
+  // Department Admin otherwise can touch (a grant still lets a non-admin
+  // manage gifts and view the roster; it never lets them overwrite a birth
+  // date — see src/app/api/profile/route.ts for the matching self-service
+  // rule).
+  const admin = isAdmin(user);
+  // Never another Admin/Super Admin, even one who happens to share the
+  // department field — a Department Admin's reach stops at ordinary
+  // department users.
+  const deptAdmin =
+    !admin && isDepartmentAdmin(user) && target.departmentId === user.departmentId && target.role === "DEPARTMENT_USER";
+  if (!admin && !deptAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  if (
+    !admin &&
+    (data.role !== undefined ||
+      data.departmentId !== undefined ||
+      data.isDepartmentAdmin !== undefined ||
+      data.birthday !== undefined)
+  ) {
+    return NextResponse.json({ error: "Only a company Admin can change role, department, Department Admin status, or birthday" }, { status: 403 });
+  }
 
   // Only Super Admins may create/modify Super Admin or Admin roles.
   if (data.role !== undefined && !isSuperAdmin(user) && (data.role === "SUPER_ADMIN" || target.role === "SUPER_ADMIN")) {

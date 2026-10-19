@@ -104,17 +104,25 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" } = {})
         fetch("/api/users/assignable?scope=all"),
         fetch("/api/auth/me"),
       ]);
-      const [mData, uData, meData] = await Promise.all([mRes.json(), uRes.json(), meRes.json()]);
-      setMeetings(mData.meetings ?? []);
-      setUsers(uData.users ?? []);
+      const [mData, uData, meData] = await Promise.all([
+        mRes.json().catch(() => ({})),
+        uRes.json().catch(() => ({})),
+        meRes.json().catch(() => ({})),
+      ]);
+      if (mRes.ok) setMeetings(mData.meetings ?? []);
+      else toast.error("Couldn't load meetings", mData.error);
+      if (uRes.ok) setUsers(uData.users ?? []);
       if (meRes.ok) {
         setMeId(meData.user?.id ?? "");
         setIsAdmin(meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN");
         setHasMeetingsGrant(!!meData.user?.modulePermissions?.includes("MEETINGS"));
       }
+    } catch {
+      toast.error("Couldn't load meetings", "Check your connection and try again.");
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingsUrl]);
 
   useEffect(() => {
