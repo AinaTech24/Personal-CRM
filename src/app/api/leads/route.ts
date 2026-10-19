@@ -6,7 +6,7 @@ import { canManageRecord, isAdmin } from "@/lib/permissions";
 import { broadcastLeadChange, canDeleteLead, leadListWhere } from "@/lib/leads";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -18,10 +18,10 @@ export async function GET(req: NextRequest) {
   const { teamOnly, teamUserIds } = await resolveTeamScope(user, req.nextUrl.searchParams.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const fullAccess = await canManageModule(user, "LEADS", "READ");
+  const scope = await moduleAccessScope(user, "LEADS", "READ");
 
   const leads = await db.lead.findMany({
-    where: leadListWhere(user, teamUserIds, teamOnly, fullAccess),
+    where: leadListWhere(user, teamUserIds, teamOnly, scope),
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
@@ -110,9 +110,11 @@ export async function PATCH(req: NextRequest) {
   const target = await db.user.findUnique({ where: { id: parsed.data.assignedToId }, select: { id: true } });
   if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  const leadsGrant = await canManageModule(user, "LEADS", "UPDATE");
+  const leadsScope = await moduleAccessScope(user, "LEADS", "UPDATE");
   const leads = await db.lead.findMany({ where: { id: { in: parsed.data.ids } } });
-  const editable = leads.filter((l) => leadsGrant || canManageRecord(user, l));
+  const editable = leads.filter(
+    (l) => leadsScope === "all" || (leadsScope !== null && l.departmentId === leadsScope.departmentId) || canManageRecord(user, l)
+  );
 
   if (editable.length > 0) {
     await db.lead.updateMany({ where: { id: { in: editable.map((l) => l.id) } }, data: { assignedToId: target.id } });

@@ -197,8 +197,8 @@ function PermissionManager() {
         <div>
           <h1 className="text-xl font-semibold">Permission Manager</h1>
           <p className="text-sm text-muted-foreground">
-            Grant someone full create/read/update/delete access to specific modules — across every department, on top of
-            whatever their role already allows.
+            Grant someone full create/read/update/delete access to specific modules within their own department, on top
+            of whatever their role already allows. A company Admin already has every module, company-wide.
           </p>
         </div>
         <div className="flex gap-1 rounded-md border border-border p-0.5">

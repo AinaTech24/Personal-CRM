@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { canManageAttendanceFor } from "@/lib/social-media";
 import { canManageCrmAttendanceFor } from "@/lib/crm-team";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
@@ -44,10 +44,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { action, adminNote } = parsed.data;
 
   const { id } = await params;
-  const request = await db.leaveRequest.findUnique({ where: { id } });
+  const request = await db.leaveRequest.findUnique({ where: { id }, include: { user: { select: { departmentId: true } } } });
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const canManageLeave = isAdmin(user) || (await canManageModule(user, "LEAVE", "UPDATE"));
+  const leaveScope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "LEAVE", "UPDATE");
+  const canManageLeave = leaveScope === "all" || (leaveScope !== null && request.user.departmentId === leaveScope.departmentId);
 
   if (action === "edit") {
     if (!canManageLeave) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -162,16 +163,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ request: serializeLeaveRequest(updated) });
 }
 
-/** Admin only. An approved request's attendance stamp is undone first, so nothing is left stuck marked as leave. */
+/** Admins and a LEAVE grantee for their own department. An approved request's attendance stamp is undone first, so nothing is left stuck marked as leave. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "LEAVE", "DELETE")))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const request = await db.leaveRequest.findUnique({ where: { id } });
+  const request = await db.leaveRequest.findUnique({ where: { id }, include: { user: { select: { departmentId: true } } } });
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const leaveScope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "LEAVE", "DELETE");
+  if (leaveScope !== "all" && !(leaveScope !== null && request.user.departmentId === leaveScope.departmentId)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   if (request.status === "APPROVED") {
     const days = await leaveWorkingDays(keyFromDate(request.startDate), keyFromDate(request.endDate));

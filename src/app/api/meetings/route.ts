@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -32,12 +32,22 @@ export async function GET(req: NextRequest) {
   let where: object;
   if (teamOnly && teamUserIds) {
     where = { OR: [{ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } }] };
+  } else if (isAdmin(user)) {
+    where = {};
   } else {
-    const or: object[] = [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }];
-    if (teamUserIds && teamUserIds.length > 0) {
-      or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
+    const scope = await moduleAccessScope(user, "MEETINGS", "READ");
+    if (scope === "all") {
+      where = {};
+    } else {
+      const or: object[] = [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }];
+      if (teamUserIds && teamUserIds.length > 0) {
+        or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
+      }
+      if (scope) {
+        or.push({ organizer: { departmentId: scope.departmentId } }, { attendees: { some: { departmentId: scope.departmentId } } });
+      }
+      where = { OR: or };
     }
-    where = isAdmin(user) || (await canManageModule(user, "MEETINGS", "READ")) ? {} : { OR: or };
   }
 
   const meetings = await db.meeting.findMany({
