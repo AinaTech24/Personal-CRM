@@ -41,6 +41,32 @@ export async function canManageModule(user: PermissionUser, module: ManagedModul
   return hasModuleAction(row, action);
 }
 
+/**
+ * How far a module grant widens this user's record visibility for a
+ * list/scope query — the intended hierarchy is company Admin (everything)
+ * above a department-scoped grant (everything in their own department)
+ * above an ungranted user (their own records only, handled by the caller's
+ * existing own-record fallback, not by this function).
+ *
+ * A module grant from the Permission Manager is deliberately NOT a
+ * company-wide bypass for anyone but a real company Admin — it's how a
+ * department's lead gets full CRUD over their own department's records
+ * (Tasks, Leads, Meetings, Projects, Clients, Attendance, Leave), mirroring
+ * the Department Admin / Department User hierarchy. A grant holder with no
+ * department of their own has nothing to scope to, so this returns null —
+ * same as not holding the grant at all; the caller's own-record fallback
+ * still applies.
+ */
+export async function moduleAccessScope(
+  user: PermissionUser,
+  module: ManagedModule,
+  action: ModuleAction
+): Promise<"all" | { departmentId: string } | null> {
+  if (isAdmin(user)) return "all";
+  if (!(await canManageModule(user, module, action))) return null;
+  return user.departmentId ? { departmentId: user.departmentId } : null;
+}
+
 /** Whether this user holds any module grant at all — the floor for reaching the /admin pages that a grant (not just company-admin) can unlock. */
 export async function hasAnyModulePermission(userId: string): Promise<boolean> {
   const row = await db.userModulePermission.findFirst({

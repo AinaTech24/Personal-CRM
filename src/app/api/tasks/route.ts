@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { broadcastTaskChange, canDeleteTask, taskListWhere } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -17,10 +17,10 @@ export async function GET(req: NextRequest) {
   const { teamOnly, teamUserIds } = await resolveTeamScope(user, req.nextUrl.searchParams.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const fullAccess = await canManageModule(user, "TASKS", "READ");
+  const scope = await moduleAccessScope(user, "TASKS", "READ");
 
   const tasks = await db.task.findMany({
-    where: taskListWhere(user, teamUserIds, teamOnly, fullAccess),
+    where: taskListWhere(user, teamUserIds, teamOnly, scope),
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
@@ -89,7 +89,10 @@ export async function DELETE(req: NextRequest) {
   const parsed = bulkDeleteSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
-  const tasks = await db.task.findMany({ where: { id: { in: parsed.data.ids } } });
+  const tasks = await db.task.findMany({
+    where: { id: { in: parsed.data.ids } },
+    include: { createdBy: { select: { departmentId: true } }, assignedTo: { select: { departmentId: true } } },
+  });
   const deletableFlags = await Promise.all(tasks.map((t) => canDeleteTask(user, t)));
   const deletable = tasks.filter((_t, i) => deletableFlags[i]);
 

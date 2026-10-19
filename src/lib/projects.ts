@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { isAdmin } from "@/lib/permissions";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
@@ -27,13 +27,10 @@ export async function getProjectForUser(
   if (!project) return null;
 
   const isMember = project.members.some((m) => m.userId === user.id);
-  const allowed =
-    isAdmin(user) ||
-    project.createdById === user.id ||
-    isMember ||
-    (await canManageModule(user, "PROJECTS", action));
+  if (isAdmin(user) || project.createdById === user.id || isMember) return project;
 
-  if (allowed) return project;
+  const scope = await moduleAccessScope(user, "PROJECTS", action);
+  if (scope === "all" || (scope && project.departmentId === scope.departmentId)) return project;
 
   const teamUserIds = await socialMediaTeamScopeFor(user);
   if (teamUserIds && isSocialMediaTeamProject(project, teamUserIds)) return project;
@@ -47,19 +44,25 @@ export async function getProjectForUser(
  * every project in it on its own (see `canManageRecord`'s note for why).
  * `teamUserIds`, when given (a Social Media lead's own team, from
  * socialMediaTeamScopeFor), additionally widens this to every project
- * created by, or with a member from, that team. A Projects module grant
- * from the Permission Manager (`fullAccess`), or being an Admin, widens this
- * company-wide.
+ * created by, or with a member from, that team. Being an Admin widens this
+ * company-wide (`{}`); a Projects module grant from the Permission Manager
+ * (`scope`, from moduleAccessScope) widens it only to the grant holder's
+ * own department.
  *
  * `teamOnly` forces the team-scoped clause even for an Admin, bypassing
  * their usual `{}` — for the Social Media Team console's Projects tab, a
  * narrower, team-only view regardless of who's looking.
  */
-export function projectListWhere(user: PermissionUser, teamUserIds?: string[] | null, teamOnly?: boolean, fullAccess?: boolean) {
+export function projectListWhere(
+  user: PermissionUser,
+  teamUserIds?: string[] | null,
+  teamOnly?: boolean,
+  scope?: "all" | { departmentId: string } | null
+) {
   if (teamOnly && teamUserIds) {
     return { OR: [{ createdById: { in: teamUserIds } }, { members: { some: { userId: { in: teamUserIds } } } }] };
   }
-  if (isAdmin(user) || fullAccess) return {};
+  if (isAdmin(user) || scope === "all") return {};
   const or: object[] = [
     { createdById: user.id },
     { members: { some: { userId: user.id } } },
@@ -67,20 +70,27 @@ export function projectListWhere(user: PermissionUser, teamUserIds?: string[] | 
   if (teamUserIds && teamUserIds.length > 0) {
     or.push({ createdById: { in: teamUserIds } }, { members: { some: { userId: { in: teamUserIds } } } });
   }
+  if (scope && typeof scope === "object") {
+    or.push({ departmentId: scope.departmentId });
+  }
   return { OR: or };
 }
 
 /**
- * Deletion is restricted to Admins, the project's creator, and a Social
- * Media lead deleting a project that belongs to their team (matching the
- * same widening getProjectForUser applies to editing).
+ * Deletion is restricted to Admins, the project's creator, a Projects
+ * module grant with delete access over the project's own department, and a
+ * Social Media lead deleting a project that belongs to their team (matching
+ * the same widening getProjectForUser applies to editing).
  */
 export async function canDeleteProject(
   user: PermissionUser,
-  project: { createdById: string; members: { userId: string }[] }
+  project: { createdById: string; departmentId: string; members: { userId: string }[] }
 ) {
   if (isAdmin(user) || project.createdById === user.id) return true;
-  if (await canManageModule(user, "PROJECTS", "DELETE")) return true;
+
+  const scope = await moduleAccessScope(user, "PROJECTS", "DELETE");
+  if (scope === "all" || (scope && project.departmentId === scope.departmentId)) return true;
+
   const teamUserIds = await socialMediaTeamScopeFor(user);
   return !!teamUserIds && isSocialMediaTeamProject(project, teamUserIds);
 }

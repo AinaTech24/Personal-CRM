@@ -4,8 +4,16 @@ import { dateFromKey } from "@/lib/attendance";
 const STATUSES = ["PRESENT", "HALF_DAY", "ABSENT"];
 const APPROVALS = ["PENDING", "APPROVED", "REJECTED"];
 
-/** Shared filter builder for the admin attendance list and its CSV export. */
-export function buildAttendanceWhere(params: URLSearchParams): Prisma.AttendanceWhereInput {
+/**
+ * Shared filter builder for the admin attendance list and its CSV export.
+ * `scope` (an Attendance module grant, from moduleAccessScope) narrows the
+ * result to the grant holder's own department when it isn't "all" — an
+ * Admin passes "all" (or omits it) for the unrestricted company-wide view.
+ */
+export function buildAttendanceWhere(
+  params: URLSearchParams,
+  scope?: "all" | { departmentId: string } | null
+): Prisma.AttendanceWhereInput {
   const where: Prisma.AttendanceWhereInput = {};
 
   const userId = params.get("userId");
@@ -28,8 +36,11 @@ export function buildAttendanceWhere(params: URLSearchParams): Prisma.Attendance
   }
 
   const q = params.get("q")?.trim();
-  if (q) {
-    where.user = { OR: [{ name: { contains: q } }, { email: { contains: q } }] };
+  if (q || (scope && typeof scope === "object")) {
+    where.user = {
+      ...(q && { OR: [{ name: { contains: q } }, { email: { contains: q } }] }),
+      ...(scope && typeof scope === "object" && { departmentId: scope.departmentId }),
+    };
   }
 
   return where;

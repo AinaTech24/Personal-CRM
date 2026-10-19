@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { canManageRecord, isAdmin, isSuperAdmin } from "@/lib/permissions";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
@@ -16,7 +16,10 @@ export async function getLeadForUser(user: PermissionUser, leadId: string, actio
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   if (!lead) return null;
   if (canManageRecord(user, lead)) return lead;
-  if (await canManageModule(user, "LEADS", action)) return lead;
+
+  const scope = await moduleAccessScope(user, "LEADS", action);
+  if (scope === "all") return lead;
+  if (scope && lead.departmentId === scope.departmentId) return lead;
 
   const teamUserIds = await socialMediaTeamScopeFor(user);
   if (teamUserIds && isSocialMediaTeamLead(lead, teamUserIds)) return lead;
@@ -26,13 +29,18 @@ export async function getLeadForUser(user: PermissionUser, leadId: string, actio
 
 /**
  * Deletion is more sensitive than editing — restrict it to Admins, a Leads
- * module grant with delete access, the lead's creator, and (matching the
- * same widening getLeadForUser applies to editing) a Social Media lead
- * deleting a lead that belongs to their team.
+ * module grant with delete access over the lead's own department, the
+ * lead's creator, and (matching the same widening getLeadForUser applies
+ * to editing) a Social Media lead deleting a lead that belongs to their
+ * team.
  */
-export async function canDeleteLead(user: PermissionUser, lead: { createdById: string; assignedToId: string | null }) {
+export async function canDeleteLead(user: PermissionUser, lead: { createdById: string; assignedToId: string | null; departmentId: string | null }) {
   if (isAdmin(user) || lead.createdById === user.id) return true;
-  if (await canManageModule(user, "LEADS", "DELETE")) return true;
+
+  const scope = await moduleAccessScope(user, "LEADS", "DELETE");
+  if (scope === "all") return true;
+  if (scope && lead.departmentId === scope.departmentId) return true;
+
   const teamUserIds = await socialMediaTeamScopeFor(user);
   return !!teamUserIds && isSocialMediaTeamLead(lead, teamUserIds);
 }
@@ -41,8 +49,11 @@ export async function canDeleteLead(user: PermissionUser, lead: { createdById: s
  * A lead is visible by default only if it's unassigned to any department
  * (shared/unscoped), or the user personally created/was assigned it — being
  * a member of the same department is no longer enough on its own (see
- * `canManageRecord`'s note for why). A Leads module grant from the Permission
- * Manager (`fullAccess`), or being an Admin, widens this company-wide.
+ * `canManageRecord`'s note for why). Being an Admin widens this
+ * company-wide (`{}`); a Leads module grant from the Permission Manager
+ * (`scope`, from moduleAccessScope) widens it only to the grant holder's
+ * own department — the Department Admin tier between an Admin and a plain
+ * Department User.
  *
  * `teamUserIds`, when given (a Social Media lead's own team, from
  * `socialMediaTeamScopeFor`), additionally widens this to every lead created
@@ -54,11 +65,16 @@ export async function canDeleteLead(user: PermissionUser, lead: { createdById: s
  * an Admin, bypassing their usual `{}` — for the Social Media Team console's
  * Leads tab, which is a narrower, team-only view regardless of who's looking.
  */
-export function leadListWhere(user: PermissionUser, teamUserIds?: string[] | null, teamOnly?: boolean, fullAccess?: boolean) {
+export function leadListWhere(
+  user: PermissionUser,
+  teamUserIds?: string[] | null,
+  teamOnly?: boolean,
+  scope?: "all" | { departmentId: string } | null
+) {
   if (teamOnly && teamUserIds) {
     return { OR: [{ assignedToId: { in: teamUserIds } }, { createdById: { in: teamUserIds } }] };
   }
-  if (isSuperAdmin(user) || isAdmin(user) || fullAccess) return {};
+  if (isSuperAdmin(user) || isAdmin(user) || scope === "all") return {};
   const or: object[] = [
     { departmentId: null },
     { assignedToId: user.id },
@@ -66,6 +82,9 @@ export function leadListWhere(user: PermissionUser, teamUserIds?: string[] | nul
   ];
   if (teamUserIds && teamUserIds.length > 0) {
     or.push({ assignedToId: { in: teamUserIds } }, { createdById: { in: teamUserIds } });
+  }
+  if (scope && typeof scope === "object") {
+    or.push({ departmentId: scope.departmentId });
   }
   return { OR: or };
 }

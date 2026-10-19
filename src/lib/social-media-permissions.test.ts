@@ -51,6 +51,22 @@ describe("socialClientListWhere", () => {
       OR: [{ createdById: "u1" }, { assignedToId: "u1" }],
     });
   });
+
+  it("imposes no filter for a module grant scoped to \"all\"", () => {
+    expect(socialClientListWhere(user(), { isLead: false }, "all")).toEqual({});
+  });
+
+  it("widens a non-lead's own-record visibility to their department for a department-scoped grant", () => {
+    const u = user({ id: "u1" });
+    expect(socialClientListWhere(u, { isLead: false }, { departmentId: "dept-1" })).toEqual({
+      OR: [
+        { createdById: "u1" },
+        { assignedToId: "u1" },
+        { createdBy: { departmentId: "dept-1" } },
+        { assignedTo: { departmentId: "dept-1" } },
+      ],
+    });
+  });
 });
 
 describe("canAccessSocialClient", () => {

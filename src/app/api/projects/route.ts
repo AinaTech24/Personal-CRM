@@ -6,7 +6,7 @@ import { isAdmin } from "@/lib/permissions";
 import { broadcastProjectChange, canDeleteProject, logProjectActivity, projectListWhere } from "@/lib/projects";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -18,10 +18,10 @@ export async function GET(req: NextRequest) {
   const { teamOnly, teamUserIds } = await resolveTeamScope(user, req.nextUrl.searchParams.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const fullAccess = await canManageModule(user, "PROJECTS", "READ");
+  const scope = await moduleAccessScope(user, "PROJECTS", "READ");
 
   const projects = await db.project.findMany({
-    where: projectListWhere(user, teamUserIds, teamOnly, fullAccess),
+    where: projectListWhere(user, teamUserIds, teamOnly, scope),
     include: {
       department: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
@@ -108,13 +108,18 @@ export async function PATCH(req: NextRequest) {
   const target = await db.user.findUnique({ where: { id: parsed.data.assignedToId }, select: { id: true } });
   if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  const projectsGrant = await canManageModule(user, "PROJECTS", "UPDATE");
+  const projectsScope = await moduleAccessScope(user, "PROJECTS", "UPDATE");
   const projects = await db.project.findMany({
     where: { id: { in: parsed.data.ids } },
     include: { members: { select: { userId: true } } },
   });
   const editable = projects.filter(
-    (p) => isAdmin(user) || projectsGrant || p.createdById === user.id || p.members.some((m) => m.userId === target.id || m.userId === user.id)
+    (p) =>
+      isAdmin(user) ||
+      projectsScope === "all" ||
+      (projectsScope !== null && p.departmentId === projectsScope.departmentId) ||
+      p.createdById === user.id ||
+      p.members.some((m) => m.userId === target.id || m.userId === user.id)
   );
 
   for (const project of editable) {

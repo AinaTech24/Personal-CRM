@@ -135,7 +135,8 @@ export function ManagePermissionsDialog({
         <DialogHeader>
           <DialogTitle>Permissions {user && `· ${[user.name, user.surname].filter(Boolean).join(" ")}`}</DialogTitle>
           <DialogDescription>
-            Grant full create/read/update/delete access to specific modules, on top of whatever their role already allows.
+            Grant full create/read/update/delete access to specific modules within their own department, on top of
+            whatever their role already allows.
           </DialogDescription>
         </DialogHeader>
         <DialogBody>

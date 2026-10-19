@@ -4,16 +4,17 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { keyFromDate } from "@/lib/attendance";
 import { buildAttendanceWhere } from "@/lib/attendance-query";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 
-/** Admin (or an Attendance module grant): attendance across all users, filterable by user, date range, status, approval, and free-text name/email. */
+/** Admin (company-wide) or an Attendance module grant (their own department): attendance across those users, filterable by user, date range, status, approval, and free-text name/email. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "READ")))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const where = buildAttendanceWhere(req.nextUrl.searchParams);
+  const scope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "ATTENDANCE", "READ");
+  if (scope === null) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const where = buildAttendanceWhere(req.nextUrl.searchParams, scope);
   const rows = await db.attendance.findMany({
     where,
     include: { user: { select: { id: true, name: true, surname: true, email: true } } },

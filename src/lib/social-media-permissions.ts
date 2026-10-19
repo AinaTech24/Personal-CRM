@@ -34,10 +34,24 @@ export function isSocialMediaOnlyUser(user: PermissionUser, membership: SocialMe
   return !isAdmin(user) && !!membership;
 }
 
-/** A client is visible to a lead/admin unconditionally; a regular member only sees what they created or are assigned. */
-export function socialClientListWhere(user: PermissionUser, membership: SocialMembership | null) {
-  if (isSocialMediaLead(user, membership)) return {};
-  return { OR: [{ createdById: user.id }, { assignedToId: user.id }] };
+/**
+ * A client is visible to a lead/admin unconditionally; a regular member
+ * only sees what they created or are assigned. `scope` (a Clients module
+ * grant, from moduleAccessScope) widens this the same way an Admin's `{}`
+ * does for "all" — company-wide — or, for a department-scoped grant, to
+ * every client created by or assigned to anyone in that department.
+ */
+export function socialClientListWhere(
+  user: PermissionUser,
+  membership: SocialMembership | null,
+  scope?: "all" | { departmentId: string } | null
+) {
+  if (isSocialMediaLead(user, membership) || scope === "all") return {};
+  const or: object[] = [{ createdById: user.id }, { assignedToId: user.id }];
+  if (scope && typeof scope === "object") {
+    or.push({ createdBy: { departmentId: scope.departmentId } }, { assignedTo: { departmentId: scope.departmentId } });
+  }
+  return { OR: or };
 }
 
 export function canAccessSocialClient(

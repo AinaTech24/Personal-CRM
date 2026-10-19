@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, hasSocialMediaAccess, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
 import { socialClientListWhere } from "@/lib/social-media-permissions";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { canManageModule, moduleAccessScope } from "@/lib/module-permissions-store";
 import { notifyAndPush } from "@/lib/notify";
 
 export async function GET() {
@@ -12,12 +12,13 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const membership = await getSocialMembership(user.id);
-  const clientsGrant = await canManageModule(user, "CLIENTS", "READ");
-  if (!hasSocialMediaAccess(user, membership) && !clientsGrant) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const clientsScope = await moduleAccessScope(user, "CLIENTS", "READ");
+  if (!hasSocialMediaAccess(user, membership) && clientsScope === null) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const clients = await db.socialClient.findMany({
-    // A Clients module grant sees and manages every client, same as a lead.
-    where: clientsGrant ? {} : socialClientListWhere(user, membership),
+    where: socialClientListWhere(user, membership, clientsScope),
     include: {
       assignedTo: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },

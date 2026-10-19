@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 import { combinedTeamScopeFor } from "@/lib/team-scope";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 
 const meetingInclude = {
@@ -30,13 +30,19 @@ const patchSchema = z.object({
  * remove a meeting.
  */
 async function canManage(user: PermissionUser, meetingId: string, action: Extract<ModuleAction, "UPDATE" | "DELETE">) {
-  if (isAdmin(user) || (await canManageModule(user, "MEETINGS", action))) return true;
+  if (isAdmin(user)) return true;
   const m = await db.meeting.findUnique({
     where: { id: meetingId },
-    select: { organizerId: true, attendees: { select: { id: true } } },
+    select: { organizerId: true, organizer: { select: { departmentId: true } }, attendees: { select: { id: true, departmentId: true } } },
   });
   if (!m) return false;
   if (m.organizerId === user.id) return true;
+
+  const scope = await moduleAccessScope(user, "MEETINGS", action);
+  if (scope === "all") return true;
+  if (scope && (m.organizer.departmentId === scope.departmentId || m.attendees.some((a) => a.departmentId === scope.departmentId))) {
+    return true;
+  }
 
   const teamUserIds = await combinedTeamScopeFor(user);
   if (!teamUserIds) return false;
@@ -51,11 +57,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const meeting = await db.meeting.findUnique({ where: { id }, include: meetingInclude });
   if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  let visible =
-    isAdmin(user) ||
-    meeting.organizer.id === user.id ||
-    meeting.attendees.some((a) => a.id === user.id) ||
-    (await canManageModule(user, "MEETINGS", "READ"));
+  let visible = isAdmin(user) || meeting.organizer.id === user.id || meeting.attendees.some((a) => a.id === user.id);
+  if (!visible) {
+    const scope = await moduleAccessScope(user, "MEETINGS", "READ");
+    if (scope === "all") {
+      visible = true;
+    } else if (scope) {
+      const inDeptIds = await db.user.findMany({
+        where: { id: { in: [meeting.organizer.id, ...meeting.attendees.map((a) => a.id)] }, departmentId: scope.departmentId },
+        select: { id: true },
+      });
+      const inDept = new Set(inDeptIds.map((u) => u.id));
+      visible = inDept.has(meeting.organizer.id) || meeting.attendees.some((a) => inDept.has(a.id));
+    }
+  }
   if (!visible) {
     const teamUserIds = await combinedTeamScopeFor(user);
     visible =

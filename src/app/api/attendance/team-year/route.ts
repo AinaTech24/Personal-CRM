@@ -2,15 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { istDateKey, dateFromKey, keyFromDate } from "@/lib/attendance";
 
-/** Admin (or an Attendance module grant): per-day team attendance counts for a year, for the overview heatmap. */
+/** Admin (company-wide) or an Attendance module grant (their own department): per-day team attendance counts for a year, for the overview heatmap. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "READ")))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const scope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "ATTENDANCE", "READ");
+  if (scope === null) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const yearParam = Number(req.nextUrl.searchParams.get("year"));
   const year = Number.isInteger(yearParam) && yearParam > 2000 ? yearParam : Number(istDateKey().slice(0, 4));
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   const [rows, holidays] = await Promise.all([
     db.attendance.findMany({
-      where: { date: { gte, lte } },
+      where: { date: { gte, lte }, ...(scope === "all" ? {} : { user: { departmentId: scope.departmentId } }) },
       select: { date: true, status: true, approvalStatus: true },
     }),
     db.holiday.findMany({ where: { date: { gte, lte } }, orderBy: { date: "asc" } }),

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { canAccessSocialClient, isSocialMediaLead, isSocialMediaOnlyUser, type SocialMembership } from "@/lib/social-media-permissions";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 import { getTeamMembershipBySlug, getTeamUserIdsBySlug, broadcastTeamChangeBySlug } from "@/lib/teams";
 
@@ -123,10 +123,19 @@ export async function getSocialClientForUser(
   clientId: string,
   action: Extract<ModuleAction, "READ" | "UPDATE"> = "READ"
 ) {
-  const client = await db.socialClient.findUnique({ where: { id: clientId } });
+  const client = await db.socialClient.findUnique({
+    where: { id: clientId },
+    include: { createdBy: { select: { departmentId: true } }, assignedTo: { select: { departmentId: true } } },
+  });
   if (!client) return null;
   if (canAccessSocialClient(user, membership, client)) return client;
-  if (await canManageModule(user, "CLIENTS", action)) return client;
+
+  const scope = await moduleAccessScope(user, "CLIENTS", action);
+  if (scope === "all") return client;
+  if (scope && (client.createdBy.departmentId === scope.departmentId || client.assignedTo?.departmentId === scope.departmentId)) {
+    return client;
+  }
+
   return "forbidden" as const;
 }
 

@@ -8,7 +8,7 @@ import { getAttendancePolicy } from "@/lib/attendance-settings";
 import { computeWorkedMinutes, classifyStatus } from "@/lib/attendance";
 import { canManageAttendanceFor } from "@/lib/social-media";
 import { canManageCrmAttendanceFor } from "@/lib/crm-team";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 
 const bodySchema = z.object({
   // Times as ISO strings, or null to clear. Editing them re-runs classification.
@@ -36,12 +36,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const record = await db.attendance.findUnique({ where: { id } });
+  const record = await db.attendance.findUnique({ where: { id }, include: { user: { select: { departmentId: true } } } });
   if (!record) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const scope = await moduleAccessScope(actor, "ATTENDANCE", "UPDATE");
+  const scopeAllowed = scope === "all" || (scope !== null && record.user.departmentId === scope.departmentId);
   if (
     !(await canManageAttendanceFor(actor, record.userId)) &&
     !(await canManageCrmAttendanceFor(actor, record.userId)) &&
-    !(await canManageModule(actor, "ATTENDANCE", "UPDATE"))
+    !scopeAllowed
   ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

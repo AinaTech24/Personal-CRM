@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { combinedTeamScopeFor } from "@/lib/team-scope";
 import { notifyAndPush } from "@/lib/notify";
 
@@ -19,11 +19,25 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const meeting = await db.meeting.findUnique({
     where: { id },
-    select: { id: true, title: true, organizerId: true, attendees: { select: { id: true } } },
+    select: {
+      id: true,
+      title: true,
+      organizerId: true,
+      organizer: { select: { departmentId: true } },
+      attendees: { select: { id: true, departmentId: true } },
+    },
   });
   if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  let allowed = isAdmin(user) || meeting.organizerId === user.id || (await canManageModule(user, "MEETINGS", "UPDATE"));
+  let allowed = isAdmin(user) || meeting.organizerId === user.id;
+  if (!allowed) {
+    const scope = await moduleAccessScope(user, "MEETINGS", "UPDATE");
+    if (scope === "all") allowed = true;
+    else if (scope) {
+      allowed =
+        meeting.organizer.departmentId === scope.departmentId || meeting.attendees.some((a) => a.departmentId === scope.departmentId);
+    }
+  }
   if (!allowed) {
     const teamUserIds = await combinedTeamScopeFor(user);
     allowed = !!teamUserIds && (teamUserIds.includes(meeting.organizerId) || meeting.attendees.some((a) => teamUserIds.includes(a.id)));

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 import { crmTeamScopeFor } from "@/lib/crm-team";
 import { dateFromKey, istDateKey } from "@/lib/attendance";
@@ -16,9 +16,10 @@ const STATUSES = ["PENDING", "APPROVED", "REJECTED", "CANCELLED"] as const;
 
 /**
  * Your own requests plus your dashboard numbers. `?scope=all` returns
- * everyone's for a company Admin or a LEAVE-module grantee, or just a
- * Social Media/CRM lead's own team for them — optionally narrowed further
- * with `?status=`.
+ * everyone's for a company Admin; a LEAVE-module grantee sees their own
+ * department, and a Social Media/CRM lead sees their own team (either or
+ * both widen a non-admin's visibility, not just one) — optionally narrowed
+ * further with `?status=`.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -26,20 +27,26 @@ export async function GET(req: NextRequest) {
 
   const params = req.nextUrl.searchParams;
   if (params.get("scope") === "all") {
-    const canManageAll = isAdmin(user) || (await canManageModule(user, "LEAVE", "READ"));
-    const socialScope = canManageAll ? null : await socialMediaTeamScopeFor(user);
-    const crmScope = canManageAll ? null : await crmTeamScopeFor(user);
-    if (!canManageAll && !socialScope && !crmScope) {
+    const moduleScope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "LEAVE", "READ");
+    const socialScope = moduleScope === "all" ? null : await socialMediaTeamScopeFor(user);
+    const crmScope = moduleScope === "all" ? null : await crmTeamScopeFor(user);
+    const teamUserIds = Array.from(new Set([...(socialScope ?? []), ...(crmScope ?? [])]));
+
+    if (moduleScope === null && teamUserIds.length === 0) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    const teamUserIds = canManageAll ? null : Array.from(new Set([...(socialScope ?? []), ...(crmScope ?? [])]));
+
+    let scopeFilter: object = {};
+    if (moduleScope !== "all") {
+      const or: object[] = [];
+      if (teamUserIds.length > 0) or.push({ userId: { in: teamUserIds } });
+      if (moduleScope) or.push({ user: { departmentId: moduleScope.departmentId } });
+      scopeFilter = { OR: or };
+    }
 
     const status = STATUSES.find((s) => s === params.get("status"));
     const rows = await db.leaveRequest.findMany({
-      where: {
-        ...(status ? { status } : {}),
-        ...(teamUserIds ? { userId: { in: teamUserIds } } : {}),
-      },
+      where: { ...(status ? { status } : {}), ...scopeFilter },
       include: leaveRequestInclude,
       orderBy: { createdAt: "desc" },
       take: 500,
