@@ -38,10 +38,12 @@ import {
   IconShield,
   IconSliders,
   IconCheck,
+  IconSearch,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSocket } from "@/components/providers/socket-provider";
+import { openCommandPalette } from "@/components/layout/command-palette";
 import type { ManagedModule } from "@/lib/module-permissions";
 import { cn } from "@/lib/utils";
 
@@ -595,6 +597,33 @@ export function Sidebar({
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
           >
             <IconChevronLeft className={cn("h-4 w-4 transition-transform duration-300", collapsed && "rotate-180")} />
+          </button>
+        </Tooltip>
+      </div>
+
+      <div className={cn("shrink-0 px-3 pb-2", collapsed && "flex justify-center")}>
+        <Tooltip label="Search (Ctrl / ⌘ K)" side="right">
+          <button
+            type="button"
+            onClick={() => {
+              onNavigate?.();
+              openCommandPalette();
+            }}
+            aria-label="Search"
+            className={cn(
+              "flex items-center gap-2 rounded-full border border-border bg-background text-sm text-muted-foreground transition-colors hover:border-ring/50 hover:text-foreground",
+              collapsed ? "h-9 w-9 justify-center" : "h-9 w-full px-3"
+            )}
+          >
+            <IconSearch className="h-4 w-4 shrink-0" />
+            {!collapsed && (
+              <>
+                <span className="flex-1 truncate text-left">Search</span>
+                <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70">
+                  Ctrl K
+                </span>
+              </>
+            )}
           </button>
         </Tooltip>
       </div>
