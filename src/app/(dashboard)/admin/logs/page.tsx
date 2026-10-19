@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
+import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import * as Popover from "@radix-ui/react-popover";
 import { IconCopy, IconEye, IconFilter } from "@/components/icons";
@@ -78,6 +79,7 @@ function Highlighted({ text, query }: { text: string; query: string }) {
 export default function AuditLogsPage() {
   const toast = useToast();
   const router = useRouter();
+  const { socket } = useSocket();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,6 +87,7 @@ export default function AuditLogsPage() {
   const [model, setModel] = useState("");
   const [viewing, setViewing] = useState<AuditLog | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [newCount, setNewCount] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,6 +97,7 @@ export default function AuditLogsPage() {
       if (!res.ok) return toast.error("Couldn't load the log", data.error);
       setLogs(data.logs ?? []);
       setModels(data.models ?? []);
+      setNewCount(0);
     } finally {
       setLoading(false);
     }
@@ -103,6 +107,22 @@ export default function AuditLogsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Every write anywhere in the app lands here live — same event db.ts's
+  // audit-logging extension emits to the "admins" room the moment it writes
+  // the row, so this page never needs a manual refresh to stay current.
+  useEffect(() => {
+    if (!socket) return;
+    const onEntry = (entry: AuditLog) => {
+      setLogs((prev) => [entry, ...prev].slice(0, 500));
+      setModels((prev) => (prev.includes(entry.model) ? prev : [...prev, entry.model].sort()));
+      setNewCount((c) => c + 1);
+    };
+    socket.on("audit_log_created", onEntry);
+    return () => {
+      socket.off("audit_log_created", onEntry);
+    };
+  }, [socket]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -186,7 +206,15 @@ export default function AuditLogsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">View logs</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold">View logs</h1>
+          {newCount > 0 && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {newCount} new since you opened this
+            </span>
+          )}
+        </div>
 
         <div className="flex shrink-0 items-center gap-1">
           {/* A row of chips grew with every model that ever logged something;
