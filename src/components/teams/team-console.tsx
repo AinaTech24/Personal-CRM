@@ -182,7 +182,7 @@ export function GenericTeamConsole({ teamId }: { teamId: string }) {
       {tab === "meetings" && <MeetingsView scope={`team:${teamId}`} />}
       {tab === "projects" && <ProjectsList scope={`team:${teamId}`} />}
       {tab === "attendance" && <AttendanceTab teamId={teamId} />}
-      {tab === "leave" && <LeaveAdminView canEditDelete={false} />}
+      {tab === "leave" && <LeaveAdminView canEditDelete={false} teamScope={`team:${teamId}`} />}
       {tab === "activity" && <ActivityTab teamId={teamId} />}
     </div>
   );
