@@ -4,8 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { moduleAccessScope } from "@/lib/module-permissions-store";
-import { socialMediaTeamScopeFor } from "@/lib/social-media";
-import { crmTeamScopeFor } from "@/lib/crm-team";
+import { allLedTeamsScopeFor } from "@/lib/teams";
 import { dateFromKey, istDateKey } from "@/lib/attendance";
 import { leaveSummary, leaveWorkingDays } from "@/lib/leave";
 import { leaveRequestInclude, serializeLeaveRequest } from "@/lib/leave-requests";
@@ -17,9 +16,9 @@ const STATUSES = ["PENDING", "APPROVED", "REJECTED", "CANCELLED"] as const;
 /**
  * Your own requests plus your dashboard numbers. `?scope=all` returns
  * everyone's for a company Admin; a LEAVE-module grantee sees their own
- * department, and a Social Media/CRM lead sees their own team (either or
- * both widen a non-admin's visibility, not just one) — optionally narrowed
- * further with `?status=`.
+ * department, and the lead of any team (CRM, Social Media, or any other)
+ * sees their own team (every widening applies together, not just one) —
+ * optionally narrowed further with `?status=`.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -28,9 +27,7 @@ export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
   if (params.get("scope") === "all") {
     const moduleScope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "LEAVE", "READ");
-    const socialScope = moduleScope === "all" ? null : await socialMediaTeamScopeFor(user);
-    const crmScope = moduleScope === "all" ? null : await crmTeamScopeFor(user);
-    const teamUserIds = Array.from(new Set([...(socialScope ?? []), ...(crmScope ?? [])]));
+    const teamUserIds = moduleScope === "all" ? [] : await allLedTeamsScopeFor(user);
 
     if (moduleScope === null && teamUserIds.length === 0) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

@@ -64,7 +64,7 @@ const PRIORITY_VARIANT = {
   URGENT: "destructive",
 } as const;
 
-export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
+export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:${string}` } = {}) {
   const leadsUrl = scope ? `/api/leads?scope=${scope}` : "/api/leads";
   const router = useRouter();
   const toast = useToast();

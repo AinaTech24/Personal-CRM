@@ -497,8 +497,8 @@ const HALF_DAY_REASON_OPTIONS = Object.entries(HALF_DAY_REASON_LABEL).map(([valu
  * Same mark/approve/reject/override actions a company Admin has in
  * /admin/attendance, scoped here to the lead's own team — the backing
  * routes (PATCH /api/attendance/[id], POST .../approve) already enforce
- * that scoping server-side (see canManageCrmAttendanceFor in
- * src/lib/crm-team.ts), this is just the matching UI.
+ * that scoping server-side (see sharesLedTeamWith in src/lib/teams.ts),
+ * this is just the matching UI.
  */
 function AttendanceTab() {
   const toast = useToast();

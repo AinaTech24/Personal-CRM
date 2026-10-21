@@ -6,8 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requestDevice } from "@/lib/request-info";
 import { getAttendancePolicy } from "@/lib/attendance-settings";
 import { computeWorkedMinutes, classifyStatus } from "@/lib/attendance";
-import { canManageAttendanceFor } from "@/lib/social-media";
-import { canManageCrmAttendanceFor } from "@/lib/crm-team";
+import { sharesLedTeamWith } from "@/lib/teams";
 import { moduleAccessScope } from "@/lib/module-permissions-store";
 
 const bodySchema = z.object({
@@ -25,8 +24,8 @@ const bodySchema = z.object({
 });
 
 /**
- * Correction / override of one record — a company Admin for anyone, or a
- * Social Media/CRM lead for someone on their own team. Editing times recomputes
+ * Correction / override of one record — a company Admin for anyone, or the
+ * lead of any team the record's owner belongs to. Editing times recomputes
  * the calculated status; a manual status that differs from the calculation
  * is flagged as an override with `calculatedStatus` preserved as the audit
  * trail. Every change writes an AttendanceAudit row.
@@ -41,11 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const scope = await moduleAccessScope(actor, "ATTENDANCE", "UPDATE");
   const scopeAllowed = scope === "all" || (scope !== null && record.user.departmentId === scope.departmentId);
-  if (
-    !(await canManageAttendanceFor(actor, record.userId)) &&
-    !(await canManageCrmAttendanceFor(actor, record.userId)) &&
-    !scopeAllowed
-  ) {
+  if (!scopeAllowed && !(await sharesLedTeamWith(actor.id, record.userId))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

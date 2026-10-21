@@ -51,7 +51,7 @@ function statusLabel(status: string) {
   return status.replace("_", " ");
 }
 
-export function ProjectsList({ scope }: { scope?: "social-media" | "crm" } = {}) {
+export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team:${string}` } = {}) {
   const projectsUrl = scope ? `/api/projects?scope=${scope}` : "/api/projects";
   const router = useRouter();
   const { query } = useSearch();

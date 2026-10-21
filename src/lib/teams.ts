@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/slug";
 import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
+import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import type { TeamMembership } from "@/lib/team-permissions";
 
 export type { TeamMembership };
@@ -52,6 +53,54 @@ export async function getTeamUserIdsBySlug(slug: string, preferredDepartmentId?:
   const departmentId = preferredDepartmentId ?? members.find((m) => m.isLead && m.departmentId)?.departmentId ?? null;
   if (!departmentId) return members.map((m) => m.userId);
   return members.filter((m) => m.departmentId === departmentId).map((m) => m.userId);
+}
+
+/** Every user id on the team with this id, restricted to the team's own department — by-id sibling of getTeamUserIdsBySlug (see its comment for the department-scoping rationale), for any team including a non-system one that has no fixed slug to key off. */
+export async function getTeamUserIds(teamId: string, preferredDepartmentId?: string | null): Promise<string[]> {
+  const rows = await db.teamMember.findMany({
+    where: { teamId, team: { disabled: false } },
+    select: { userId: true, isLead: true, user: { select: { departmentId: true } } },
+  });
+  const members = rows.map((r) => ({ userId: r.userId, isLead: r.isLead, departmentId: r.user.departmentId }));
+  const departmentId = preferredDepartmentId ?? members.find((m) => m.isLead && m.departmentId)?.departmentId ?? null;
+  if (!departmentId) return members.map((m) => m.userId);
+  return members.filter((m) => m.departmentId === departmentId).map((m) => m.userId);
+}
+
+/**
+ * A team's user ids, when `user` may legitimately narrow a list down to
+ * just this team — an Admin/Super Admin, or the team's own lead. Mirrors
+ * crmTeamOnlyScopeFor/socialMediaTeamOnlyScopeFor, generalized to any team
+ * by id for the `scope=team:<id>` query param Leads/Tasks/Meetings/Projects
+ * share.
+ */
+export async function teamOnlyScopeFor(user: PermissionUser, teamId: string): Promise<string[] | null> {
+  if (isAdmin(user)) return getTeamUserIds(teamId);
+  const membership = await getUserTeamMembership(teamId, user.id);
+  if (!membership?.isLead) return null;
+  return getTeamUserIds(teamId, user.departmentId);
+}
+
+/**
+ * The union of every (non-disabled) team `user` leads' own user ids — the
+ * generalized version of combining socialMediaTeamScopeFor + crmTeamScopeFor
+ * for leave-requests' `?scope=all`, so a lead of any custom team (not just
+ * Social Media/CRM, both of which are themselves just rows in this same
+ * table) sees their team's leave requests too. Empty for a company admin,
+ * who doesn't need widening — their access is already unrestricted.
+ */
+export async function allLedTeamsScopeFor(user: PermissionUser): Promise<string[]> {
+  if (isAdmin(user)) return [];
+  const led = await db.teamMember.findMany({
+    where: { userId: user.id, isLead: true, team: { disabled: false } },
+    select: { teamId: true },
+  });
+  if (led.length === 0) return [];
+  const ids = new Set<string>();
+  for (const { teamId } of led) {
+    for (const id of await getTeamUserIds(teamId, user.departmentId)) ids.add(id);
+  }
+  return [...ids];
 }
 
 /** Broadcasts to every member of the team identified by `slug`, plus admins — not a global event everyone would receive regardless of access. */
