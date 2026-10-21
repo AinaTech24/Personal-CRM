@@ -115,7 +115,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Push only to people who aren't currently connected. Anyone with the app
   // open already got the message over the socket and an in-app toast, and
   // buzzing their phone for something they just watched arrive is noise.
-  const recipients = members.filter((m) => m !== user.id && !isUserOnline(m));
+  const otherMembers = members.filter((m) => m !== user.id);
+  const recipients = otherMembers.filter((m) => !isUserOnline(m));
   if (recipients.length) {
     // Fired off rather than awaited: a slow or unreachable push service must
     // not stall — or fail — a send that is already committed. Safe to leave
@@ -126,6 +127,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       url: `/messages?c=${id}`,
       tag: `conv-${id}`,
     }).catch((err) => console.error("[push] message notification failed", err));
+  } else if (otherMembers.length) {
+    // Logged so "nothing in pm2 logs after I sent a message" is distinguishable
+    // from "sendPushToUsers ran and found nothing to do" — this path means
+    // every other member was still seen as socket-connected, so push was
+    // never even attempted.
+    console.log(`[push] skipped — all ${otherMembers.length} other member(s) are currently online`);
   }
 
   return NextResponse.json({ message }, { status: 201 });
