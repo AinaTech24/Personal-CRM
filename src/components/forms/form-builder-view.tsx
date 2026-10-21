@@ -27,7 +27,7 @@ import { SkeletonForm } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { copyTextFromAsync } from "@/lib/clipboard";
-import { FIELD_PALETTE, FIELD_TYPE_META, parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
+import { FIELD_PAIR_SHORTCUTS, FIELD_PALETTE, FIELD_TYPE_META, parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
 import {
   IconCheck,
   IconChevronDown,
@@ -312,6 +312,23 @@ export function FormBuilderView({ formId }: { formId: string }) {
     setExpandedId(data.field.id);
   }
 
+  /** "Email + Password" / "Phone + Password" shortcuts — two ordinary fields added one after another, not a new combined control (see FIELD_PAIR_SHORTCUTS). */
+  async function addFieldPair(shortcut: (typeof FIELD_PAIR_SHORTCUTS)[number]) {
+    if (!form) return;
+    for (const { type, label } of shortcut.fields) {
+      const meta = FIELD_TYPE_META[type];
+      const res = await fetch(`/api/forms/${formId}/fields`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, label, options: meta.hasOptions ? ["Option 1", "Option 2"] : undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't add field", data.error);
+      setForm((f) => (f ? { ...f, fields: [...f.fields, data.field] } : f));
+      setExpandedId(data.field.id);
+    }
+  }
+
   function updateField(fieldId: string, patch: Partial<FieldRow>) {
     setForm((f) => (f ? { ...f, fields: f.fields.map((fl) => (fl.id === fieldId ? { ...fl, ...patch } : fl)) } : f));
     const body: Record<string, unknown> = { ...patch };
@@ -450,6 +467,18 @@ export function FormBuilderView({ formId }: { formId: string }) {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">Add a field</p>
             {FIELD_PALETTE.map((type) => (
               <PaletteItem key={type} type={type} onAdd={() => addField(type)} />
+            ))}
+            <p className="mt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">Quick add</p>
+            {FIELD_PAIR_SHORTCUTS.map((shortcut) => (
+              <button
+                key={shortcut.key}
+                type="button"
+                onClick={() => addFieldPair(shortcut)}
+                className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-left text-sm transition-colors hover:border-primary/40 hover:bg-primary/5"
+              >
+                <IconFile className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {shortcut.label}
+              </button>
             ))}
           </div>
 

@@ -3,6 +3,8 @@ export const FORM_FIELD_TYPES = [
   "LONG_TEXT",
   "EMAIL",
   "PHONE",
+  "LINK",
+  "PASSWORD",
   "NUMBER",
   "DATE",
   "DROPDOWN",
@@ -24,21 +26,25 @@ export interface FieldTypeMeta {
   isFile: boolean;
   /** SECTION_HEADING — a layout divider, not a question; never has an answer. */
   isLayoutOnly: boolean;
+  /** PASSWORD — masked everywhere the answer is shown (typing it in, and every admin view), not just stored as plain text like everything else already is. */
+  isSensitive: boolean;
 }
 
 export const FIELD_TYPE_META: Record<FormFieldType, FieldTypeMeta> = {
-  SHORT_TEXT: { type: "SHORT_TEXT", label: "Short Text", hasOptions: false, isFile: false, isLayoutOnly: false },
-  LONG_TEXT: { type: "LONG_TEXT", label: "Long Text", hasOptions: false, isFile: false, isLayoutOnly: false },
-  EMAIL: { type: "EMAIL", label: "Email", hasOptions: false, isFile: false, isLayoutOnly: false },
-  PHONE: { type: "PHONE", label: "Phone", hasOptions: false, isFile: false, isLayoutOnly: false },
-  NUMBER: { type: "NUMBER", label: "Number", hasOptions: false, isFile: false, isLayoutOnly: false },
-  DATE: { type: "DATE", label: "Date", hasOptions: false, isFile: false, isLayoutOnly: false },
-  DROPDOWN: { type: "DROPDOWN", label: "Dropdown", hasOptions: true, isFile: false, isLayoutOnly: false },
-  RADIO: { type: "RADIO", label: "Radio Buttons", hasOptions: true, isFile: false, isLayoutOnly: false },
-  CHECKBOX: { type: "CHECKBOX", label: "Checkboxes", hasOptions: true, isFile: false, isLayoutOnly: false },
-  FILE_SINGLE: { type: "FILE_SINGLE", label: "File Upload", hasOptions: false, isFile: true, isLayoutOnly: false },
-  FILE_MULTI: { type: "FILE_MULTI", label: "Multiple Files", hasOptions: false, isFile: true, isLayoutOnly: false },
-  SECTION_HEADING: { type: "SECTION_HEADING", label: "Section Heading", hasOptions: false, isFile: false, isLayoutOnly: true },
+  SHORT_TEXT: { type: "SHORT_TEXT", label: "Short Text", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
+  LONG_TEXT: { type: "LONG_TEXT", label: "Long Text", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
+  EMAIL: { type: "EMAIL", label: "Email", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
+  PHONE: { type: "PHONE", label: "Phone", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
+  LINK: { type: "LINK", label: "Link", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
+  PASSWORD: { type: "PASSWORD", label: "Password", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: true },
+  NUMBER: { type: "NUMBER", label: "Number", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
+  DATE: { type: "DATE", label: "Date", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
+  DROPDOWN: { type: "DROPDOWN", label: "Dropdown", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false },
+  RADIO: { type: "RADIO", label: "Radio Buttons", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false },
+  CHECKBOX: { type: "CHECKBOX", label: "Checkboxes", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false },
+  FILE_SINGLE: { type: "FILE_SINGLE", label: "File Upload", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false },
+  FILE_MULTI: { type: "FILE_MULTI", label: "Multiple Files", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false },
+  SECTION_HEADING: { type: "SECTION_HEADING", label: "Section Heading", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false },
 };
 
 export const FIELD_PALETTE: FormFieldType[] = [
@@ -46,6 +52,8 @@ export const FIELD_PALETTE: FormFieldType[] = [
   "LONG_TEXT",
   "EMAIL",
   "PHONE",
+  "LINK",
+  "PASSWORD",
   "NUMBER",
   "DATE",
   "DROPDOWN",
@@ -54,6 +62,40 @@ export const FIELD_PALETTE: FormFieldType[] = [
   "FILE_SINGLE",
   "FILE_MULTI",
   "SECTION_HEADING",
+];
+
+/**
+ * Builder-only convenience: a palette "shortcut" that inserts a ready-made
+ * pair of fields (an identifier field + its PASSWORD) in one click, instead
+ * of a combined single control — the data model is one answer per field
+ * (see FormAnswer), so "Email + Password" is two ordinary fields, not a
+ * new type. Matches the pattern already used by hand in existing forms
+ * (e.g. an "... Login (Email or Mobile Number)" field followed by its own
+ * "... Login Password" field).
+ */
+export interface FieldPairShortcut {
+  key: string;
+  label: string;
+  fields: { type: FormFieldType; label: string }[];
+}
+
+export const FIELD_PAIR_SHORTCUTS: FieldPairShortcut[] = [
+  {
+    key: "EMAIL_PASSWORD",
+    label: "Email + Password",
+    fields: [
+      { type: "EMAIL", label: "Email" },
+      { type: "PASSWORD", label: "Password" },
+    ],
+  },
+  {
+    key: "PHONE_PASSWORD",
+    label: "Phone + Password",
+    fields: [
+      { type: "PHONE", label: "Phone" },
+      { type: "PASSWORD", label: "Password" },
+    ],
+  },
 ];
 
 /** DROPDOWN/RADIO/CHECKBOX choices are stored as one pipe-separated string. */
