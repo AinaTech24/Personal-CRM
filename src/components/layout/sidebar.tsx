@@ -459,13 +459,17 @@ export function Sidebar({
   // always-visible top-level nav entry above. A Department Admin additionally
   // gets the Permission Manager link, the one /admin page their own flag
   // (not a module grant) unlocks.
-  const grantedAdminNav = isAdmin
+  let grantedAdminNav = isAdmin
     ? adminNav
     : adminNav.filter((item) => {
         if (item.href === "/admin/permissions") return isDepartmentAdmin;
         const grantedModule = ADMIN_HREF_MODULE.get(item.href);
         return !!grantedModule && managedModuleSet.has(grantedModule);
       });
+
+  // Same drag-to-reorder preference as Main — applied last so it works on
+  // whatever ended up actually visible for them.
+  grantedAdminNav = applyNavOrder(grantedAdminNav, navOrder);
 
   // The sidebar's own search capsule filters the modules already visible to
   // this user — it's a local nav filter, not the global Ctrl+K search, so it
@@ -580,15 +584,24 @@ export function Sidebar({
     collapsed ? "opacity-0" : "opacity-100"
   );
 
+  // Main nav and Admin nav are reordered independently — they're separate
+  // permission-gated groups with their own heading, so a drag only ever
+  // moves an item within the group it started in. Both groups' positions
+  // live in the same saved order list; applyNavOrder() already filters that
+  // list down to whichever items are actually in play for a given group.
   function handleNavDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = visibleMainNav.findIndex((i) => i.href === active.id);
-    const newIndex = visibleMainNav.findIndex((i) => i.href === over.id);
+    const inMain = visibleMainNav.some((i) => i.href === active.id);
+    const list = inMain ? visibleMainNav : grantedAdminNav;
+    const oldIndex = list.findIndex((i) => i.href === active.id);
+    const newIndex = list.findIndex((i) => i.href === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-    const reordered = arrayMove(visibleMainNav, oldIndex, newIndex).map((i) => i.href);
-    setNavOrder(reordered);
-    saveNavOrder(reordered);
+    const reorderedHrefs = arrayMove(list, oldIndex, newIndex).map((i) => i.href);
+    const otherHrefs = (inMain ? grantedAdminNav : visibleMainNav).map((i) => i.href);
+    const combined = inMain ? [...reorderedHrefs, ...otherHrefs] : [...otherHrefs, ...reorderedHrefs];
+    setNavOrder(combined);
+    saveNavOrder(combined);
   }
 
   return (
@@ -619,7 +632,7 @@ export function Sidebar({
         </Tooltip>
       </div>
 
-      <div className={cn("shrink-0 px-3 pb-2", collapsed && "flex justify-center")}>
+      <div className={cn("flex shrink-0 items-center gap-1.5 px-3 pb-2", collapsed && "justify-center")}>
         {collapsed ? (
           <Tooltip label="Expand to search modules" side="right">
             <button
@@ -632,51 +645,51 @@ export function Sidebar({
             </button>
           </Tooltip>
         ) : (
-          <div className="flex h-9 w-full items-center gap-2 rounded-full border border-border bg-background px-3 text-sm text-muted-foreground transition-colors focus-within:border-ring/50">
-            <IconSearch className="h-4 w-4 shrink-0" />
-            <input
-              value={navSearch}
-              onChange={(e) => setNavSearch(e.target.value)}
-              placeholder="Search sidebar..."
-              aria-label="Search sidebar modules"
-              className="h-full min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
-            />
-            {navSearch ? (
-              <button
-                type="button"
-                onClick={() => setNavSearch("")}
-                aria-label="Clear sidebar search"
-                className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <IconX className="h-3.5 w-3.5" />
-              </button>
-            ) : (
-              <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70">
-                Ctrl K
-              </span>
+          <>
+            <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-background px-3 text-sm text-muted-foreground transition-colors focus-within:border-ring/50">
+              <IconSearch className="h-4 w-4 shrink-0" />
+              <input
+                value={navSearch}
+                onChange={(e) => setNavSearch(e.target.value)}
+                placeholder="Search sidebar..."
+                aria-label="Search sidebar modules"
+                className="h-full min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
+              />
+              {navSearch ? (
+                <button
+                  type="button"
+                  onClick={() => setNavSearch("")}
+                  aria-label="Clear sidebar search"
+                  className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <IconX className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70">
+                  Ctrl K
+                </span>
+              )}
+            </div>
+            {navReady && !navSearchQuery && (
+              <Tooltip label={rearranging ? "Done rearranging" : "Rearrange modules"} side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setRearranging((r) => !r)}
+                  aria-label={rearranging ? "Done rearranging" : "Rearrange modules"}
+                  className={cn(
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:border-ring/50 hover:text-foreground",
+                    rearranging && "border-ring/50 bg-accent text-foreground"
+                  )}
+                >
+                  {rearranging ? <IconCheck className="h-4 w-4" /> : <IconSliders className="h-4 w-4" />}
+                </button>
+              </Tooltip>
             )}
-          </div>
+          </>
         )}
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 py-2">
-        {navReady && !collapsed && !navSearchQuery && (
-          <div className="mb-1 flex items-center justify-end">
-            <Tooltip label={rearranging ? "Done rearranging" : "Rearrange modules"} side="bottom">
-              <button
-                type="button"
-                onClick={() => setRearranging((r) => !r)}
-                aria-label={rearranging ? "Done rearranging" : "Rearrange modules"}
-                className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground",
-                  rearranging && "bg-accent text-foreground"
-                )}
-              >
-                {rearranging ? <IconCheck className="h-3.5 w-3.5" /> : <IconSliders className="h-3.5 w-3.5" />}
-              </button>
-            </Tooltip>
-          </div>
-        )}
         {!navReady ? (
           // Placeholder rows while we learn which modules this user may see.
           Array.from({ length: mainNav.length }, (_, i) => (
@@ -688,22 +701,51 @@ export function Sidebar({
         ) : navSearchQuery ? (
           // While searching, the list is just a filtered, non-draggable rundown —
           // reordering a partial view would scramble the saved order underneath it.
-          searchedMainNav.map((item) => {
-            const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
-            return (
-              <NavLinkItem
-                key={item.href}
-                item={item}
-                active={active}
-                badgeCount={item.href === "/messages" ? unreadMessages : 0}
-                tone={item.href === "/messages" ? "count" : "attention"}
-                collapsed={collapsed}
-                labelClass={labelClass}
-                onNavigate={onNavigate}
-              />
-            );
-          })
+          <>
+            {searchedMainNav.map((item) => {
+              const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+              return (
+                <NavLinkItem
+                  key={item.href}
+                  item={item}
+                  active={active}
+                  badgeCount={item.href === "/messages" ? unreadMessages : 0}
+                  tone={item.href === "/messages" ? "count" : "attention"}
+                  collapsed={collapsed}
+                  labelClass={labelClass}
+                  onNavigate={onNavigate}
+                />
+              );
+            })}
+            {searchedAdminNav.length > 0 && (
+              <>
+                <div
+                  className={cn(
+                    "mt-4 mb-1 h-4 px-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70",
+                    labelClass
+                  )}
+                >
+                  Admin
+                </div>
+                {searchedAdminNav.map((item) => (
+                  <NavLinkItem
+                    key={item.href}
+                    item={item}
+                    active={pathname.startsWith(item.href)}
+                    badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : 0}
+                    collapsed={collapsed}
+                    labelClass={labelClass}
+                    onNavigate={onNavigate}
+                  />
+                ))}
+              </>
+            )}
+          </>
         ) : (
+          // Main nav and Admin nav drag within their own SortableContext (so a
+          // drag never jumps an item across the permission boundary between
+          // them), but share one DndContext — every module in the sidebar,
+          // Admin section included, is reorderable the same way.
           <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleNavDragEnd}>
             <SortableContext items={visibleMainNav.map((i) => i.href)} strategy={verticalListSortingStrategy}>
               {visibleMainNav.map((item) => {
@@ -723,55 +765,34 @@ export function Sidebar({
                 );
               })}
             </SortableContext>
+
+            {(isAdmin || grantedAdminNav.length > 0) && (
+              <>
+                <div
+                  className={cn(
+                    "mt-4 mb-1 h-4 px-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70",
+                    labelClass
+                  )}
+                >
+                  Admin
+                </div>
+                <SortableContext items={grantedAdminNav.map((i) => i.href)} strategy={verticalListSortingStrategy}>
+                  {grantedAdminNav.map((item) => (
+                    <SortableNavItem
+                      key={item.href}
+                      item={item}
+                      rearranging={rearranging && !collapsed}
+                      active={pathname.startsWith(item.href)}
+                      badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : 0}
+                      collapsed={collapsed}
+                      labelClass={labelClass}
+                      onNavigate={onNavigate}
+                    />
+                  ))}
+                </SortableContext>
+              </>
+            )}
           </DndContext>
-        )}
-
-        {navReady && navSearchQuery && searchedAdminNav.length > 0 && (
-          <>
-            <div
-              className={cn(
-                "mt-4 mb-1 h-4 px-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70",
-                labelClass
-              )}
-            >
-              Admin
-            </div>
-            {searchedAdminNav.map((item) => (
-              <NavLinkItem
-                key={item.href}
-                item={item}
-                active={pathname.startsWith(item.href)}
-                badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : 0}
-                collapsed={collapsed}
-                labelClass={labelClass}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </>
-        )}
-
-        {navReady && !navSearchQuery && (isAdmin || grantedAdminNav.length > 0) && (
-          <>
-            <div
-              className={cn(
-                "mt-4 mb-1 h-4 px-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70",
-                labelClass
-              )}
-            >
-              Admin
-            </div>
-            {grantedAdminNav.map((item) => (
-              <NavLinkItem
-                key={item.href}
-                item={item}
-                active={pathname.startsWith(item.href)}
-                badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : 0}
-                collapsed={collapsed}
-                labelClass={labelClass}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </>
         )}
 
         {navReady && navSearchQuery && !navSearchHasResults && !collapsed && (
