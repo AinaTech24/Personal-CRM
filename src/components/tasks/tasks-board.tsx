@@ -48,7 +48,7 @@ const PRIORITY_VARIANT = {
   URGENT: "destructive",
 } as const;
 
-export function TasksBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
+export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:${string}` } = {}) {
   const tasksUrl = scope ? `/api/tasks?scope=${scope}` : "/api/tasks";
   const { query } = useSearch();
   const toast = useToast();
