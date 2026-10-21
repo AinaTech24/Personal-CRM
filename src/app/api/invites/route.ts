@@ -14,7 +14,7 @@ const bodySchema = z.object({
   email: z.string().email(),
   role: z.enum(["SUPER_ADMIN", "ADMIN", "DEPARTMENT_USER"]),
   departmentId: z.string().optional().nullable(),
-  /** "Social Media (Admin)" from the invite picker — the account is still created as DEPARTMENT_USER. */
+  /** "Social Media Lead" from the invite picker — the account is still created as DEPARTMENT_USER. */
   socialMediaAdmin: z.boolean().optional(),
   /** "Social Media User" from the invite picker — a regular (non-lead) team member. */
   socialMediaMember: z.boolean().optional(),
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "A Social Media lead can only invite into the Social Media team" }, { status: 400 });
     }
     if (!socialMediaAdmin && !socialMediaMember) {
-      return NextResponse.json({ error: "Choose Social Media User or Social Media (Admin)" }, { status: 400 });
+      return NextResponse.json({ error: "Choose Social Media User or Social Media Lead" }, { status: 400 });
     }
   } else if (crmLeadInviting) {
     if (role !== "DEPARTMENT_USER") {
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "A CRM lead can only invite into the CRM team" }, { status: 400 });
     }
     if (!crmAdmin && !crmMember) {
-      return NextResponse.json({ error: "Choose CRM User or CRM (Admin)" }, { status: 400 });
+      return NextResponse.json({ error: "Choose CRM User or CRM Lead" }, { status: 400 });
     }
   } else if (customTeamLeadInviting) {
     if (role !== "DEPARTMENT_USER") {
