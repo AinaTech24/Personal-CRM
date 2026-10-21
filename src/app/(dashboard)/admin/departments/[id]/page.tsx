@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Tooltip } from "@/components/ui/tooltip";
+import { PageLoader } from "@/components/ui/page-loader";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/components/providers/toast-provider";
 import { IconSend, IconChevronLeft, IconInfo, IconShield, IconKey, IconDownload } from "@/components/icons";
@@ -159,7 +160,7 @@ export default function DepartmentDetailPage() {
   }
 
   if (!department) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+    return <PageLoader />;
   }
 
   return (

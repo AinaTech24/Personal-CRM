@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { GenericTeamConsole } from "@/components/teams/team-console";
 import { IconChevronLeft } from "@/components/icons";
+import { PageLoader } from "@/components/ui/page-loader";
 
 /** Social Media and CRM keep their own dedicated consoles — reached directly if someone links here anyway. */
 const SYSTEM_TEAM_HREF: Record<string, string> = {
@@ -50,7 +51,7 @@ export default function TeamDetailPage() {
   }
 
   if (!slug || SYSTEM_TEAM_HREF[slug]) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+    return <PageLoader />;
   }
 
   return (

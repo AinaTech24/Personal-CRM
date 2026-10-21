@@ -23,6 +23,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { SkeletonForm } from "@/components/ui/skeleton";
+import { PageLoader } from "@/components/ui/page-loader";
 import { IconPencil, IconTrash, IconCheck, IconX, IconPlus, IconShield, IconSend } from "@/components/icons";
 import { ManagePermissionsDialog } from "@/components/permissions/manage-permissions-dialog";
 import { useToast } from "@/components/providers/toast-provider";
@@ -116,7 +117,7 @@ export function GenericTeamConsole({ teamId }: { teamId: string }) {
     return <p className="text-sm text-destructive">{loadError}</p>;
   }
   if (!team) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+    return <PageLoader />;
   }
 
   return (
