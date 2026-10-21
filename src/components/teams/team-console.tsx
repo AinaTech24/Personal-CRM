@@ -223,14 +223,16 @@ function MembersTab({
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSaving, setInviteSaving] = useState(false);
 
-  // Same "{team} User" / "{team} (Admin)" wording CRM Team ("CRM User" /
-  // "CRM (Admin)") and Social Media Team use for their own invite picker,
+  // Same "{team} User" / "{team} Lead" wording CRM Team ("CRM User" /
+  // "CRM Lead") and Social Media Team use for their own invite picker,
   // built from this team's own name since a custom team has no fixed
-  // short code to hardcode the way those two do.
+  // short code to hardcode the way those two do. "Lead" rather than
+  // "(Admin)" so it's never mistaken for company Department Admin, a
+  // completely unrelated permission.
   const roleOptions = useMemo(
     () => [
       { value: "MEMBER", label: `${team.name} User` },
-      { value: "LEAD", label: `${team.name} (Admin)` },
+      { value: "LEAD", label: `${team.name} Lead` },
     ],
     [team.name]
   );

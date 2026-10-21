@@ -64,7 +64,7 @@ interface Candidate {
 
 const MEMBER_ROLE_OPTIONS = [
   { value: "MEMBER", label: "CRM User" },
-  { value: "ADMIN", label: "CRM (Admin)" },
+  { value: "ADMIN", label: "CRM Lead" },
 ];
 
 /**
@@ -336,7 +336,7 @@ function MembersTab({
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">{m.user.email}</td>
                     <td className="px-4 py-2.5">
-                      <Badge variant={m.isLead ? "default" : "secondary"}>{m.isLead ? "CRM (Admin)" : "CRM User"}</Badge>
+                      <Badge variant={m.isLead ? "default" : "secondary"}>{m.isLead ? "CRM Lead" : "CRM User"}</Badge>
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-end gap-1">
