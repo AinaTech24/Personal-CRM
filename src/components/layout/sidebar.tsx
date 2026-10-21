@@ -24,7 +24,6 @@ import {
   IconInvoices,
   IconBuilding,
   IconMail,
-  IconSettings,
   IconClock,
   IconChevronLeft,
   IconGrid,
@@ -82,7 +81,6 @@ const adminNav: NavItem[] = [
   { href: "/admin/clients", label: "Client Accounts", icon: IconBuilding },
   { href: "/forms", label: "Forms", icon: IconLayoutGrid },
   { href: "/admin/email", label: "Email (SMTP)", icon: IconMail },
-  { href: "/admin/settings", label: "Application", icon: IconSettings },
 ];
 
 /**
@@ -633,59 +631,88 @@ export function Sidebar({
       </div>
 
       <div className={cn("flex shrink-0 items-center gap-1.5 px-3 pb-2", collapsed && "justify-center")}>
-        {collapsed ? (
-          <Tooltip label="Expand to search modules" side="right">
-            <button
-              type="button"
-              onClick={onToggle}
-              aria-label="Expand to search modules"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:border-ring/50 hover:text-foreground"
+        {(() => {
+          // One persistent element across both states — never swapped for a
+          // separate fixed-size button — so its box keeps recalculating in
+          // step with the sidebar's own animating grid column (same reason
+          // the "smooth expand" case already worked), instead of popping to
+          // its collapsed size the instant `collapsed` flips, ahead of the
+          // sidebar actually finishing its shrink.
+          const capsule = (
+            <div
+              role={collapsed ? "button" : undefined}
+              tabIndex={collapsed ? 0 : undefined}
+              onClick={collapsed ? onToggle : undefined}
+              onKeyDown={
+                collapsed
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onToggle();
+                      }
+                    }
+                  : undefined
+              }
+              aria-label={collapsed ? "Expand to search modules" : undefined}
+              className={cn(
+                "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-background px-3 text-sm text-muted-foreground transition-colors focus-within:border-ring/50",
+                collapsed && "cursor-pointer justify-center px-0 hover:border-ring/50 hover:text-foreground"
+              )}
             >
-              <IconSearch className="h-4 w-4" />
-            </button>
-          </Tooltip>
-        ) : (
-          <>
-            <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-background px-3 text-sm text-muted-foreground transition-colors focus-within:border-ring/50">
               <IconSearch className="h-4 w-4 shrink-0" />
               <input
                 value={navSearch}
                 onChange={(e) => setNavSearch(e.target.value)}
                 placeholder="Search sidebar..."
                 aria-label="Search sidebar modules"
-                className="h-full min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
+                tabIndex={collapsed ? -1 : undefined}
+                className={cn(
+                  "h-full min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground transition-opacity duration-200",
+                  collapsed ? "w-0 opacity-0" : "opacity-100"
+                )}
               />
-              {navSearch ? (
-                <button
-                  type="button"
-                  onClick={() => setNavSearch("")}
-                  aria-label="Clear sidebar search"
-                  className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <IconX className="h-3.5 w-3.5" />
-                </button>
-              ) : (
-                <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70">
-                  Ctrl K
-                </span>
-              )}
+              {!collapsed &&
+                (navSearch ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setNavSearch("");
+                    }}
+                    aria-label="Clear sidebar search"
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <IconX className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
+                  <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70">
+                    Ctrl K
+                  </span>
+                ))}
             </div>
-            {navReady && !navSearchQuery && (
-              <Tooltip label={rearranging ? "Done rearranging" : "Rearrange modules"} side="bottom">
-                <button
-                  type="button"
-                  onClick={() => setRearranging((r) => !r)}
-                  aria-label={rearranging ? "Done rearranging" : "Rearrange modules"}
-                  className={cn(
-                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:border-ring/50 hover:text-foreground",
-                    rearranging && "border-ring/50 bg-accent text-foreground"
-                  )}
-                >
-                  {rearranging ? <IconCheck className="h-4 w-4" /> : <IconSliders className="h-4 w-4" />}
-                </button>
-              </Tooltip>
-            )}
-          </>
+          );
+          return collapsed ? (
+            <Tooltip label="Expand to search modules" side="right">
+              {capsule}
+            </Tooltip>
+          ) : (
+            capsule
+          );
+        })()}
+        {navReady && !navSearchQuery && !collapsed && (
+          <Tooltip label={rearranging ? "Done rearranging" : "Rearrange modules"} side="bottom">
+            <button
+              type="button"
+              onClick={() => setRearranging((r) => !r)}
+              aria-label={rearranging ? "Done rearranging" : "Rearrange modules"}
+              className={cn(
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:border-ring/50 hover:text-foreground",
+                rearranging && "border-ring/50 bg-accent text-foreground"
+              )}
+            >
+              {rearranging ? <IconCheck className="h-4 w-4" /> : <IconSliders className="h-4 w-4" />}
+            </button>
+          </Tooltip>
         )}
       </div>
 
