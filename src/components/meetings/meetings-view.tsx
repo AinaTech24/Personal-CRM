@@ -67,7 +67,7 @@ const STATUS_STYLE: Record<MeetingStatus, string> = {
 
 const isLink = (s: string) => /^https?:\/\//i.test(s.trim());
 
-export function MeetingsView({ scope }: { scope?: "social-media" | "crm" } = {}) {
+export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team:${string}` } = {}) {
   const toast = useToast();
   const meetingsUrl = scope ? `/api/meetings?scope=${scope}` : "/api/meetings";
   const [meetings, setMeetings] = useState<Meeting[]>([]);

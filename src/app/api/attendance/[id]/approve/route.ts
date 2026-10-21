@@ -3,8 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { requestDevice } from "@/lib/request-info";
-import { canManageAttendanceFor } from "@/lib/social-media";
-import { canManageCrmAttendanceFor } from "@/lib/crm-team";
+import { sharesLedTeamWith } from "@/lib/teams";
 import { moduleAccessScope } from "@/lib/module-permissions-store";
 
 const bodySchema = z.object({
@@ -13,8 +12,8 @@ const bodySchema = z.object({
 });
 
 /**
- * Approve or reject a record — a company Admin for anyone, or a Social
- * Media lead for someone on their own team. Approval finalizes it into the
+ * Approve or reject a record — a company Admin for anyone, or the lead of
+ * any team the record's owner belongs to. Approval finalizes it into the
  * summary; rejection excludes it. Both are audited.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -27,11 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const scope = await moduleAccessScope(actor, "ATTENDANCE", "UPDATE");
   const scopeAllowed = scope === "all" || (scope !== null && record.user.departmentId === scope.departmentId);
-  if (
-    !(await canManageAttendanceFor(actor, record.userId)) &&
-    !(await canManageCrmAttendanceFor(actor, record.userId)) &&
-    !scopeAllowed
-  ) {
+  if (!scopeAllowed && !(await sharesLedTeamWith(actor.id, record.userId))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

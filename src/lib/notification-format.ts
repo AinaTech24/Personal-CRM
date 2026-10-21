@@ -30,12 +30,15 @@ export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?:
   lead_reminder: IconLeads,
   task_assigned: IconTasks,
   task_comment: IconTasks,
+  task_attachment_added: IconTasks,
   task_reminder: IconTasks,
   project_assigned: IconProjects,
   project_member_added: IconProjects,
   project_supporter_added: IconProjects,
   project_task_assigned: IconProjects,
+  project_document_added: IconProjects,
   quotation_decided: IconQuotations,
+  quotation_submitted: IconQuotations,
   meeting_invited: IconCalendar,
   meeting_reminder: IconCalendar,
   check_in_reminder: IconClock,
@@ -59,12 +62,15 @@ export const NOTIFICATION_CATEGORY: Record<string, string> = {
   lead_reminder: "leads",
   task_assigned: "tasks",
   task_comment: "tasks",
+  task_attachment_added: "tasks",
   task_reminder: "tasks",
   project_assigned: "projects",
   project_member_added: "projects",
   project_supporter_added: "projects",
   project_task_assigned: "projects",
+  project_document_added: "projects",
   quotation_decided: "quotations",
+  quotation_submitted: "quotations",
   meeting_invited: "meetings",
   meeting_reminder: "meetings",
   check_in_reminder: "attendance",
@@ -117,6 +123,11 @@ export function notificationMessage(n: NotificationLike): string {
       const taskTitle = typeof n.payload.taskTitle === "string" ? n.payload.taskTitle : "a task";
       return `${actor} commented on the task "${taskTitle}"`;
     }
+    case "task_attachment_added": {
+      const taskTitle = typeof n.payload.taskTitle === "string" ? n.payload.taskTitle : "a task";
+      const fileName = typeof n.payload.fileName === "string" ? n.payload.fileName : "a file";
+      return `${actor} added "${fileName}" to the task "${taskTitle}"`;
+    }
     case "project_assigned": {
       const projectName = typeof n.payload.projectName === "string" ? n.payload.projectName : "a project";
       return `${actor} assigned you the project "${projectName}"`;
@@ -132,6 +143,15 @@ export function notificationMessage(n: NotificationLike): string {
     case "project_task_assigned": {
       const taskTitle = typeof n.payload.taskTitle === "string" ? n.payload.taskTitle : "a task";
       return `${actor} assigned you to the project task "${taskTitle}"`;
+    }
+    case "project_document_added": {
+      const fileName = typeof n.payload.fileName === "string" ? n.payload.fileName : "a document";
+      const projectName = typeof n.payload.projectName === "string" ? n.payload.projectName : "a project";
+      return `${actor} added "${fileName}" to "${projectName}"`;
+    }
+    case "quotation_submitted": {
+      const number = typeof n.payload.quotationNumber === "string" ? n.payload.quotationNumber : "a quotation";
+      return `${actor} sent quotation ${number} for approval`;
     }
     case "quotation_decided": {
       const number = typeof n.payload.quotationNumber === "string" ? n.payload.quotationNumber : "a quotation";
@@ -242,16 +262,19 @@ export function notificationVisual(n: NotificationLike): NotificationVisual {
 
 export function notificationHref(n: NotificationLike): string | null {
   if (n.type === "lead_assigned" || n.type === "lead_reminder") return "/leads";
-  if (n.type === "task_assigned" || n.type === "task_comment" || n.type === "task_reminder") return "/tasks";
+  if (n.type === "task_assigned" || n.type === "task_comment" || n.type === "task_attachment_added" || n.type === "task_reminder") {
+    return "/tasks";
+  }
   if (
     n.type === "project_assigned" ||
     n.type === "project_member_added" ||
     n.type === "project_supporter_added" ||
-    n.type === "project_task_assigned"
+    n.type === "project_task_assigned" ||
+    n.type === "project_document_added"
   ) {
     return typeof n.payload.projectId === "string" ? `/projects/${n.payload.projectId}` : "/projects";
   }
-  if (n.type === "quotation_decided") return "/quotations";
+  if (n.type === "quotation_decided" || n.type === "quotation_submitted") return "/quotations";
   if (n.type === "meeting_invited" || n.type === "meeting_reminder") return "/meetings";
   if (n.type === "check_in_reminder" || n.type === "check_out_reminder") return "/attendance";
   if (n.type === "social_client_assigned") {

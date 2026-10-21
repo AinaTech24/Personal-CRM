@@ -64,7 +64,7 @@ const PRIORITY_VARIANT = {
   URGENT: "destructive",
 } as const;
 
-export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
+export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:${string}` } = {}) {
   const leadsUrl = scope ? `/api/leads?scope=${scope}` : "/api/leads";
   const router = useRouter();
   const toast = useToast();
@@ -96,8 +96,10 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
 
   const loadLeads = useCallback(async () => {
     const res = await fetch(leadsUrl);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (res.ok) setLeads(data.leads);
+    else toast.error("Couldn't load leads", data.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadsUrl]);
 
   const loadAll = useCallback(async () => {
@@ -109,23 +111,27 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" } = {}) {
         fetch("/api/auth/me"),
       ]);
       const [leadsData, usersData, meData] = await Promise.all([
-        leadsRes.json(),
-        usersRes.json(),
-        meRes.json(),
+        leadsRes.json().catch(() => ({})),
+        usersRes.json().catch(() => ({})),
+        meRes.json().catch(() => ({})),
       ]);
       if (leadsRes.ok) setLeads(leadsData.leads);
+      else toast.error("Couldn't load leads", leadsData.error);
       if (usersRes.ok) setAssignableUsers(usersData.users);
       if (meRes.ok) setCurrentUser(meData.user);
 
       const isAdmin = meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN";
       if (isAdmin) {
         const deptRes = await fetch("/api/departments");
-        const deptData = await deptRes.json();
+        const deptData = await deptRes.json().catch(() => ({}));
         if (deptRes.ok) setDepartments(deptData.departments);
       }
+    } catch {
+      toast.error("Couldn't load leads", "Check your connection and try again.");
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadsUrl]);
 
   useEffect(() => {

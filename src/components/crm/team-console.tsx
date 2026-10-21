@@ -9,6 +9,7 @@ import {
   DialogBody,
   DialogFooter,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,10 +20,10 @@ import { Badge } from "@/components/ui/badge";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { SkeletonForm } from "@/components/ui/skeleton";
 import { IconPencil, IconTrash, IconSend, IconCheck, IconX, IconPlus } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
-import { userOptionLabel } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/attendance/status-badge";
 import { HALF_DAY_REASON_LABEL, STATUS_LABEL } from "@/lib/attendance-ui";
@@ -79,15 +80,33 @@ const MEMBER_ROLE_OPTIONS = [
 export function CrmTeamConsole() {
   const [tab, setTab] = useState<TabKey>("members");
   const [forbidden, setForbidden] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-xl font-semibold">CRM Team</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage who&apos;s on the team, and see their attendance and activity across the whole CRM — scoped to this
-          team only.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">CRM Team</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage who&apos;s on the team, and see their attendance and activity across the whole CRM — scoped to
+            this team only.
+          </p>
+        </div>
+        {tab === "members" && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Tooltip label="Add member" side="bottom">
+              <Button size="icon" variant="outline" onClick={() => setAddOpen(true)} aria-label="Add member">
+                <IconPlus className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Invite new user" side="bottom">
+              <Button size="icon" variant="outline" onClick={() => setInviteOpen(true)} aria-label="Invite new user">
+                <IconSend className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-1">
@@ -114,7 +133,15 @@ export function CrmTeamConsole() {
         </Card>
       ) : (
         <>
-          {tab === "members" && <MembersTab onForbidden={() => setForbidden(true)} />}
+          {tab === "members" && (
+            <MembersTab
+              onForbidden={() => setForbidden(true)}
+              addOpen={addOpen}
+              setAddOpen={setAddOpen}
+              inviteOpen={inviteOpen}
+              setInviteOpen={setInviteOpen}
+            />
+          )}
           {tab === "leads" && <LeadsBoard scope="crm" />}
           {tab === "tasks" && <TasksBoard scope="crm" />}
           {tab === "meetings" && <MeetingsView scope="crm" />}
@@ -131,22 +158,45 @@ export function CrmTeamConsole() {
 
 // ---------- Members ----------
 
-function MembersTab({ onForbidden }: { onForbidden: () => void }) {
+function MembersTab({
+  onForbidden,
+  addOpen,
+  setAddOpen,
+  inviteOpen,
+  setInviteOpen,
+}: {
+  onForbidden: () => void;
+  addOpen: boolean;
+  setAddOpen: (v: boolean) => void;
+  inviteOpen: boolean;
+  setInviteOpen: (v: boolean) => void;
+}) {
   const toast = useToast();
   const [members, setMembers] = useState<Member[] | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [addUserId, setAddUserId] = useState("");
-  const [adding, setAdding] = useState(false);
+  const [query, setQuery] = useState("");
+  const [adding, setAdding] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<Member | null>(null);
   const [editTarget, setEditTarget] = useState<Member | null>(null);
   const [editRole, setEditRole] = useState("MEMBER");
   const [editSaving, setEditSaving] = useState(false);
 
-  const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("MEMBER");
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSaving, setInviteSaving] = useState(false);
+
+  // Reset each dialog's own transient state whenever the header icon opens it.
+  useEffect(() => {
+    if (addOpen) setQuery("");
+  }, [addOpen]);
+  useEffect(() => {
+    if (inviteOpen) {
+      setInviteEmail("");
+      setInviteRole("MEMBER");
+      setInviteError(null);
+    }
+  }, [inviteOpen]);
 
   const load = useCallback(async () => {
     const [membersRes, candidatesRes] = await Promise.all([fetch("/api/crm/members"), fetch("/api/crm/team-candidates")]);
@@ -162,32 +212,31 @@ function MembersTab({ onForbidden }: { onForbidden: () => void }) {
   }, [load]);
 
   const memberIds = new Set((members ?? []).map((m) => m.userId));
-  const candidateOptions = candidates.filter((u) => !memberIds.has(u.id)).map((u) => ({ value: u.id, label: userOptionLabel(u) }));
+  const filteredCandidates = useMemo(() => {
+    const available = candidates.filter((u) => !memberIds.has(u.id));
+    const q = query.trim().toLowerCase();
+    if (!q) return available;
+    return available.filter(
+      (c) => `${c.name} ${c.surname ?? ""}`.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidates, query, members]);
 
-  async function addMember() {
-    if (!addUserId) return;
-    setAdding(true);
+  async function addMember(c: Candidate) {
+    setAdding(c.id);
     try {
       const res = await fetch("/api/crm/members", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: addUserId }),
+        body: JSON.stringify({ userId: c.id }),
       });
       const data = await res.json();
       if (!res.ok) return toast.error("Couldn't add member", data.error);
-      setAddUserId("");
-      toast.success("Added to CRM team");
+      toast.success("Added to CRM team", `${c.name} ${c.surname ?? ""}`.trim());
       load();
     } finally {
-      setAdding(false);
+      setAdding(null);
     }
-  }
-
-  function openInvite() {
-    setInviteEmail("");
-    setInviteRole("MEMBER");
-    setInviteError(null);
-    setInviteOpen(true);
   }
 
   async function submitInvite(e: React.FormEvent) {
@@ -262,27 +311,6 @@ function MembersTab({ onForbidden }: { onForbidden: () => void }) {
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 p-5">
-          <div className="w-64">
-            <Label htmlFor="crm-team-add-existing" className="mb-1.5 block text-xs text-muted-foreground">
-              Add an existing user
-            </Label>
-            <Dropdown id="crm-team-add-existing" value={addUserId} onChange={setAddUserId} placeholder="Choose a user" options={candidateOptions} />
-          </div>
-          <Tooltip label="Add to team" side="bottom">
-            <Button size="icon" onClick={addMember} disabled={!addUserId || adding} aria-label="Add to team">
-              <IconPlus className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-          <Tooltip label="Invite new user" side="bottom">
-            <Button size="icon" variant="outline" className="ml-auto" onClick={openInvite} aria-label="Invite new user">
-              <IconSend className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-        </CardContent>
-      </Card>
-
-      <Card>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -341,6 +369,42 @@ function MembersTab({ onForbidden }: { onForbidden: () => void }) {
           </table>
         </div>
       </Card>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add to CRM Team</DialogTitle>
+            <DialogDescription>Pick someone already in Aina CRM.</DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search people…" autoFocus />
+            <div className="mt-2 flex max-h-72 flex-col gap-0.5 overflow-y-auto">
+              {filteredCandidates.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No one to show.</p>
+              ) : (
+                filteredCandidates.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    disabled={adding === c.id}
+                    onClick={() => addMember(c)}
+                    className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-primary/5 disabled:opacity-50"
+                  >
+                    <UserAvatar name={c.name} className="h-7 w-7 shrink-0 text-xs" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">
+                        {c.name} {c.surname ?? ""}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">{c.email}</span>
+                    </span>
+                    {adding === c.id && <span className="text-xs text-muted-foreground">Adding...</span>}
+                  </button>
+                ))
+              )}
+            </div>
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editTarget} onOpenChange={(v) => !v && setEditTarget(null)}>
         <DialogContent>
@@ -433,8 +497,8 @@ const HALF_DAY_REASON_OPTIONS = Object.entries(HALF_DAY_REASON_LABEL).map(([valu
  * Same mark/approve/reject/override actions a company Admin has in
  * /admin/attendance, scoped here to the lead's own team — the backing
  * routes (PATCH /api/attendance/[id], POST .../approve) already enforce
- * that scoping server-side (see canManageCrmAttendanceFor in
- * src/lib/crm-team.ts), this is just the matching UI.
+ * that scoping server-side (see sharesLedTeamWith in src/lib/teams.ts),
+ * this is just the matching UI.
  */
 function AttendanceTab() {
   const toast = useToast();

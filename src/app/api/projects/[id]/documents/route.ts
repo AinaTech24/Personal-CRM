@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getProjectForUser, logProjectActivity } from "@/lib/projects";
 import { saveProjectDocument, UploadValidationError } from "@/lib/uploads";
+import { notifyAndPush } from "@/lib/notify";
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -46,6 +47,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   await logProjectActivity(id, user.id, "document_added", { fileName });
+
+  // The people actually responsible for the project — creator and assignee
+  // — hear about a new document; not every member, to avoid a notification
+  // per file for a project with a large roster.
+  const recipientIds = new Set([access.createdById, ...(access.assignedToId ? [access.assignedToId] : [])]);
+  recipientIds.delete(user.id);
+  await Promise.all(
+    Array.from(recipientIds).map((recipientId) =>
+      notifyAndPush(
+        recipientId,
+        "project_document_added",
+        { projectId: id, projectName: access.name, fileName: displayName, actorName: user.name },
+        {
+          title: "New project document",
+          body: `${user.name} added "${displayName}" to "${access.name}"`,
+          url: `/projects/${id}`,
+          tag: "project-document-added",
+        }
+      )
+    )
+  );
 
   return NextResponse.json({ document }, { status: 201 });
 }

@@ -54,18 +54,6 @@ export async function crmTeamOnlyScopeFor(user: PermissionUser): Promise<string[
 }
 
 /**
- * Whether `user` may mark/edit/approve another user's attendance for the CRM
- * Team — a company Admin/Super Admin always can; a CRM lead can, but only
- * for someone on their own team. Mirrors social-media.ts's
- * canManageAttendanceFor.
- */
-export async function canManageCrmAttendanceFor(user: PermissionUser, targetUserId: string): Promise<boolean> {
-  if (isAdmin(user)) return true;
-  const teamUserIds = await crmTeamScopeFor(user);
-  return !!teamUserIds && teamUserIds.includes(targetUserId);
-}
-
-/**
  * One-call guard for routes a CRM Team member (regular or lead, not a
  * company admin) shouldn't reach — mirrors isRestrictedFromModule. Not
  * currently applied to any module (unlike Social Media's Quotations
