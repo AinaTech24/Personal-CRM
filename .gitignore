@@ -47,3 +47,4 @@ next-env.d.ts
 
 # scratch/dev-only working files (may contain session cookies, temp scripts, logs)
 /scratchpad
+/.scratch

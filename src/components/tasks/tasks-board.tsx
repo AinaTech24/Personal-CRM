@@ -63,6 +63,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   const [selectedTask, setSelectedTask] = useState<TaskSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TaskSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [forbidden, setForbidden] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
   const [view, setView] = useState<ViewMode>("pipeline");
@@ -79,8 +80,14 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   const loadTasks = useCallback(async () => {
     const res = await fetch(tasksUrl);
     const data = await res.json().catch(() => ({}));
-    if (res.ok) setTasks(data.tasks);
-    else toast.error("Couldn't load tasks", data.error);
+    if (res.ok) {
+      setTasks(data.tasks);
+      setForbidden(false);
+    } else if (scope && res.status === 403) {
+      setForbidden(true);
+    } else {
+      toast.error("Couldn't load tasks", data.error);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasksUrl]);
 
@@ -97,8 +104,14 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         usersRes.json().catch(() => ({})),
         meRes.json().catch(() => ({})),
       ]);
-      if (tasksRes.ok) setTasks(tasksData.tasks);
-      else toast.error("Couldn't load tasks", tasksData.error);
+      if (tasksRes.ok) {
+        setTasks(tasksData.tasks);
+        setForbidden(false);
+      } else if (scope && tasksRes.status === 403) {
+        setForbidden(true);
+      } else {
+        toast.error("Couldn't load tasks", tasksData.error);
+      }
       if (usersRes.ok) setAssignableUsers(usersData.users);
       if (meRes.ok) {
         setCurrentUserName(meData.user?.name);
@@ -291,6 +304,15 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   }
 
   const allFilteredSelected = filteredTasks.length > 0 && filteredTasks.every((t) => selectedIds.has(t.id));
+
+  if (forbidden) {
+    return (
+      <Card className="flex h-full flex-col items-center justify-center gap-1 py-16 text-center">
+        <p className="text-sm font-medium">You don&apos;t have access to this team&apos;s Tasks</p>
+        <p className="text-sm text-muted-foreground">Ask your team lead or a company admin for access.</p>
+      </Card>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">

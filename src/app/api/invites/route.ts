@@ -8,6 +8,7 @@ import { sendMail, inviteEmailHtml } from "@/lib/mailer";
 import { getAppUrl } from "@/lib/app-settings";
 import { getSocialMembership, isSocialMediaLead } from "@/lib/social-media";
 import { getCrmMembership, isCrmLead } from "@/lib/crm-team";
+import { getUserTeamMembership } from "@/lib/teams";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -20,6 +21,9 @@ const bodySchema = z.object({
   /** Same idea as socialMediaAdmin/socialMediaMember, for the CRM Team's own invite picker. */
   crmAdmin: z.boolean().optional(),
   crmMember: z.boolean().optional(),
+  /** Any other (non-system) team's own "Invite new user" — the team to join, and whether as its lead. */
+  teamId: z.string().optional(),
+  teamIsLead: z.boolean().optional(),
   /** Grants Department Admin for `departmentId` on acceptance — company Admin only, see the route for why. */
   inviteeIsDepartmentAdmin: z.boolean().optional(),
 });
@@ -47,14 +51,15 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
-  const { email, role, departmentId, socialMediaAdmin, socialMediaMember, crmAdmin, crmMember } = parsed.data;
+  const { email, role, departmentId, socialMediaAdmin, socialMediaMember, crmAdmin, crmMember, teamId, teamIsLead } = parsed.data;
   let { inviteeIsDepartmentAdmin } = parsed.data;
 
-  // A company Admin/Super Admin can invite anyone into anything. Three
+  // A company Admin/Super Admin can invite anyone into anything. Four
   // non-admin carve-outs, each only into the inviter's own team/department,
   // each forced to DEPARTMENT_USER — none of them is a side door into "any
   // non-admin can invite anyone":
   // - a Social Media or CRM lead, into their own team;
+  // - the lead of any other (non-system) team, into that same team;
   // - a Department Admin, into their own department — but they can't also
   //   grant the new invitee Department Admin; only a company Admin can mint
   //   another one.
@@ -62,8 +67,12 @@ export async function POST(req: NextRequest) {
   const crmMembership = await getCrmMembership(user.id);
   const socialLeadInviting = !isAdmin(user) && isSocialMediaLead(user, socialMembership);
   const crmLeadInviting = !isAdmin(user) && !socialLeadInviting && isCrmLead(user, crmMembership);
-  const deptAdminInviting = !isAdmin(user) && !socialLeadInviting && !crmLeadInviting && isDepartmentAdmin(user);
-  const leadInviting = socialLeadInviting || crmLeadInviting || deptAdminInviting;
+  const teamMembership =
+    !isAdmin(user) && !socialLeadInviting && !crmLeadInviting && teamId ? await getUserTeamMembership(teamId, user.id) : null;
+  const customTeamLeadInviting = !!teamMembership?.isLead;
+  const deptAdminInviting =
+    !isAdmin(user) && !socialLeadInviting && !crmLeadInviting && !customTeamLeadInviting && isDepartmentAdmin(user);
+  const leadInviting = socialLeadInviting || crmLeadInviting || customTeamLeadInviting || deptAdminInviting;
   if (!canInviteUsers(user) && !leadInviting) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -88,6 +97,13 @@ export async function POST(req: NextRequest) {
     if (!crmAdmin && !crmMember) {
       return NextResponse.json({ error: "Choose CRM User or CRM (Admin)" }, { status: 400 });
     }
+  } else if (customTeamLeadInviting) {
+    if (role !== "DEPARTMENT_USER") {
+      return NextResponse.json({ error: "Only a company Admin can invite as Admin or Super Admin" }, { status: 403 });
+    }
+    if (departmentId) {
+      return NextResponse.json({ error: "A team lead can only invite into their own team" }, { status: 400 });
+    }
   } else if (deptAdminInviting) {
     if (role !== "DEPARTMENT_USER") {
       return NextResponse.json({ error: "Only a company Admin can invite as Admin or Super Admin" }, { status: 403 });
@@ -100,12 +116,34 @@ export async function POST(req: NextRequest) {
     inviteeIsDepartmentAdmin = false;
   }
 
-  // Only a company Admin may grant Social Media / CRM access through a
-  // Department Admin's invite — those modules are unrelated to a department.
+  // A non-admin can only ever grant membership on a team whose lead they
+  // actually are (teamMembership, looked up above, already proves that) —
+  // a company Admin may target any team id directly, system ones included,
+  // though the console UI only ever offers this for a non-system team.
+  if (teamId && !isAdmin(user) && !customTeamLeadInviting) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Only a company Admin may grant Social Media / CRM / another team's
+  // access through a Department Admin's invite — those modules are
+  // unrelated to a department.
   const grantSocialMediaAdmin = deptAdminInviting ? false : socialMediaAdmin;
   const grantSocialMediaMember = deptAdminInviting ? false : socialMediaMember;
   const grantCrmAdmin = deptAdminInviting ? false : crmAdmin;
   const grantCrmMember = deptAdminInviting ? false : crmMember;
+  const grantTeamId = deptAdminInviting ? null : (teamId ?? null);
+  const grantTeamIsLead = deptAdminInviting ? false : !!teamIsLead;
+
+  // Social Media/CRM already provision membership through their own
+  // dedicated flags above — this generic path is for every other team, so a
+  // system team id here (accidental or not) would double up on that.
+  if (grantTeamId) {
+    const targetTeam = await db.team.findUnique({ where: { id: grantTeamId }, select: { isSystem: true } });
+    if (!targetTeam) return NextResponse.json({ error: "Team not found" }, { status: 404 });
+    if (targetTeam.isSystem) {
+      return NextResponse.json({ error: "Use that team's own invite option instead" }, { status: 400 });
+    }
+  }
 
   const smtp = await db.smtpSettings.findUnique({ where: { id: "default" }, select: { allowExternalInvites: true } });
   if (!isAllowedInviteEmail(email, smtp?.allowExternalInvites ?? false)) {
@@ -143,6 +181,8 @@ export async function POST(req: NextRequest) {
       socialMediaMember: grantSocialMediaMember ?? false,
       crmAdmin: grantCrmAdmin ?? false,
       crmMember: grantCrmMember ?? false,
+      teamId: grantTeamId,
+      teamIsLead: grantTeamIsLead,
       inviteeIsDepartmentAdmin: inviteeIsDepartmentAdmin ?? false,
       token,
       invitedById: user.id,

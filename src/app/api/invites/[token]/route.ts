@@ -89,6 +89,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       if (crmTeam && (invite.crmAdmin || invite.crmMember)) {
         await tx.teamMember.create({ data: { teamId: crmTeam.id, userId: created.id, isLead: invite.crmAdmin } });
       }
+      if (invite.teamId) {
+        await tx.teamMember.create({ data: { teamId: invite.teamId, userId: created.id, isLead: invite.teamIsLead } });
+      }
       return created;
     });
   } catch (err) {

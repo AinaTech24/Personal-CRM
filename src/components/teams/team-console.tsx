@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogBody,
+  DialogFooter,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
@@ -22,7 +23,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { SkeletonForm } from "@/components/ui/skeleton";
-import { IconPencil, IconTrash, IconCheck, IconX, IconPlus, IconShield } from "@/components/icons";
+import { IconPencil, IconTrash, IconCheck, IconX, IconPlus, IconShield, IconSend } from "@/components/icons";
 import { ManagePermissionsDialog } from "@/components/permissions/manage-permissions-dialog";
 import { useToast } from "@/components/providers/toast-provider";
 import { cn } from "@/lib/utils";
@@ -88,6 +89,7 @@ export function GenericTeamConsole({ teamId }: { teamId: string }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [meId, setMeId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const load = useCallback(async () => {
     const [teamRes, meRes] = await Promise.all([fetch(`/api/teams/${teamId}`), fetch("/api/auth/me")]);
@@ -132,10 +134,18 @@ export function GenericTeamConsole({ teamId }: { teamId: string }) {
           </p>
         </div>
         {tab === "members" && canManage && (
-          <Button onClick={() => setAddOpen(true)}>
-            <IconPlus className="mr-2 h-4 w-4" />
-            Add member
-          </Button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Tooltip label="Add member" side="bottom">
+              <Button size="icon" variant="outline" onClick={() => setAddOpen(true)} aria-label="Add member">
+                <IconPlus className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Invite new user" side="bottom">
+              <Button size="icon" variant="outline" onClick={() => setInviteOpen(true)} aria-label="Invite new user">
+                <IconSend className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+          </div>
         )}
       </div>
 
@@ -163,6 +173,8 @@ export function GenericTeamConsole({ teamId }: { teamId: string }) {
           canManage={canManage}
           addOpen={addOpen}
           setAddOpen={setAddOpen}
+          inviteOpen={inviteOpen}
+          setInviteOpen={setInviteOpen}
           reload={load}
         />
       )}
@@ -179,6 +191,11 @@ export function GenericTeamConsole({ teamId }: { teamId: string }) {
 
 // ---------- Members ----------
 
+const TEAM_MEMBER_ROLE_OPTIONS = [
+  { value: "MEMBER", label: "Member" },
+  { value: "LEAD", label: "Lead" },
+];
+
 function MembersTab({
   teamId,
   team,
@@ -186,6 +203,8 @@ function MembersTab({
   canManage,
   addOpen,
   setAddOpen,
+  inviteOpen,
+  setInviteOpen,
   reload,
 }: {
   teamId: string;
@@ -194,6 +213,8 @@ function MembersTab({
   canManage: boolean;
   addOpen: boolean;
   setAddOpen: (v: boolean) => void;
+  inviteOpen: boolean;
+  setInviteOpen: (v: boolean) => void;
   reload: () => void;
 }) {
   const toast = useToast();
@@ -203,6 +224,11 @@ function MembersTab({
   const [permsUser, setPermsUser] = useState<{ id: string; name: string; surname?: string | null } | null>(null);
   const [removing, setRemoving] = useState<Member | null>(null);
 
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("MEMBER");
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSaving, setInviteSaving] = useState(false);
+
   useEffect(() => {
     if (!addOpen) return;
     setQuery("");
@@ -211,6 +237,47 @@ function MembersTab({
       .then((res) => res.json().catch(() => ({})).then((data) => ({ ok: res.ok, data })))
       .then(({ ok, data }) => setCandidates(ok ? data.users : []));
   }, [addOpen, teamId]);
+
+  useEffect(() => {
+    if (!inviteOpen) return;
+    setInviteEmail("");
+    setInviteRole("MEMBER");
+    setInviteError(null);
+  }, [inviteOpen]);
+
+  async function submitInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setInviteError(null);
+    setInviteSaving(true);
+    try {
+      const res = await fetch("/api/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: inviteEmail,
+          role: "DEPARTMENT_USER",
+          departmentId: null,
+          teamId,
+          teamIsLead: inviteRole === "LEAD",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setInviteError(data.error ?? "Something went wrong");
+        toast.error("Couldn't send invite", data.error);
+        return;
+      }
+      setInviteOpen(false);
+      if (data.emailSent === false) {
+        toast.error("Invite created, but the email couldn't be sent", "Copy the link and share it manually.");
+        if (data.acceptUrl) navigator.clipboard.writeText(data.acceptUrl).catch(() => {});
+      } else {
+        toast.success(`Invite sent to ${inviteEmail}`);
+      }
+    } finally {
+      setInviteSaving(false);
+    }
+  }
 
   const filteredCandidates = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -350,6 +417,39 @@ function MembersTab({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invite a new user</DialogTitle>
+            <DialogDescription>Email them an invite straight into {team.name}.</DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <form id="team-invite-form" onSubmit={submitInvite} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="generic-team-invite-email">Email</Label>
+                <Input
+                  id="generic-team-invite-email"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="generic-team-invite-role">Role</Label>
+                <Dropdown id="generic-team-invite-role" value={inviteRole} onChange={setInviteRole} options={TEAM_MEMBER_ROLE_OPTIONS} />
+              </div>
+              {inviteError && <p className="text-sm text-destructive">{inviteError}</p>}
+            </form>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="submit" form="team-invite-form" disabled={inviteSaving}>
+              {inviteSaving ? "Sending..." : "Send invite"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ManagePermissionsDialog user={permsUser} onOpenChange={(open) => !open && setPermsUser(null)} />
 
       <ConfirmDialog
@@ -405,6 +505,7 @@ const HALF_DAY_REASON_OPTIONS = Object.entries(HALF_DAY_REASON_LABEL).map(([valu
 function AttendanceTab({ teamId }: { teamId: string }) {
   const toast = useToast();
   const [rows, setRows] = useState<AttendanceRow[] | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -416,6 +517,7 @@ function AttendanceTab({ teamId }: { teamId: string }) {
     if (to) params.set("to", to);
     const res = await fetch(`/api/teams/${teamId}/attendance?${params.toString()}`);
     const data = await res.json().catch(() => ({}));
+    if (res.status === 403) return setForbidden(true);
     if (!res.ok) return toast.error("Couldn't load attendance", data.error);
     setRows(data.records ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -440,6 +542,15 @@ function AttendanceTab({ teamId }: { teamId: string }) {
     } finally {
       setBusyId(null);
     }
+  }
+
+  if (forbidden) {
+    return (
+      <Card className="flex flex-col items-center justify-center gap-1 py-16 text-center">
+        <p className="text-sm font-medium">You don&apos;t have access to this team&apos;s Attendance</p>
+        <p className="text-sm text-muted-foreground">Ask your team lead or a company admin for access.</p>
+      </Card>
+    );
   }
 
   if (rows === null) return <SkeletonForm fields={3} />;
@@ -666,11 +777,13 @@ const ACTION_STYLE: Record<string, string> = {
 function ActivityTab({ teamId }: { teamId: string }) {
   const toast = useToast();
   const [logs, setLogs] = useState<ActivityLog[] | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/teams/${teamId}/activity`);
     const data = await res.json().catch(() => ({}));
+    if (res.status === 403) return setForbidden(true);
     if (!res.ok) return toast.error("Couldn't load team activity", data.error);
     setLogs(data.logs ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -687,6 +800,15 @@ function ActivityTab({ teamId }: { teamId: string }) {
       (l) => l.summary.toLowerCase().includes(q) || l.model.toLowerCase().includes(q) || (l.actorName ?? "").toLowerCase().includes(q)
     );
   }, [logs, query]);
+
+  if (forbidden) {
+    return (
+      <Card className="flex flex-col items-center justify-center gap-1 py-16 text-center">
+        <p className="text-sm font-medium">You don&apos;t have access to this team&apos;s Activity</p>
+        <p className="text-sm text-muted-foreground">Ask your team lead or a company admin for access.</p>
+      </Card>
+    );
+  }
 
   if (logs === null) return <SkeletonForm fields={3} />;
 

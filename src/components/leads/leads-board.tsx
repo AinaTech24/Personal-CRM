@@ -77,6 +77,7 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   const [selectedLead, setSelectedLead] = useState<LeadSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LeadSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [forbidden, setForbidden] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<LeadStatus | null>(null);
   const [view, setView] = useState<ViewMode>("pipeline");
@@ -97,8 +98,14 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   const loadLeads = useCallback(async () => {
     const res = await fetch(leadsUrl);
     const data = await res.json().catch(() => ({}));
-    if (res.ok) setLeads(data.leads);
-    else toast.error("Couldn't load leads", data.error);
+    if (res.ok) {
+      setLeads(data.leads);
+      setForbidden(false);
+    } else if (scope && res.status === 403) {
+      setForbidden(true);
+    } else {
+      toast.error("Couldn't load leads", data.error);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadsUrl]);
 
@@ -115,8 +122,14 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         usersRes.json().catch(() => ({})),
         meRes.json().catch(() => ({})),
       ]);
-      if (leadsRes.ok) setLeads(leadsData.leads);
-      else toast.error("Couldn't load leads", leadsData.error);
+      if (leadsRes.ok) {
+        setLeads(leadsData.leads);
+        setForbidden(false);
+      } else if (scope && leadsRes.status === 403) {
+        setForbidden(true);
+      } else {
+        toast.error("Couldn't load leads", leadsData.error);
+      }
       if (usersRes.ok) setAssignableUsers(usersData.users);
       if (meRes.ok) setCurrentUser(meData.user);
 
@@ -362,6 +375,15 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   }
 
   const allFilteredSelected = filteredLeads.length > 0 && filteredLeads.every((l) => selectedIds.has(l.id));
+
+  if (forbidden) {
+    return (
+      <Card className="flex h-full flex-col items-center justify-center gap-1 py-16 text-center">
+        <p className="text-sm font-medium">You don&apos;t have access to this team&apos;s Leads</p>
+        <p className="text-sm text-muted-foreground">Ask your team lead or a company admin for access.</p>
+      </Card>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">
