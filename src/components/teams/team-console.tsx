@@ -82,7 +82,6 @@ function fullName(u: { name: string; surname?: string | null }) {
  * /api/teams/[id]/attendance + /activity routes.
  */
 export function GenericTeamConsole({ teamId }: { teamId: string }) {
-  const toast = useToast();
   const [tab, setTab] = useState<TabKey>("members");
   const [team, setTeam] = useState<TeamDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -104,7 +103,6 @@ export function GenericTeamConsole({ teamId }: { teamId: string }) {
       setIsAdmin(me?.role === "SUPER_ADMIN" || me?.role === "ADMIN");
       setMeId(me?.id ?? null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId]);
 
   useEffect(() => {
