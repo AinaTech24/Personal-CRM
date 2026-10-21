@@ -655,8 +655,14 @@ export function Sidebar({
               }
               aria-label={collapsed ? "Expand to search modules" : undefined}
               className={cn(
-                "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-background px-3 text-sm text-muted-foreground transition-colors focus-within:border-ring/50",
-                collapsed && "cursor-pointer justify-center px-0 hover:border-ring/50 hover:text-foreground"
+                // An explicit width (100% ↔ 36px) rather than flex-1: flex-grow
+                // kept claiming a few extra pixels of leftover row space beyond
+                // what the collapsed circle needed, landing on a ~40×36 oval
+                // instead of a true circle. Transitioning `width` directly
+                // settles on an exact 36×36 every time, and still animates
+                // smoothly since it's a real CSS transition, not a discrete swap.
+                "box-border flex h-9 w-full min-w-0 items-center gap-2 rounded-full border border-border bg-background px-3 text-sm text-muted-foreground transition-[width,padding,color,background-color,border-color] duration-300 ease-in-out focus-within:border-ring/50",
+                collapsed && "w-9 cursor-pointer justify-center px-0 hover:border-ring/50 hover:text-foreground"
               )}
             >
               <IconSearch className="h-4 w-4 shrink-0" />
