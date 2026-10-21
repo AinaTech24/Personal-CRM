@@ -95,16 +95,6 @@ function Highlight({ text, query }: { text: string; query: string }) {
 const RECENT_SEARCHES_KEY = "aina-recent-searches";
 const RECENT_PAGES_KEY = "aina-recent-pages";
 
-/**
- * Opens the single app-wide CommandPalette instance (mounted once in
- * Topbar) from anywhere else in the tree — the sidebar's search capsule,
- * say — without lifting its dialog state into a context. A plain DOM event
- * is enough for a one-way "open this" signal between unrelated components.
- */
-export function openCommandPalette() {
-  window.dispatchEvent(new Event("aina-open-search"));
-}
-
 function loadList<T>(key: string): T[] {
   try {
     return JSON.parse(localStorage.getItem(key) || "[]");
@@ -123,8 +113,7 @@ export function CommandPalette() {
   const [recentPages, setRecentPages] = useState<SearchResult[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Global ⌘K / Ctrl+K to open, plus the same open signal any other trigger
-  // (the sidebar's search capsule) can fire via openCommandPalette().
+  // Global ⌘K / Ctrl+K to open.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -132,13 +121,8 @@ export function CommandPalette() {
         setOpen((o) => !o);
       }
     };
-    const onExternalOpen = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    window.addEventListener("aina-open-search", onExternalOpen);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("aina-open-search", onExternalOpen);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   useEffect(() => {
