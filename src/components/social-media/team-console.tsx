@@ -146,7 +146,7 @@ export function SocialMediaTeamConsole() {
           {tab === "meetings" && <MeetingsView scope="social-media" />}
           {tab === "projects" && <ProjectsList scope="social-media" />}
           {tab === "attendance" && <AttendanceTab />}
-          {tab === "leave" && <LeaveAdminView canEditDelete={false} />}
+          {tab === "leave" && <LeaveAdminView canEditDelete={false} teamScope="social-media" />}
           {tab === "activity" && <ActivityTab />}
         </>
       )}

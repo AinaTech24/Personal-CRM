@@ -148,7 +148,7 @@ export function CrmTeamConsole() {
           {tab === "calls" && <CallsView scope="crm" />}
           {tab === "projects" && <ProjectsList scope="crm" />}
           {tab === "attendance" && <AttendanceTab />}
-          {tab === "leave" && <LeaveAdminView canEditDelete={false} />}
+          {tab === "leave" && <LeaveAdminView canEditDelete={false} teamScope="crm" />}
           {tab === "activity" && <ActivityTab />}
         </>
       )}
