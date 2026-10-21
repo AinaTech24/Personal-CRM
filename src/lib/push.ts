@@ -46,16 +46,24 @@ export interface PushPayload {
  * accumulate otherwise, as every reinstall or cleared site data strands one.
  */
 export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
-  if (!pushConfigured || userIds.length === 0) return;
+  if (userIds.length === 0) return;
+  if (!pushConfigured) {
+    console.warn("[push] skipped — VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY aren't set");
+    return;
+  }
 
   const subs = await db.pushSubscription.findMany({
     where: { userId: { in: userIds } },
     select: { id: true, endpoint: true, p256dh: true, auth: true },
   });
-  if (subs.length === 0) return;
+  if (subs.length === 0) {
+    console.log(`[push] no subscriptions on file for ${userIds.length} recipient(s) — nothing to send`);
+    return;
+  }
 
   const body = JSON.stringify(payload);
   const dead: string[] = [];
+  let sent = 0;
 
   await Promise.all(
     subs.map(async (s) => {
@@ -64,6 +72,7 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           body
         );
+        sent++;
       } catch (err) {
         const status = (err as { statusCode?: number }).statusCode;
         if (status === 404 || status === 410) dead.push(s.id);
@@ -71,6 +80,7 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
       }
     })
   );
+  console.log(`[push] sent ${sent}/${subs.length} (${dead.length} stale subscription(s) found)`);
 
   if (dead.length) {
     await db.pushSubscription.deleteMany({ where: { id: { in: dead } } }).catch(() => {});

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { IconLogOut, IconSettings, IconUser } from "@/components/icons";
 import { SettingsDialog } from "@/components/layout/settings-dialog";
+import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
@@ -96,10 +97,19 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
               <p className="text-sm font-medium">{name}</p>
               <p className="text-xs text-muted-foreground">{email}</p>
               {(role || departmentName || designation) && (
-                <div className="mt-1.5 flex flex-col gap-0.5 text-xs text-muted-foreground">
-                  {role && <p>{ROLE_LABEL[role] ?? role}</p>}
-                  {departmentName && <p>{departmentName}</p>}
-                  {designation && <p>{designation}</p>}
+                <div className="mt-2 flex flex-col gap-1">
+                  {role && (
+                    <Badge className="w-fit px-1.5 py-0 text-[10px] uppercase tracking-wide">
+                      {ROLE_LABEL[role] ?? role}
+                    </Badge>
+                  )}
+                  {(designation || departmentName) && (
+                    <p className="text-xs text-muted-foreground">
+                      {designation}
+                      {designation && departmentName ? " · " : ""}
+                      {departmentName}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
