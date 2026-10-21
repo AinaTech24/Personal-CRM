@@ -116,23 +116,40 @@ export async function POST(req: NextRequest) {
     inviteeIsDepartmentAdmin = false;
   }
 
-  // A non-admin can only ever grant membership on a team whose lead they
-  // actually are (teamMembership, looked up above, already proves that) —
-  // a company Admin may target any team id directly, system ones included,
-  // though the console UI only ever offers this for a non-system team.
-  if (teamId && !isAdmin(user) && !customTeamLeadInviting) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Explicit allow-list, not a subtractive "clear it for this one branch" —
+  // each non-admin branch above only proves the caller may grant ITS OWN
+  // thing (e.g. customTeamLeadInviting only proves membership on `teamId`),
+  // so every grant defaults to "nothing" and is only turned on inside the
+  // branch that's actually allowed to set it. A Social Media lead posting
+  // `crmAdmin: true` alongside their own invite, for instance, must not
+  // silently mint a CRM Team lead — the same subtractive version of this
+  // code once let exactly that through for every non-deptAdmin branch,
+  // including (once teams went generic) any custom team's lead.
+  let grantSocialMediaAdmin = false;
+  let grantSocialMediaMember = false;
+  let grantCrmAdmin = false;
+  let grantCrmMember = false;
+  let grantTeamId: string | null = null;
+  let grantTeamIsLead = false;
+  if (isAdmin(user)) {
+    grantSocialMediaAdmin = !!socialMediaAdmin;
+    grantSocialMediaMember = !!socialMediaMember;
+    grantCrmAdmin = !!crmAdmin;
+    grantCrmMember = !!crmMember;
+    grantTeamId = teamId ?? null;
+    grantTeamIsLead = !!teamIsLead;
+  } else if (socialLeadInviting) {
+    grantSocialMediaAdmin = !!socialMediaAdmin;
+    grantSocialMediaMember = !!socialMediaMember;
+  } else if (crmLeadInviting) {
+    grantCrmAdmin = !!crmAdmin;
+    grantCrmMember = !!crmMember;
+  } else if (customTeamLeadInviting) {
+    grantTeamId = teamId ?? null;
+    grantTeamIsLead = !!teamIsLead;
   }
-
-  // Only a company Admin may grant Social Media / CRM / another team's
-  // access through a Department Admin's invite — those modules are
-  // unrelated to a department.
-  const grantSocialMediaAdmin = deptAdminInviting ? false : socialMediaAdmin;
-  const grantSocialMediaMember = deptAdminInviting ? false : socialMediaMember;
-  const grantCrmAdmin = deptAdminInviting ? false : crmAdmin;
-  const grantCrmMember = deptAdminInviting ? false : crmMember;
-  const grantTeamId = deptAdminInviting ? null : (teamId ?? null);
-  const grantTeamIsLead = deptAdminInviting ? false : !!teamIsLead;
+  // deptAdminInviting grants none of the above — a department is unrelated
+  // to any of these modules.
 
   // Social Media/CRM already provision membership through their own
   // dedicated flags above — this generic path is for every other team, so a

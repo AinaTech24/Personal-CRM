@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { allLedTeamsScopeFor } from "@/lib/teams";
+import { resolveTeamScope } from "@/lib/team-scope";
 import { dateFromKey, istDateKey } from "@/lib/attendance";
 import { leaveSummary, leaveWorkingDays } from "@/lib/leave";
 import { leaveRequestInclude, serializeLeaveRequest } from "@/lib/leave-requests";
@@ -18,7 +19,11 @@ const STATUSES = ["PENDING", "APPROVED", "REJECTED", "CANCELLED"] as const;
  * everyone's for a company Admin; a LEAVE-module grantee sees their own
  * department, and the lead of any team (CRM, Social Media, or any other)
  * sees their own team (every widening applies together, not just one) —
- * optionally narrowed further with `?status=`.
+ * optionally narrowed further with `?status=`. A team console's own Leave
+ * tab instead passes `?teamScope=` (the same "crm"/"social-media"/
+ * "team:<id>" values Leads/Tasks/Meetings/Projects already understand) to
+ * ask for exactly that one team's requests — company Admin or that team's
+ * own lead only, nothing wider.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -26,6 +31,22 @@ export async function GET(req: NextRequest) {
 
   const params = req.nextUrl.searchParams;
   if (params.get("scope") === "all") {
+    const teamScopeParam = params.get("teamScope");
+    if (teamScopeParam) {
+      const { teamOnly, teamUserIds } = await resolveTeamScope(user, teamScopeParam);
+      if (teamOnly) {
+        if (!teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        const status = STATUSES.find((s) => s === params.get("status"));
+        const rows = await db.leaveRequest.findMany({
+          where: { ...(status ? { status } : {}), userId: { in: teamUserIds } },
+          include: leaveRequestInclude,
+          orderBy: { createdAt: "desc" },
+          take: 500,
+        });
+        return NextResponse.json({ requests: rows.map(serializeLeaveRequest) });
+      }
+    }
+
     const moduleScope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "LEAVE", "READ");
     const teamUserIds = moduleScope === "all" ? [] : await allLedTeamsScopeFor(user);
 
@@ -115,18 +136,64 @@ export async function POST(req: NextRequest) {
     include: leaveRequestInclude,
   });
 
-  // Tell every other active admin there is something to decide.
+  // Tell everyone who might need to decide this: every other active company
+  // Admin, a LEAVE grantee scoped to the requester's own department (their
+  // "support executive"), and the lead of any team the requester belongs to
+  // (their "department head") — not just admins, so the person who actually
+  // owns this decision hears about it instead of only finding out if they
+  // happen to check the list. Each gets routed to wherever they can act on
+  // it: admins/grantees to /admin/leave, a team lead to their own team's
+  // console (which they may not even be able to reach /admin/leave from).
+  const notified = new Set<string>([user.id]);
+  const targets: { id: string; url: string }[] = [];
+
   const admins = await db.user.findMany({
     where: { isActive: true, role: { in: ["ADMIN", "SUPER_ADMIN"] }, NOT: { id: user.id } },
     select: { id: true },
   });
+  for (const a of admins) {
+    if (notified.has(a.id)) continue;
+    notified.add(a.id);
+    targets.push({ id: a.id, url: "/admin/leave" });
+  }
+
+  if (user.departmentId) {
+    const leaveGrantees = await db.userModulePermission.findMany({
+      where: { module: "LEAVE", canUpdate: true, user: { isActive: true, departmentId: user.departmentId } },
+      select: { userId: true },
+    });
+    for (const g of leaveGrantees) {
+      if (notified.has(g.userId)) continue;
+      notified.add(g.userId);
+      targets.push({ id: g.userId, url: "/admin/leave" });
+    }
+  }
+
+  const myTeams = await db.teamMember.findMany({
+    where: { userId: user.id, team: { disabled: false } },
+    select: { team: { select: { id: true, slug: true } } },
+  });
+  if (myTeams.length > 0) {
+    const teamLeadRows = await db.teamMember.findMany({
+      where: { teamId: { in: myTeams.map((t) => t.team.id) }, isLead: true, user: { isActive: true } },
+      select: { userId: true, teamId: true },
+    });
+    for (const row of teamLeadRows) {
+      if (notified.has(row.userId)) continue;
+      notified.add(row.userId);
+      const slug = myTeams.find((t) => t.team.id === row.teamId)?.team.slug;
+      const url = slug === "crm" ? "/crm/team" : slug === "social-media" ? "/social-media/team" : `/teams/${row.teamId}`;
+      targets.push({ id: row.userId, url });
+    }
+  }
+
   await Promise.all(
-    admins.map((a) =>
+    targets.map(({ id, url }) =>
       notifyAndPush(
-        a.id,
+        id,
         "leave_requested",
         { requestId: created.id, actorName: user.name },
-        { title: "New leave request", body: `${user.name} applied for leave`, url: "/admin/leave", tag: "leave-requested" }
+        { title: "New leave request", body: `${user.name} applied for leave`, url, tag: "leave-requested" }
       )
     )
   );

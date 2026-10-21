@@ -35,10 +35,19 @@ const FILTERS = [
   { value: "ALL", label: "All requests" },
 ];
 
-export function LeaveAdminView({ canEditDelete = true }: { canEditDelete?: boolean }) {
+export function LeaveAdminView({
+  canEditDelete = true,
+  teamScope,
+}: {
+  canEditDelete?: boolean;
+  /** Narrows to exactly one team's own requests — the same "crm"/"social-media"/"team:<id>" values Leads/Tasks/Meetings/Projects already take. Omit for the unscoped admin/own-department/own-teams view at /admin/leave. */
+  teamScope?: "crm" | "social-media" | `team:${string}`;
+}) {
   const toast = useToast();
   const { socket } = useSocket();
+  const leaveUrl = teamScope ? `/api/leave-requests?scope=all&teamScope=${teamScope}` : "/api/leave-requests?scope=all";
   const [requests, setRequests] = useState<LeaveRequestRow[] | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [filter, setFilter] = useState("PENDING");
   const [deciding, setDeciding] = useState<{ request: LeaveRequestRow; action: "approve" | "reject" } | null>(null);
   const [note, setNote] = useState("");
@@ -53,9 +62,14 @@ export function LeaveAdminView({ canEditDelete = true }: { canEditDelete?: boole
   const [deletingRequest, setDeletingRequest] = useState<LeaveRequestRow | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/leave-requests?scope=all");
+    const res = await fetch(leaveUrl);
+    if (teamScope && res.status === 403) {
+      setForbidden(true);
+      return;
+    }
+    setForbidden(false);
     setRequests(res.ok ? (await res.json()).requests : []);
-  }, []);
+  }, [leaveUrl, teamScope]);
 
   useEffect(() => {
     load();
@@ -144,6 +158,15 @@ export function LeaveAdminView({ canEditDelete = true }: { canEditDelete?: boole
     else toast.success("Leave request deleted", deletingRequest.user.name);
     setDeletingRequest(null);
     load();
+  }
+
+  if (forbidden) {
+    return (
+      <Card className="flex flex-col items-center justify-center gap-1 py-16 text-center">
+        <p className="text-sm font-medium">You don&apos;t have access to this team&apos;s Leave requests</p>
+        <p className="text-sm text-muted-foreground">Ask your team lead or a company admin for access.</p>
+      </Card>
+    );
   }
 
   return (
