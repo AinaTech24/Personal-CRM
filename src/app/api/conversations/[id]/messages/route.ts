@@ -5,7 +5,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { allowedMime, emitToMembers, isMember, memberIdsOf, messageInclude } from "@/lib/chat";
 import { sendPushToUsers } from "@/lib/push";
 import { notificationCopy } from "@/lib/message-preview";
-import { isUserOnline } from "@/lib/socket-emit";
 
 /** Messages in a conversation (oldest→newest), minus ones this user deleted for themselves. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -112,27 +111,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     attachmentName: message.attachments[0]?.name,
   });
 
-  // Push only to people who aren't currently connected. Anyone with the app
-  // open already got the message over the socket and an in-app toast, and
-  // buzzing their phone for something they just watched arrive is noise.
+  // Push to every other member regardless of socket/online status — same rule
+  // every other notification type already follows via notifyAndPush, which
+  // never checks presence either. A connected tab already gets the message
+  // over the socket and an in-app toast; the OS-level push is a second,
+  // independent channel (phone/desktop notification shade), not a fallback
+  // for only when the first one can't reach them.
   const otherMembers = members.filter((m) => m !== user.id);
-  const recipients = otherMembers.filter((m) => !isUserOnline(m));
-  if (recipients.length) {
+  if (otherMembers.length) {
     // Fired off rather than awaited: a slow or unreachable push service must
     // not stall — or fail — a send that is already committed. Safe to leave
     // running because this is a long-lived Node server (server.js), not a
     // function that gets frozen once the response is returned.
-    void sendPushToUsers(recipients, {
+    void sendPushToUsers(otherMembers, {
       ...copy,
       url: `/messages?c=${id}`,
       tag: `conv-${id}`,
     }).catch((err) => console.error("[push] message notification failed", err));
-  } else if (otherMembers.length) {
-    // Logged so "nothing in pm2 logs after I sent a message" is distinguishable
-    // from "sendPushToUsers ran and found nothing to do" — this path means
-    // every other member was still seen as socket-connected, so push was
-    // never even attempted.
-    console.log(`[push] skipped — all ${otherMembers.length} other member(s) are currently online`);
   }
 
   return NextResponse.json({ message }, { status: 201 });
