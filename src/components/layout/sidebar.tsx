@@ -179,44 +179,25 @@ function NavLinkItem({
         href={item.href}
         onClick={onNavigate}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors",
-          collapsed ? "justify-center px-0" : "hover:bg-primary/5 hover:text-foreground",
-          active && !collapsed && "bg-accent text-foreground"
+          "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground",
+          active && "bg-accent text-foreground"
         )}
       >
-        {/* Always the same h-9 w-9 circle — border/background only ever
-            change color, never size, so collapsing never pops this into
-            existence the way swapping in a differently-sized element would.
-            Collapsed, the visible bordered circle matches the search button
-            and sidebar-toggle button above it, so every collapsed-rail
-            control reads as one consistent set of icon buttons instead of a
-            styled button sitting above plain, unstyled icons; expanded, the
-            border/background are simply transparent. */}
-        <span
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-transparent transition-colors duration-200",
-            collapsed &&
-              (active
-                ? "border-primary/40 bg-primary/10 text-primary"
-                : "border-border bg-background hover:border-ring/50 hover:text-foreground")
-          )}
-        >
-          <span className="relative flex items-center justify-center">
-            <item.icon className="h-5 w-5" />
-            {badgeCount > 0 &&
-              (isCount ? (
-                // Collapsed, the rail is too narrow for a number, so the icon
-                // carries a dot instead — the tooltip still gives the count.
-                collapsed && (
-                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-card" />
-                )
-              ) : (
-                <span className="absolute -right-1 -top-1 flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-card" />
-                </span>
-              ))}
-          </span>
+        <span className="relative shrink-0">
+          <item.icon className="h-5 w-5" />
+          {badgeCount > 0 &&
+            (isCount ? (
+              // Collapsed, the rail is too narrow for a number, so the icon
+              // carries a dot instead — the tooltip still gives the count.
+              collapsed && (
+                <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-card" />
+              )
+            ) : (
+              <span className="absolute -right-1 -top-1 flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-card" />
+              </span>
+            ))}
         </span>
         <span className={cn("flex-1", labelClass)}>{item.label}</span>
         {badgeCount > 0 && !collapsed && (
