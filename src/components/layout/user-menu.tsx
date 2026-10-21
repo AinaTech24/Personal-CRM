@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { IconLogOut, IconSettings, IconUser } from "@/components/icons";
+import { IconBuildingCog, IconLogOut, IconSettings, IconUser } from "@/components/icons";
 import { SettingsDialog } from "@/components/layout/settings-dialog";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -91,43 +91,78 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
           <DropdownMenu.Content
             align="end"
             sideOffset={8}
-            className="z-50 w-56 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
+            className="z-50 w-64 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
           >
-            <div className="px-2 py-1.5">
-              <p className="text-sm font-medium">{name}</p>
-              <p className="text-xs text-muted-foreground">{email}</p>
-              {(role || departmentName || designation) && (
-                <div className="mt-2 flex flex-col gap-1">
-                  {role && (
-                    <Badge className="w-fit px-1.5 py-0 text-[10px] uppercase tracking-wide">
-                      {ROLE_LABEL[role] ?? role}
-                    </Badge>
-                  )}
-                  {(designation || departmentName) && (
-                    <p className="text-xs text-muted-foreground">
-                      {designation}
-                      {designation && departmentName ? " · " : ""}
-                      {departmentName}
-                    </p>
-                  )}
-                </div>
+            <div className="flex items-center gap-3 px-3.5 py-3.5">
+              <div
+                className={cn(
+                  "flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border",
+                  avatar ? "bg-transparent" : "bg-primary text-primary-foreground"
+                )}
+              >
+                {avatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatar} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <IconUser className="h-5 w-5" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{name}</p>
+                <p className="truncate text-xs text-muted-foreground">{email}</p>
+              </div>
+            </div>
+            {(role || departmentName || designation) && (
+              <div className="flex flex-col gap-1 px-3.5 pb-3.5">
+                {role && (
+                  <Badge className="w-fit px-1.5 py-0 text-[10px] uppercase tracking-wide">
+                    {ROLE_LABEL[role] ?? role}
+                  </Badge>
+                )}
+                {(designation || departmentName) && (
+                  <p className="text-xs text-muted-foreground">
+                    {designation}
+                    {designation && departmentName ? " · " : ""}
+                    {departmentName}
+                  </p>
+                )}
+              </div>
+            )}
+            <DropdownMenu.Separator className="h-px bg-border" />
+            <div className="p-1.5">
+              <DropdownMenu.Item
+                onSelect={() => setSettingsOpen(true)}
+                className="group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-sm outline-none hover:bg-primary/5"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                  <IconSettings className="h-4 w-4" />
+                </span>
+                Settings
+              </DropdownMenu.Item>
+              {isAdmin && (
+                <DropdownMenu.Item
+                  onSelect={() => router.push("/admin/settings")}
+                  className="group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-sm outline-none hover:bg-primary/5"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                    <IconBuildingCog className="h-4 w-4" />
+                  </span>
+                  Application
+                </DropdownMenu.Item>
               )}
             </div>
-            <DropdownMenu.Separator className="my-1 h-px bg-border" />
-            <DropdownMenu.Item
-              onSelect={() => setSettingsOpen(true)}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-primary/5"
-            >
-              <IconSettings className="h-3.5 w-3.5" />
-              Settings
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              onSelect={() => setLogoutOpen(true)}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-primary/5"
-            >
-              <IconLogOut className="h-3.5 w-3.5" />
-              Log out
-            </DropdownMenu.Item>
+            <DropdownMenu.Separator className="h-px bg-border" />
+            <div className="p-1.5">
+              <DropdownMenu.Item
+                onSelect={() => setLogoutOpen(true)}
+                className="group flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-sm outline-none hover:bg-destructive/5"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-destructive/10 group-hover:text-destructive">
+                  <IconLogOut className="h-4 w-4" />
+                </span>
+                Log out
+              </DropdownMenu.Item>
+            </div>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
