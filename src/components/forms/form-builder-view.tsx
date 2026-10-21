@@ -130,6 +130,15 @@ function FieldSettings({ field, onChange }: { field: FieldRow; onChange: (patch:
           />
         </div>
       )}
+      {field.type === "LINK" && (
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Preview</Label>
+          <div className="flex items-center gap-2 rounded-md border border-dashed border-input px-3 py-2 text-sm text-muted-foreground">
+            <IconExternalLink className="h-4 w-4 shrink-0" />
+            <span className="truncate">{field.placeholder?.trim() || "https://..."}</span>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-1.5">
         <Label className="text-xs">Help text</Label>
         <Textarea rows={2} value={field.helpText ?? ""} onChange={(e) => onChange({ helpText: e.target.value })} />
