@@ -62,6 +62,7 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
   const [departments, setDepartments] = useState<Department[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [forbidden, setForbidden] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
@@ -79,8 +80,14 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
   const loadProjects = useCallback(async () => {
     const res = await fetch(projectsUrl);
     const data = await res.json().catch(() => ({}));
-    if (res.ok) setProjects(data.projects);
-    else toast.error("Couldn't load projects", data.error);
+    if (res.ok) {
+      setProjects(data.projects);
+      setForbidden(false);
+    } else if (scope && res.status === 403) {
+      setForbidden(true);
+    } else {
+      toast.error("Couldn't load projects", data.error);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectsUrl]);
 
@@ -97,8 +104,14 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
         usersRes.json().catch(() => ({})),
         meRes.json().catch(() => ({})),
       ]);
-      if (projectsRes.ok) setProjects(projectsData.projects);
-      else toast.error("Couldn't load projects", projectsData.error);
+      if (projectsRes.ok) {
+        setProjects(projectsData.projects);
+        setForbidden(false);
+      } else if (scope && projectsRes.status === 403) {
+        setForbidden(true);
+      } else {
+        toast.error("Couldn't load projects", projectsData.error);
+      }
       if (usersRes.ok) setAssignableUsers(usersData.users);
       if (meRes.ok) setCurrentUser(meData.user);
 
@@ -313,6 +326,15 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
   }
 
   const allFilteredSelected = filteredProjects.length > 0 && filteredProjects.every((p) => selectedIds.has(p.id));
+
+  if (forbidden) {
+    return (
+      <Card className="flex h-full flex-col items-center justify-center gap-1 py-16 text-center">
+        <p className="text-sm font-medium">You don&apos;t have access to this team&apos;s Projects</p>
+        <p className="text-sm text-muted-foreground">Ask your team lead or a company admin for access.</p>
+      </Card>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">

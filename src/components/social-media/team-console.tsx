@@ -501,6 +501,7 @@ const HALF_DAY_REASON_OPTIONS = Object.entries(HALF_DAY_REASON_LABEL).map(([valu
 function AttendanceTab() {
   const toast = useToast();
   const [rows, setRows] = useState<AttendanceRow[] | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -512,6 +513,7 @@ function AttendanceTab() {
     if (to) params.set("to", to);
     const res = await fetch(`/api/social/team-attendance?${params.toString()}`);
     const data = await res.json().catch(() => ({}));
+    if (res.status === 403) return setForbidden(true);
     if (!res.ok) return toast.error("Couldn't load attendance", data.error);
     setRows(data.records ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -536,6 +538,15 @@ function AttendanceTab() {
     } finally {
       setBusyId(null);
     }
+  }
+
+  if (forbidden) {
+    return (
+      <Card className="flex flex-col items-center justify-center gap-1 py-16 text-center">
+        <p className="text-sm font-medium">You don&apos;t have access to this team&apos;s Attendance</p>
+        <p className="text-sm text-muted-foreground">Ask your team lead or a company admin for access.</p>
+      </Card>
+    );
   }
 
   if (rows === null) return <SkeletonForm fields={3} />;
@@ -762,11 +773,13 @@ const ACTION_STYLE: Record<string, string> = {
 function ActivityTab() {
   const toast = useToast();
   const [logs, setLogs] = useState<ActivityLog[] | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch("/api/social/team-activity");
     const data = await res.json().catch(() => ({}));
+    if (res.status === 403) return setForbidden(true);
     if (!res.ok) return toast.error("Couldn't load team activity", data.error);
     setLogs(data.logs ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -783,6 +796,15 @@ function ActivityTab() {
       (l) => l.summary.toLowerCase().includes(q) || l.model.toLowerCase().includes(q) || (l.actorName ?? "").toLowerCase().includes(q)
     );
   }, [logs, query]);
+
+  if (forbidden) {
+    return (
+      <Card className="flex flex-col items-center justify-center gap-1 py-16 text-center">
+        <p className="text-sm font-medium">You don&apos;t have access to this team&apos;s Activity</p>
+        <p className="text-sm text-muted-foreground">Ask your team lead or a company admin for access.</p>
+      </Card>
+    );
+  }
 
   if (logs === null) return <SkeletonForm fields={3} />;
 

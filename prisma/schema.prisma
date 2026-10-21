@@ -250,6 +250,13 @@ model Invite {
   /// TeamMember row on acceptance instead — the CRM Team's equivalent.
   crmAdmin          Boolean     @default(false)
   crmMember         Boolean     @default(false)
+  /// Same idea as socialMediaAdmin/socialMediaMember/crmAdmin/crmMember, but
+  /// for any other (non-system) team — provisions a TeamMember row on this
+  /// team on acceptance, isLead per `teamIsLead`. Null for every invite not
+  /// created from a custom team's own console.
+  teamId            String?
+  team              Team?       @relation(fields: [teamId], references: [id])
+  teamIsLead        Boolean     @default(false)
   /// Grants Department Admin (see User.isDepartmentAdmin) for `departmentId`
   /// the moment this invite is accepted. Only a company Admin/Super Admin
   /// can set this when creating the invite — a Department Admin inviting
@@ -263,6 +270,7 @@ model Invite {
   createdAt         DateTime    @default(now())
 
   @@index([email])
+  @@index([teamId])
 }
 
 model Notification {
@@ -1356,6 +1364,7 @@ model Team {
   disabled  Boolean      @default(false)
   createdAt DateTime     @default(now())
   members   TeamMember[]
+  invites   Invite[]
 }
 
 model TeamMember {

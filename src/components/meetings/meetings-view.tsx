@@ -76,6 +76,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
   const [isAdmin, setIsAdmin] = useState(false);
   const [hasMeetingsGrant, setHasMeetingsGrant] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [forbidden, setForbidden] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   // The dialog stays mounted so it can animate closed, but it seeds its form
   // from the meeting at mount — so bump this on every open to remount it clean
@@ -109,8 +110,14 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
         uRes.json().catch(() => ({})),
         meRes.json().catch(() => ({})),
       ]);
-      if (mRes.ok) setMeetings(mData.meetings ?? []);
-      else toast.error("Couldn't load meetings", mData.error);
+      if (mRes.ok) {
+        setMeetings(mData.meetings ?? []);
+        setForbidden(false);
+      } else if (scope && mRes.status === 403) {
+        setForbidden(true);
+      } else {
+        toast.error("Couldn't load meetings", mData.error);
+      }
       if (uRes.ok) setUsers(uData.users ?? []);
       if (meRes.ok) {
         setMeId(meData.user?.id ?? "");
@@ -258,6 +265,15 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
       const data = await res.json().catch(() => ({}));
       toast.error("Couldn't move the meeting", data.error);
     }
+  }
+
+  if (forbidden) {
+    return (
+      <Card className="flex flex-col items-center justify-center gap-1 py-16 text-center">
+        <p className="text-sm font-medium">You don&apos;t have access to this team&apos;s Meetings</p>
+        <p className="text-sm text-muted-foreground">Ask your team lead or a company admin for access.</p>
+      </Card>
+    );
   }
 
   return (
