@@ -190,11 +190,6 @@ export function GenericTeamConsole({ teamId }: { teamId: string }) {
 
 // ---------- Members ----------
 
-const TEAM_MEMBER_ROLE_OPTIONS = [
-  { value: "MEMBER", label: "Member" },
-  { value: "LEAD", label: "Lead" },
-];
-
 function MembersTab({
   teamId,
   team,
@@ -227,6 +222,18 @@ function MembersTab({
   const [inviteRole, setInviteRole] = useState("MEMBER");
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSaving, setInviteSaving] = useState(false);
+
+  // Same "{team} User" / "{team} (Admin)" wording CRM Team ("CRM User" /
+  // "CRM (Admin)") and Social Media Team use for their own invite picker,
+  // built from this team's own name since a custom team has no fixed
+  // short code to hardcode the way those two do.
+  const roleOptions = useMemo(
+    () => [
+      { value: "MEMBER", label: `${team.name} User` },
+      { value: "LEAD", label: `${team.name} (Admin)` },
+    ],
+    [team.name]
+  );
 
   useEffect(() => {
     if (!addOpen) return;
@@ -436,7 +443,7 @@ function MembersTab({
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="generic-team-invite-role">Role</Label>
-                <Dropdown id="generic-team-invite-role" value={inviteRole} onChange={setInviteRole} options={TEAM_MEMBER_ROLE_OPTIONS} />
+                <Dropdown id="generic-team-invite-role" value={inviteRole} onChange={setInviteRole} options={roleOptions} />
               </div>
               {inviteError && <p className="text-sm text-destructive">{inviteError}</p>}
             </form>
