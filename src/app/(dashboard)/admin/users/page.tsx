@@ -31,19 +31,6 @@ const ROLE_OPTIONS = [
   { value: "SUPER_ADMIN", label: "Super Admin" },
 ];
 
-/**
- * "Social Media (Admin)"/"Social Media User" aren't real company Roles — the
- * account still gets created as DEPARTMENT_USER, but the invite also grants
- * Social Media module access the moment it's accepted (as team lead or a
- * regular member, respectively). Kept as their own list so the real Role
- * enum (used by the edit dialog / roleLabel) never sees these sentinels.
- */
-const INVITE_ROLE_OPTIONS = [
-  ...ROLE_OPTIONS,
-  { value: "SOCIAL_MEDIA_ADMIN", label: "Social Media (Admin)" },
-  { value: "SOCIAL_MEDIA_MEMBER", label: "Social Media User" },
-];
-
 const FILTER_OPTIONS = [
   { value: "ALL", label: "All users" },
   { value: "USERS", label: "Users" },
@@ -96,6 +83,7 @@ export default function UsersPage() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("DEPARTMENT_USER");
   const [departmentId, setDepartmentId] = useState("");
+  const [inviteIsDepartmentAdmin, setInviteIsDepartmentAdmin] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [bulkInvite, setBulkInvite] = useState(false);
@@ -158,6 +146,7 @@ export default function UsersPage() {
     setEmail("");
     setRole("DEPARTMENT_USER");
     setDepartmentId("");
+    setInviteIsDepartmentAdmin(false);
     setInviteError(null);
     setBulkInvite(false);
     setBulkEmails("");
@@ -167,17 +156,14 @@ export default function UsersPage() {
 
   /** One invite POST, shared by the single and bulk forms — same body shape either way, just a different source for the email. */
   async function sendOneInvite(targetEmail: string): Promise<{ error: string | null; emailSent?: boolean; acceptUrl?: string }> {
-    const socialMediaAdmin = role === "SOCIAL_MEDIA_ADMIN";
-    const socialMediaMember = role === "SOCIAL_MEDIA_MEMBER";
     const res = await fetch("/api/invites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: targetEmail,
-        role: socialMediaAdmin || socialMediaMember ? "DEPARTMENT_USER" : role,
-        departmentId: departmentId || null,
-        socialMediaAdmin,
-        socialMediaMember,
+        role,
+        departmentId,
+        inviteeIsDepartmentAdmin: inviteIsDepartmentAdmin,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -187,6 +173,10 @@ export default function UsersPage() {
 
   async function submitInvite(e: React.FormEvent) {
     e.preventDefault();
+    if (!departmentId) {
+      setInviteError("Pick a department");
+      return;
+    }
     if (bulkInvite) return submitBulkInvite();
     setInviteError(null);
     setInviteLoading(true);
@@ -541,16 +531,38 @@ export default function UsersPage() {
               )}
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="invite-role">Role</Label>
-                <Dropdown id="invite-role" value={role} onChange={setRole} options={INVITE_ROLE_OPTIONS} />
+                <Dropdown id="invite-role" value={role} onChange={setRole} options={ROLE_OPTIONS} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="invite-department">Department (optional)</Label>
+                <Label htmlFor="invite-department">Department</Label>
                 <Dropdown
                   id="invite-department"
                   value={departmentId}
-                  onChange={setDepartmentId}
-                  placeholder="None"
+                  onChange={(v) => {
+                    setDepartmentId(v);
+                    // Department Admin means nothing without a department to
+                    // administer — clearing it would otherwise leave the
+                    // toggle checked but silently inert.
+                    if (!v && inviteIsDepartmentAdmin) setInviteIsDepartmentAdmin(false);
+                  }}
+                  placeholder="Select a department"
                   options={deptOptions}
+                />
+              </div>
+              <div className="flex items-start justify-between gap-4 rounded-md border border-border p-3">
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium">Make Department Admin</span>
+                  <span className="text-xs text-muted-foreground">
+                    {departmentId
+                      ? `Can open the Permission Manager for anyone else in ${departments.find((d) => d.id === departmentId)?.name ?? "this department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.`
+                      : "Pick a department above first — this has nothing to administer without one."}
+                  </span>
+                </span>
+                <ToggleSwitch
+                  checked={inviteIsDepartmentAdmin}
+                  onChange={setInviteIsDepartmentAdmin}
+                  disabled={!departmentId}
+                  label="Make Department Admin"
                 />
               </div>
               {inviteError && <p className="text-sm text-destructive">{inviteError}</p>}
@@ -569,7 +581,7 @@ export default function UsersPage() {
             </form>
           </DialogBody>
           <DialogFooter>
-            <Button type="submit" form="invite-form" disabled={inviteLoading} className="gap-1.5">
+            <Button type="submit" form="invite-form" disabled={inviteLoading || !departmentId} className="gap-1.5">
               <IconSend className="h-4 w-4" />
               {inviteLoading ? "Sending..." : bulkInvite ? "Send invites" : "Send invite"}
             </Button>

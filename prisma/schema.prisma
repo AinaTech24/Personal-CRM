@@ -236,7 +236,7 @@ model Invite {
   role              Role
   departmentId      String?
   department        Department? @relation(fields: [departmentId], references: [id])
-  /// "Social Media (Admin)" in the invite Role picker isn't a real company
+  /// "Social Media Lead" in the invite Role picker isn't a real company
   /// Role — the account is still created as DEPARTMENT_USER, this just tells
   /// acceptance to also provision a Social Media TeamMember(isLead: true) row,
   /// so full social-media access is granted the moment they accept rather
