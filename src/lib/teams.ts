@@ -34,11 +34,13 @@ async function getTeamMembersBySlug(slug: string): Promise<{ userId: string; isL
 
 /**
  * Every user id on the team identified by `slug`, restricted to those
- * actually in the team's own department — derived from the team's lead(s)
- * rather than a hardcoded id, so a one-off member added for a single
- * review doesn't pull their own unrelated leads/tasks/attendance into this
- * team's aggregate views. Falls back to the unfiltered roster if no lead
- * has a department set.
+ * actually in the team's own department (or with no department at all —
+ * e.g. someone invited straight into the team, who was never assigned one
+ * in the first place and so can't be "from a different department") —
+ * derived from the team's lead(s) rather than a hardcoded id, so a one-off
+ * member added for a single review doesn't pull their own unrelated
+ * leads/tasks/attendance into this team's aggregate views. Falls back to
+ * the unfiltered roster if no lead has a department set.
  *
  * `preferredDepartmentId`, when given, wins over the derived one — callers
  * pass the CALLING lead's own department here (never an admin's, who has no
@@ -52,10 +54,10 @@ export async function getTeamUserIdsBySlug(slug: string, preferredDepartmentId?:
   const members = await getTeamMembersBySlug(slug);
   const departmentId = preferredDepartmentId ?? members.find((m) => m.isLead && m.departmentId)?.departmentId ?? null;
   if (!departmentId) return members.map((m) => m.userId);
-  return members.filter((m) => m.departmentId === departmentId).map((m) => m.userId);
+  return members.filter((m) => m.departmentId === departmentId || m.departmentId === null).map((m) => m.userId);
 }
 
-/** Every user id on the team with this id, restricted to the team's own department — by-id sibling of getTeamUserIdsBySlug (see its comment for the department-scoping rationale), for any team including a non-system one that has no fixed slug to key off. */
+/** Every user id on the team with this id, restricted to the team's own department (or with no department at all) — by-id sibling of getTeamUserIdsBySlug (see its comment for the department-scoping rationale), for any team including a non-system one that has no fixed slug to key off. */
 export async function getTeamUserIds(teamId: string, preferredDepartmentId?: string | null): Promise<string[]> {
   const rows = await db.teamMember.findMany({
     where: { teamId, team: { disabled: false } },
@@ -64,7 +66,7 @@ export async function getTeamUserIds(teamId: string, preferredDepartmentId?: str
   const members = rows.map((r) => ({ userId: r.userId, isLead: r.isLead, departmentId: r.user.departmentId }));
   const departmentId = preferredDepartmentId ?? members.find((m) => m.isLead && m.departmentId)?.departmentId ?? null;
   if (!departmentId) return members.map((m) => m.userId);
-  return members.filter((m) => m.departmentId === departmentId).map((m) => m.userId);
+  return members.filter((m) => m.departmentId === departmentId || m.departmentId === null).map((m) => m.userId);
 }
 
 /**
@@ -88,6 +90,14 @@ export async function teamOnlyScopeFor(user: PermissionUser, teamId: string): Pr
  * Social Media/CRM, both of which are themselves just rows in this same
  * table) sees their team's leave requests too. Empty for a company admin,
  * who doesn't need widening — their access is already unrestricted.
+ *
+ * Deliberately does NOT pass `user.departmentId` as each team's
+ * preferredDepartmentId the way a single-team caller (teamOnlyScopeFor,
+ * crmTeamScopeFor, ...) does — this iterates every team the user leads, and
+ * their own department only disambiguates co-leads correctly for a team
+ * it's actually likely to belong to. Forcing it onto every led team would
+ * wipe out any team whose real membership sits in a different department
+ * than this particular lead's own.
  */
 export async function allLedTeamsScopeFor(user: PermissionUser): Promise<string[]> {
   if (isAdmin(user)) return [];
@@ -98,7 +108,7 @@ export async function allLedTeamsScopeFor(user: PermissionUser): Promise<string[
   if (led.length === 0) return [];
   const ids = new Set<string>();
   for (const { teamId } of led) {
-    for (const id of await getTeamUserIds(teamId, user.departmentId)) ids.add(id);
+    for (const id of await getTeamUserIds(teamId)) ids.add(id);
   }
   return [...ids];
 }
