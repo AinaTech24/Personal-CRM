@@ -126,6 +126,19 @@ function FieldInput({ field, value, onChange }: { field: FieldDef; value: Answer
       return <Input type="email" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? undefined} />;
     case "PHONE":
       return <Input type="tel" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? undefined} />;
+    case "LINK":
+      return <Input type="url" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? "https://..."} />;
+    case "PASSWORD":
+      return (
+        <Input
+          type="password"
+          autoComplete="off"
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.required}
+          placeholder={field.placeholder ?? undefined}
+        />
+      );
     case "NUMBER":
       return <Input type="number" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? undefined} />;
     case "DATE":
