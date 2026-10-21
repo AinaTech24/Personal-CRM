@@ -1984,6 +1984,8 @@ enum FormFieldType {
   LONG_TEXT
   EMAIL
   PHONE
+  LINK
+  PASSWORD
   NUMBER
   DATE
   DROPDOWN

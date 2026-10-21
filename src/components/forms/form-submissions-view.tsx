@@ -24,6 +24,7 @@ import {
   IconDownload,
   IconExternalLink,
   IconEye,
+  IconEyeOff,
   IconFileSpreadsheet,
   IconPencil,
   IconTrash,
@@ -82,6 +83,10 @@ function EditAnswerField({
       return <Input type="email" value={value} onChange={(e) => onChange(field.id, e.target.value)} />;
     case "PHONE":
       return <Input type="tel" value={value} onChange={(e) => onChange(field.id, e.target.value)} />;
+    case "LINK":
+      return <Input type="url" value={value} onChange={(e) => onChange(field.id, e.target.value)} />;
+    case "PASSWORD":
+      return <Input type="password" autoComplete="off" value={value} onChange={(e) => onChange(field.id, e.target.value)} />;
     case "NUMBER":
       return <Input type="number" value={value} onChange={(e) => onChange(field.id, e.target.value)} />;
     case "DATE":
@@ -133,6 +138,7 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
   const [editAnswers, setEditAnswers] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState<SubmissionRow | null>(null);
+  const [revealedAnswerIds, setRevealedAnswerIds] = useState<Set<string>>(new Set());
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
@@ -324,7 +330,15 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
         </Card>
       )}
 
-      <Dialog open={openId !== null} onOpenChange={(v) => !v && setOpenId(null)}>
+      <Dialog
+        open={openId !== null}
+        onOpenChange={(v) => {
+          if (!v) {
+            setOpenId(null);
+            setRevealedAnswerIds(new Set());
+          }
+        }}
+      >
         <DialogContent size="lg">
           <DialogHeader className="flex-row items-start justify-between gap-3">
             <div>
@@ -361,12 +375,41 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
               </>
             ) : (
               <>
-                {detail.answers.map((a) => (
-                  <div key={a.id} className="flex flex-col gap-0.5 text-sm">
-                    <span className="text-xs text-muted-foreground">{a.field.label}</span>
-                    <span className="whitespace-pre-wrap break-words">{a.value.replace(/\|/g, ", ")}</span>
-                  </div>
-                ))}
+                {detail.answers.map((a) => {
+                  const isPassword = a.field.type === "PASSWORD";
+                  const revealed = revealedAnswerIds.has(a.id);
+                  return (
+                    <div key={a.id} className="flex flex-col gap-0.5 text-sm">
+                      <span className="text-xs text-muted-foreground">{a.field.label}</span>
+                      {isPassword ? (
+                        <div className="flex items-center gap-2">
+                          <span className="whitespace-pre-wrap break-words font-mono">
+                            {revealed ? a.value : "•".repeat(Math.max(a.value.length, 8))}
+                          </span>
+                          <Tooltip label={revealed ? "Hide" : "Reveal"}>
+                            <button
+                              type="button"
+                              aria-label={revealed ? `Hide ${a.field.label}` : `Reveal ${a.field.label}`}
+                              onClick={() =>
+                                setRevealedAnswerIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(a.id)) next.delete(a.id);
+                                  else next.add(a.id);
+                                  return next;
+                                })
+                              }
+                              className="shrink-0 text-muted-foreground hover:text-foreground"
+                            >
+                              {revealed ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
+                            </button>
+                          </Tooltip>
+                        </div>
+                      ) : (
+                        <span className="whitespace-pre-wrap break-words">{a.value.replace(/\|/g, ", ")}</span>
+                      )}
+                    </div>
+                  );
+                })}
                 {attachmentsByField.size > 0 && (
                   <div className="flex flex-col gap-3 border-t border-border/60 pt-3">
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Attachments</h3>
