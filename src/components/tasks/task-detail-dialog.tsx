@@ -183,6 +183,7 @@ export function TaskDetailDialog({
   }
 
   const headerTitle = task?.title ?? initialSummary?.title;
+  const currentAssignees = task?.assignees ?? (task?.assignedTo ? [task.assignedTo] : []);
 
   return (
     <>
@@ -242,12 +243,20 @@ export function TaskDetailDialog({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground">
-                  Assigned to ({(task.assignees?.length ?? (task.assignedTo ? 1 : 0))})
-                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">Assigned to ({currentAssignees.length})</span>
+                  {currentAssignees.length > 0 && (
+                    <span
+                      className="truncate text-right text-xs text-muted-foreground"
+                      title={currentAssignees.map((a) => a.name).join(", ")}
+                    >
+                      {currentAssignees.map((a) => a.name).join(", ")}
+                    </span>
+                  )}
+                </div>
                 <MultiUserSelect
                   users={assignableUsers.map((u) => ({ id: u.id, name: userOptionLabel(u) }))}
-                  selectedIds={(task.assignees ?? (task.assignedTo ? [task.assignedTo] : [])).map((u) => u.id)}
+                  selectedIds={currentAssignees.map((u) => u.id)}
                   onChange={(ids) => patchTask({ assigneeIds: ids })}
                   disabled={savingField === "assigneeIds"}
                   emptyLabel="No one to assign."
@@ -255,26 +264,26 @@ export function TaskDetailDialog({
                 />
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground">Due date</span>
-                <DateTimePicker
-                  className="w-56"
-                  value={task.dueDate ? new Date(task.dueDate) : null}
-                  onChange={(d) => patchTask({ dueDate: d.toISOString() })}
-                  placeholder="Not set"
-                />
-              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs text-muted-foreground">Due date</span>
+                  <DateTimePicker
+                    value={task.dueDate ? new Date(task.dueDate) : null}
+                    onChange={(d) => patchTask({ dueDate: d.toISOString() })}
+                    placeholder="Not set"
+                  />
+                </div>
 
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground">Remind me at</span>
-                <DateTimePicker
-                  className="w-56"
-                  value={task.remindAt ? new Date(task.remindAt) : null}
-                  onChange={(d) => patchTask({ remindAt: d.toISOString() })}
-                  placeholder="No reminder"
-                  clearable
-                  onClear={() => patchTask({ remindAt: null })}
-                />
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs text-muted-foreground">Remind me at</span>
+                  <DateTimePicker
+                    value={task.remindAt ? new Date(task.remindAt) : null}
+                    onChange={(d) => patchTask({ remindAt: d.toISOString() })}
+                    placeholder="No reminder"
+                    clearable
+                    onClear={() => patchTask({ remindAt: null })}
+                  />
+                </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
