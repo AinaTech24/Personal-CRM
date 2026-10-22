@@ -15,11 +15,16 @@ import {
   IconProjects,
   IconCalendar,
   IconMessage,
+  IconQuotations,
+  IconInvoices,
+  IconPhone,
+  IconBuilding,
+  IconImage,
 } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { useDashboardActivity } from "@/components/dashboard/dashboard-activity";
 import { formatIstTime, formatDuration } from "@/lib/attendance-ui";
-import { cn } from "@/lib/utils";
+import { cn, formatMoney } from "@/lib/utils";
 
 interface MeDashboard {
   todayKey: string;
@@ -47,6 +52,24 @@ interface MeDashboard {
     recent: { id: string; name: string; status: string; progress: number; endDate: string | null }[];
   };
   unreadChats: number;
+  /** Only present for a CRM Team member (or an admin) — see hasCrmAccess. */
+  crm: {
+    quotations: {
+      open: number;
+      recent: { id: string; number: string; clientName: string; status: string; total: number; validUntil: string | null }[];
+    };
+    invoices: {
+      open: number;
+      recent: { id: string; number: string; clientName: string; status: string; total: number }[];
+    };
+    calls: { id: string; clientName: string; callType: string; startTime: string; nextAction: string | null }[];
+  } | null;
+  /** Only present for a Social Media Team member (or an admin) — see hasSocialMediaAccess. */
+  socialMedia: {
+    clients: number;
+    pendingContent: number;
+    content: { id: string; title: string; type: string; stage: string; scheduledFor: string | null; clientName: string }[];
+  } | null;
 }
 
 const pretty = (s: string) => s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -64,6 +87,23 @@ const PROJECT_STATUS_VARIANT: Record<string, "secondary" | "default" | "warning"
   ON_HOLD: "warning",
   COMPLETED: "success",
   CANCELLED: "destructive",
+};
+
+const QUOTATION_STATUS_VARIANT: Record<string, "secondary" | "default" | "warning" | "success" | "destructive"> = {
+  DRAFT: "secondary",
+  SENT: "default",
+  APPROVED: "success",
+  REJECTED: "destructive",
+  EXPIRED: "warning",
+};
+
+const INVOICE_STATUS_VARIANT: Record<string, "secondary" | "default" | "warning" | "success" | "destructive"> = {
+  DRAFT: "secondary",
+  SENT: "default",
+  PAID: "success",
+  PARTIAL_PAYMENT: "warning",
+  OVERDUE: "destructive",
+  CANCELLED: "secondary",
 };
 
 function whenLabel(iso: string) {
@@ -323,6 +363,143 @@ export function UserDashboard({ firstName }: { firstName: string }) {
           </Panel>
         </div>
       </div>
+
+      {/* CRM Team work — only fetched/shown for a CRM member (or admin). */}
+      {data.crm && (
+        <div className="flex flex-col gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">Your CRM work</h2>
+            <p className="text-sm text-muted-foreground">Quotations, invoices, and calls you own.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatTile
+              href="/quotations"
+              icon={<IconQuotations className="h-4 w-4" />}
+              label="Open quotations"
+              value={data.crm.quotations.open}
+              hint={data.crm.quotations.open > 0 ? "Not yet approved" : "All settled"}
+            />
+            <StatTile
+              href="/invoices"
+              icon={<IconInvoices className="h-4 w-4" />}
+              label="Open invoices"
+              value={data.crm.invoices.open}
+              hint={data.crm.invoices.open > 0 ? "Awaiting payment" : "All settled"}
+              tone={data.crm.invoices.open > 0 ? "primary" : "default"}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Panel
+              title="Recent quotations"
+              href="/quotations"
+              icon={<IconQuotations className="h-4 w-4" />}
+              empty={data.crm.quotations.recent.length === 0}
+              emptyLabel="No open quotations."
+            >
+              {data.crm.quotations.recent.map((q) => (
+                <Link key={q.id} href="/quotations" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm">{q.clientName}</span>
+                    <span className="text-xs text-muted-foreground">{q.number}</span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-0.5">
+                    <span className="text-xs font-medium tabular-nums">{formatMoney(q.total)}</span>
+                    <Badge variant={QUOTATION_STATUS_VARIANT[q.status] ?? "default"} className="px-1.5 py-0 text-[10px]">
+                      {pretty(q.status)}
+                    </Badge>
+                  </span>
+                </Link>
+              ))}
+            </Panel>
+
+            <Panel
+              title="Recent invoices"
+              href="/invoices"
+              icon={<IconInvoices className="h-4 w-4" />}
+              empty={data.crm.invoices.recent.length === 0}
+              emptyLabel="No open invoices."
+            >
+              {data.crm.invoices.recent.map((i) => (
+                <Link key={i.id} href="/invoices" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm">{i.clientName}</span>
+                    <span className="text-xs text-muted-foreground">{i.number}</span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-0.5">
+                    <span className="text-xs font-medium tabular-nums">{formatMoney(i.total)}</span>
+                    <Badge variant={INVOICE_STATUS_VARIANT[i.status] ?? "default"} className="px-1.5 py-0 text-[10px]">
+                      {pretty(i.status)}
+                    </Badge>
+                  </span>
+                </Link>
+              ))}
+            </Panel>
+
+            <Panel
+              title="Recent calls"
+              href="/calls"
+              icon={<IconPhone className="h-4 w-4" />}
+              empty={data.crm.calls.length === 0}
+              emptyLabel="No calls logged yet."
+            >
+              {data.crm.calls.map((c) => (
+                <Link key={c.id} href="/calls" className="flex flex-col gap-0.5 px-4 py-2.5 transition-colors hover:bg-primary/5">
+                  <span className="truncate text-sm">{c.clientName}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {pretty(c.callType)} · {format(parseISO(c.startTime), "MMM d, h:mm a")}
+                  </span>
+                  {c.nextAction && <span className="truncate text-xs text-primary">Next: {c.nextAction}</span>}
+                </Link>
+              ))}
+            </Panel>
+          </div>
+        </div>
+      )}
+
+      {/* Social Media Team work — only fetched/shown for a Social Media member (or admin). */}
+      {data.socialMedia && (
+        <div className="flex flex-col gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">Your Social Media work</h2>
+            <p className="text-sm text-muted-foreground">Clients you own, and content still in progress.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatTile href="/clients" icon={<IconBuilding className="h-4 w-4" />} label="My clients" value={data.socialMedia.clients} hint="Created by or assigned to you" />
+            <StatTile
+              href="/clients"
+              icon={<IconImage className="h-4 w-4" />}
+              label="Content in progress"
+              value={data.socialMedia.pendingContent}
+              hint={data.socialMedia.pendingContent > 0 ? "Not yet published" : "Nothing pending"}
+              tone={data.socialMedia.pendingContent > 0 ? "primary" : "default"}
+            />
+          </div>
+
+          <Panel
+            title="Content pipeline"
+            href="/clients"
+            icon={<IconImage className="h-4 w-4" />}
+            empty={data.socialMedia.content.length === 0}
+            emptyLabel="Nothing in progress."
+          >
+            {data.socialMedia.content.map((c) => (
+              <Link key={c.id} href="/clients" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm">{c.title}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {c.clientName} · {pretty(c.type)}
+                    {c.scheduledFor ? ` · ${format(parseISO(c.scheduledFor), "MMM d")}` : ""}
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px]">{pretty(c.stage)}</span>
+              </Link>
+            ))}
+          </Panel>
+        </div>
+      )}
     </div>
   );
 }
