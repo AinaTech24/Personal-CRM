@@ -16,6 +16,7 @@ import { UserField } from "@/components/ui/user-field";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dropdown } from "@/components/ui/dropdown";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { AttachmentPicker, uploadPendingAttachments, type PendingAttachment } from "@/components/tasks/attachment-picker";
 import { IconPlus } from "@/components/icons";
@@ -39,7 +40,7 @@ export function NewTaskDialog({
   const [status, setStatus] = useState<TaskStatus>("TODO");
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [remindAt, setRemindAt] = useState<Date | null>(null);
-  const [assignedToId, setAssignedToId] = useState("");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -51,7 +52,7 @@ export function NewTaskDialog({
     setStatus("TODO");
     setDueDate(null);
     setRemindAt(null);
-    setAssignedToId("");
+    setAssigneeIds([]);
     setAttachments([]);
     setError(null);
   }
@@ -71,7 +72,7 @@ export function NewTaskDialog({
           status,
           dueDate: dueDate ? dueDate.toISOString() : null,
           remindAt: remindAt ? remindAt.toISOString() : null,
-          assignedToId: assignedToId || null,
+          assigneeIds,
         }),
       });
       const data = await res.json();
@@ -151,21 +152,19 @@ export function NewTaskDialog({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="task-assignee">Assign to</Label>
-                <Dropdown
-                  id="task-assignee"
-                  value={assignedToId}
-                  onChange={setAssignedToId}
-                  placeholder="Unassigned"
-                  options={assignableUsers.map((u) => ({ value: u.id, label: userOptionLabel(u), avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Due date</Label>
-                <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Not set" />
-              </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Due date</Label>
+              <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Not set" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label>Assign to ({assigneeIds.length})</Label>
+              <MultiUserSelect
+                users={assignableUsers.map((u) => ({ id: u.id, name: userOptionLabel(u) }))}
+                selectedIds={assigneeIds}
+                onChange={setAssigneeIds}
+                emptyLabel="No one to assign."
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">

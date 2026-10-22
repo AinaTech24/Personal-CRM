@@ -13,10 +13,19 @@ export interface ProjectSummary {
   endDate: string | null;
   department: { id: string; name: string };
   createdBy: { id: string; name: string };
+  /** The primary (first) assignee — kept for back-compat; prefer `assignees` for the full list. */
   assignedTo: { id: string; name: string } | null;
+  /** Everyone this project is assigned to — may be empty, one, or several. */
+  assignees?: { id: string; name: string }[];
   createdAt: string;
   updatedAt: string;
   _count: { members: number; milestones: number; tasks: number };
+}
+
+/** Every assignee of a project, from either shape the API returns — `assignees` when present, falling back to the single legacy `assignedTo`. */
+export function projectAssignees(project: Pick<ProjectSummary, "assignedTo" | "assignees">): { id: string; name: string }[] {
+  if (project.assignees && project.assignees.length > 0) return project.assignees;
+  return project.assignedTo ? [project.assignedTo] : [];
 }
 
 export interface ProjectMemberItem {

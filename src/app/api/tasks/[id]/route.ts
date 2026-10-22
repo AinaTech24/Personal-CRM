@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { broadcastTaskChange, canDeleteTask, getTaskForUser } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
+import { emitToUser } from "@/lib/socket-emit";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -18,6 +19,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     where: { id },
     include: {
       assignedTo: { select: { id: true, name: true, email: true } },
+      assignees: { select: { id: true, name: true, email: true } },
       createdBy: { select: { id: true, name: true } },
       comments: { include: { author: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
       attachments: {
@@ -37,7 +39,8 @@ const patchSchema = z.object({
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
   status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELLED"]).optional(),
   dueDate: z.string().nullable().optional(),
-  assignedToId: z.string().nullable().optional(),
+  /** The full replacement assignee list — omit to leave assignment untouched, pass (possibly empty) to replace it entirely. */
+  assigneeIds: z.array(z.string()).optional(),
   remindAt: z.string().nullable().optional(),
 });
 
@@ -57,6 +60,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const data = parsed.data;
   const before = access;
+  const beforeAssigneeIds = new Set([...before.assignees.map((a) => a.id), ...(before.assignedToId ? [before.assignedToId] : [])]);
+  const assigneeIds = data.assigneeIds !== undefined ? [...new Set(data.assigneeIds)] : undefined;
 
   const task = await db.task.update({
     where: { id },
@@ -66,7 +71,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.priority !== undefined && { priority: data.priority }),
       ...(data.status !== undefined && { status: data.status }),
       ...(data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
-      ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId }),
+      ...(assigneeIds !== undefined && {
+        assignedToId: assigneeIds[0] ?? null,
+        assignees: { set: assigneeIds.map((aid) => ({ id: aid })) },
+      }),
       // A changed (or cleared) reminder time is a fresh reminder — reset the
       // sent flag too, so moving it doesn't just silently skip firing.
       ...(data.remindAt !== undefined && {
@@ -74,25 +82,32 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         reminderSentAt: null,
       }),
     },
+    include: { assignees: { select: { id: true } } },
   });
 
-  if (
-    data.assignedToId !== undefined &&
-    data.assignedToId !== before.assignedToId &&
-    data.assignedToId &&
-    data.assignedToId !== user.id
-  ) {
-    await notifyAndPush(
-      data.assignedToId,
-      "task_assigned",
-      { taskId: id, taskTitle: task.title, actorName: user.name },
-      { title: "Task assigned", body: `${user.name} assigned you the task "${task.title}"`, url: "/tasks", tag: "task-assigned" }
+  if (assigneeIds !== undefined) {
+    const newlyAdded = assigneeIds.filter((aid) => !beforeAssigneeIds.has(aid) && aid !== user.id);
+    await Promise.all(
+      newlyAdded.map((aid) =>
+        notifyAndPush(
+          aid,
+          "task_assigned",
+          { taskId: id, taskTitle: task.title, actorName: user.name },
+          { title: "Task assigned", body: `${user.name} assigned you the task "${task.title}"`, url: "/tasks", tag: "task-assigned" }
+        )
+      )
     );
   }
 
   broadcastTaskChange("task_updated", task);
-  if (before.assignedToId && before.assignedToId !== task.assignedToId) {
-    broadcastTaskChange("task_updated", { ...task, assignedToId: before.assignedToId });
+  if (assigneeIds !== undefined) {
+    // Anyone unassigned needs their own UI to refresh (the task drops out of
+    // their list) even though broadcastTaskChange above no longer reaches
+    // them — it only emits to the task's current creator/assignees/admins.
+    const nowAssigned = new Set(task.assignees.map((a) => a.id));
+    for (const removedId of beforeAssigneeIds) {
+      if (!nowAssigned.has(removedId)) emitToUser(removedId, "task_updated", { taskId: id });
+    }
   }
 
   return NextResponse.json({ task });

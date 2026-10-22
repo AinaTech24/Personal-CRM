@@ -25,7 +25,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   const notifyTargets = new Set(
-    [access.createdById, access.assignedToId].filter((uid): uid is string => !!uid && uid !== user.id)
+    [access.createdById, access.assignedToId, ...access.assignees.map((a) => a.id)].filter(
+      (uid): uid is string => !!uid && uid !== user.id
+    )
   );
   for (const targetId of notifyTargets) {
     await notifyAndPush(

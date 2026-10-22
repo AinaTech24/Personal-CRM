@@ -40,7 +40,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       take: 200,
     }),
     db.task.findMany({
-      where: { assignedToId: id },
+      where: { OR: [{ assignedToId: id }, { assignees: { some: { id } } }] },
       select: { id: true, title: true, status: true, priority: true, dueDate: true, createdAt: true },
       orderBy: { createdAt: "desc" },
       take: 200,

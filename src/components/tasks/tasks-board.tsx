@@ -25,6 +25,7 @@ import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
 import {
   PRIORITY_OPTIONS,
   TASK_STATUSES,
+  taskAssignees,
   type AssignableUser,
   type TaskStatus,
   type TaskSummary,
@@ -148,7 +149,11 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   const filteredTasks = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tasks.filter((task) => {
-      if (!facetMatches(filters.assignee, (v) => (v === UNASSIGNED ? task.assignedTo === null : task.assignedTo?.id === v))) {
+      if (
+        !facetMatches(filters.assignee, (v) =>
+          v === UNASSIGNED ? taskAssignees(task).length === 0 : taskAssignees(task).some((a) => a.id === v)
+        )
+      ) {
         return false;
       }
       if (!facetMatches(filters.status, (v) => task.status === v)) return false;
@@ -268,14 +273,14 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   // Edit is open to the creator and the assignee; deletion is narrower — the
   // creator or an admin. Mirrors the API's own checks; this only decides the UI.
   const canManage = (t: TaskSummary) =>
-    fullAccess || t.createdBy.id === currentUserId || t.assignedTo?.id === currentUserId;
+    fullAccess || t.createdBy.id === currentUserId || taskAssignees(t).some((a) => a.id === currentUserId);
   const canDelete = (t: TaskSummary) => fullAccess || t.createdBy.id === currentUserId;
 
   async function remindTask(task: TaskSummary) {
     const res = await fetch(`/api/tasks/${task.id}/remind`, { method: "POST" });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return toast.error("Couldn't send the reminder", data.error);
-    toast.success("Reminder sent", task.assignedTo?.name);
+    toast.success("Reminder sent", taskAssignees(task).map((a) => a.name).join(", "));
   }
 
   function taskActions(task: TaskSummary): RowAction[] {
@@ -283,7 +288,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
     if (canManage(task)) {
       actions.push({ key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => setSelectedTask(task) });
     }
-    if (fullAccess && task.assignedTo && task.assignedTo.id !== currentUserId) {
+    if (fullAccess && taskAssignees(task).some((a) => a.id !== currentUserId)) {
       actions.push({ key: "remind", label: "Send reminder", icon: <IconBell className="h-3.5 w-3.5" />, onSelect: () => remindTask(task) });
     }
     if (canDelete(task)) {
@@ -488,7 +493,11 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
                           </p>
                         )}
                         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                          <span>{task.assignedTo ? task.assignedTo.name : "Unassigned"}</span>
+                          <span className="truncate">
+                            {taskAssignees(task).length > 0
+                              ? taskAssignees(task).map((a) => a.name).join(", ")
+                              : "Unassigned"}
+                          </span>
                           <span>
                             {task._count.comments > 0 &&
                               `${task._count.comments} comment${task._count.comments === 1 ? "" : "s"}`}

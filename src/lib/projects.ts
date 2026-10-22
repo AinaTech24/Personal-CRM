@@ -22,7 +22,7 @@ export async function getProjectForUser(
 ) {
   const project = await db.project.findUnique({
     where: { id: projectId },
-    include: { members: { select: { userId: true } } },
+    include: { members: { select: { userId: true } }, assignees: { select: { id: true } } },
   });
   if (!project) return null;
 

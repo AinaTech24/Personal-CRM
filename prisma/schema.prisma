@@ -132,11 +132,13 @@ model User {
 
   tasksCreated    Task[]           @relation("TaskCreatedBy")
   tasksAssigned   Task[]           @relation("TaskAssignedTo")
+  tasksAssignedTo Task[]           @relation("TaskAssignees")
   taskComments    TaskComment[]
   taskAttachments TaskAttachment[]
 
   projectsCreated        Project[]          @relation("ProjectCreatedBy")
   projectsAssigned       Project[]          @relation("ProjectAssignedTo")
+  projectsAssignedTo     Project[]          @relation("ProjectAssignees")
   projectMemberships     ProjectMember[]
   projectDocuments       ProjectDocument[]
   projectActivities      ProjectActivity[]
@@ -435,8 +437,17 @@ model Task {
   status              TaskStatus   @default(TODO)
   priority            Priority     @default(MEDIUM)
   dueDate             DateTime?
+  /// The primary assignee — kept in sync as the first entry of `assignees`
+  /// below (set/cleared together), so every existing single-assignee reader
+  /// (reminders, the dashboard's "my tasks" widget, the activity feed, a
+  /// ProjectTask mirroring into its linked Task) keeps working unchanged.
+  /// `assignees` is the source of truth for "who can see/act on this" and
+  /// for notifications; this scalar is a read convenience, not a second
+  /// independent assignment.
   assignedToId        String?
   assignedTo          User?        @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
+  /// Everyone this task is assigned to — may be empty, one, or several.
+  assignees           User[]       @relation("TaskAssignees")
   createdById         String
   createdBy           User         @relation("TaskCreatedBy", fields: [createdById], references: [id])
   projectTaskParentId String?      @unique
@@ -508,8 +519,16 @@ model Project {
   endDate      DateTime?
   createdById  String
   createdBy    User          @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  /// The primary assignee — kept in sync as the first entry of `assignees`
+  /// below. See Task.assignedToId's comment for why this scalar stays
+  /// alongside the relation rather than being replaced by it.
   assignedToId String?
   assignedTo   User?         @relation("ProjectAssignedTo", fields: [assignedToId], references: [id])
+  /// Everyone this project is assigned to — may be empty, one, or several.
+  /// Distinct from `members` (the project's whole team/roster): every
+  /// assignee is force-added as a member, but not every member is an
+  /// assignee.
+  assignees    User[]        @relation("ProjectAssignees")
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
   if (scope === "tasks") {
     const attachment = await db.taskAttachment.findFirst({
       where: { filePath: relativePath },
-      include: { task: { select: { createdById: true, assignedToId: true } } },
+      include: { task: { select: { createdById: true, assignedToId: true, assignees: { select: { id: true } } } } },
     });
     if (!attachment) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (!canManageTask(user, attachment.task)) {

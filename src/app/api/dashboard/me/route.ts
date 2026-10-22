@@ -25,7 +25,10 @@ export async function GET() {
       }),
       db.userLeave.findUnique({ where: { userId_date: { userId: user.id, date: today } } }),
       db.task.findMany({
-        where: { assignedToId: user.id, status: { notIn: ["COMPLETED", "CANCELLED"] } },
+        where: {
+          OR: [{ assignedToId: user.id }, { assignees: { some: { id: user.id } } }],
+          status: { notIn: ["COMPLETED", "CANCELLED"] },
+        },
         select: { id: true, title: true, status: true, priority: true, dueDate: true },
         orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
         take: 50,
