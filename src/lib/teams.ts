@@ -79,7 +79,11 @@ export async function getTeamUserIds(teamId: string, preferredDepartmentId?: str
 export async function teamOnlyScopeFor(user: PermissionUser, teamId: string): Promise<string[] | null> {
   if (isAdmin(user)) return getTeamUserIds(teamId);
   const membership = await getUserTeamMembership(teamId, user.id);
-  if (!membership?.isLead) return null;
+  if (!membership) return null;
+  // A genuine member who isn't a lead still gets their own records, same as
+  // the main (non-team) Leads/Tasks/Meetings/Projects pages already show
+  // them — only non-members get shut out entirely.
+  if (!membership.isLead) return [user.id];
   return getTeamUserIds(teamId, user.departmentId);
 }
 

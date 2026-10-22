@@ -72,12 +72,17 @@ export async function socialMediaTeamScopeFor(user: PermissionUser): Promise<str
  */
 export async function socialMediaTeamOnlyScopeFor(user: PermissionUser): Promise<string[] | null> {
   const membership = await getSocialMembership(user.id);
-  if (!isSocialMediaLead(user, membership)) return null;
-  // Unlike socialMediaTeamScopeFor, isSocialMediaLead here can also be true
-  // for a company Admin peeking at the team-only view — an admin has no
-  // department-of-the-team of their own, so only prefer the caller's
-  // department when membership says they're a genuine lead.
-  return getSocialMediaTeamUserIds(membership?.isLead ? user.departmentId : undefined);
+  if (isSocialMediaLead(user, membership)) {
+    // Unlike socialMediaTeamScopeFor, isSocialMediaLead here can also be
+    // true for a company Admin peeking at the team-only view — an admin has
+    // no department-of-the-team of their own, so only prefer the caller's
+    // department when membership says they're a genuine lead.
+    return getSocialMediaTeamUserIds(membership?.isLead ? user.departmentId : undefined);
+  }
+  // A genuine member who isn't a lead still gets their own records, same as
+  // the main (non-team) Leads/Tasks/Meetings/Projects pages already show
+  // them — only non-members get shut out entirely.
+  return membership ? [user.id] : null;
 }
 
 /**
