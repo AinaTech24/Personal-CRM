@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { isAdmin } from "@/lib/permissions";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
+import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
@@ -25,6 +25,7 @@ export async function getProjectForUser(
     include: { members: { select: { userId: true } }, assignees: { select: { id: true } } },
   });
   if (!project) return null;
+  if (!isAdmin(user) && (await isModuleBlocked(user, "PROJECTS"))) return "forbidden" as const;
 
   const isMember = project.members.some((m) => m.userId === user.id);
   if (isAdmin(user) || project.createdById === user.id || isMember) return project;

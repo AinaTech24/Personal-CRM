@@ -4,12 +4,13 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, hasSocialMediaAccess, crmClientsScopeFor, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
 import { socialClientListWhere } from "@/lib/social-media-permissions";
-import { canManageModule, moduleAccessScope } from "@/lib/module-permissions-store";
+import { canManageModule, moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
 import { notifyAndPush } from "@/lib/notify";
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "CLIENTS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const membership = await getSocialMembership(user.id);
   const clientsScope = (await moduleAccessScope(user, "CLIENTS", "READ")) ?? (await crmClientsScopeFor(user));
@@ -43,6 +44,7 @@ const bodySchema = z.object({
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "CLIENTS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const membership = await getSocialMembership(user.id);
   if (!hasSocialMediaAccess(user, membership) && !(await canManageModule(user, "CLIENTS", "CREATE"))) {

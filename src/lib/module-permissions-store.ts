@@ -37,10 +37,13 @@ export async function getUserModulePermissions(userId: string): Promise<ManagedM
  * Every module an admin has explicitly blocked for this person (see
  * ModulePermissionFlags.blocked) — never includes anyone who's simply never
  * been touched in Permission Manager, since that state has no row at all.
- * The sidebar uses this to hide a module's nav link outright, overriding
- * even baseline own-record access; nothing else (list/detail APIs, etc.)
- * currently consults this, so direct-URL access is unaffected, matching the
- * company-wide "Sidebar modules" hide's own existing nav-only scope.
+ * The sidebar uses this (via /api/module-visibility) to hide a module's nav
+ * link outright. For Tasks/Projects/Leads/Meetings/Clients, the relevant
+ * list/detail/create/update/delete routes separately call the single-module
+ * isModuleBlocked() below to actually deny the data too, not just the nav
+ * link — unlike the company-wide "Sidebar modules" hide, which only ever
+ * affects the sidebar. Messages is page-gated only (see its page.tsx) since
+ * conversations are membership-based, not ownership-based.
  */
 export async function getBlockedModules(userId: string): Promise<ManagedModule[]> {
   const rows = await db.userModulePermission.findMany({ where: { userId, blocked: true }, select: { module: true } });
@@ -79,6 +82,22 @@ export async function moduleAccessScope(
   if (isAdmin(user)) return "all";
   if (!(await canManageModule(user, module, action))) return null;
   return user.departmentId ? { departmentId: user.departmentId } : null;
+}
+
+/**
+ * Whether an admin has explicitly blocked `module` for this person (see
+ * ModulePermissionFlags.blocked) — a real access denial, not just a nav
+ * hide: callers short-circuit to "forbidden"/empty on true, before even
+ * their own baseline own-record access would otherwise apply. Always false
+ * for an admin.
+ */
+export async function isModuleBlocked(user: PermissionUser, module: ManagedModule): Promise<boolean> {
+  if (isAdmin(user)) return false;
+  const row = await db.userModulePermission.findUnique({
+    where: { userId_module: { userId: user.id, module } },
+    select: { blocked: true },
+  });
+  return row?.blocked ?? false;
 }
 
 /** Whether this user holds any module grant at all — the floor for reaching the /admin pages that a grant (not just company-admin) can unlock. */

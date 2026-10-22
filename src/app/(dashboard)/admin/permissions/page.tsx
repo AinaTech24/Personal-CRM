@@ -207,8 +207,10 @@ function PermissionManager() {
           <p className="text-sm text-muted-foreground">
             Grant someone full create/read/update/delete access to specific modules within their own department, on top
             of whatever their role already allows. A company Admin already has every module, company-wide. The Access
-            column is separate from those four — turning it off hides that module&apos;s nav link for this one person
-            specifically, where the CRUD toggles only ever widen their visibility beyond their own records.
+            column is separate from those four — turning it off blocks this one person from that module entirely
+            (nav link and the module&apos;s own pages/API alike, even their own records), where the CRUD toggles only
+            ever widen their visibility beyond that. Messages is nav/page-only, since conversations work by membership
+            rather than ownership.
           </p>
         </div>
         <div className="flex gap-1 rounded-md border border-border p-0.5">
