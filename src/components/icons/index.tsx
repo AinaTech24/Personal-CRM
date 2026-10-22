@@ -41,6 +41,16 @@ export function IconMoon(props: IconProps) {
   );
 }
 
+/** "Match system" theme option — a plain monitor, no sun/moon rays. */
+export function IconMonitor(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3" y="4" width="18" height="13" rx="1.5" />
+      <path d="M9 20.5h6M12 17v3.5" />
+    </svg>
+  );
+}
+
 export function IconLogOut(props: IconProps) {
   return (
     <svg {...base(props)}>

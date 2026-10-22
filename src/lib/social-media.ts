@@ -4,6 +4,7 @@ import { canAccessSocialClient, isSocialMediaLead, isSocialMediaOnlyUser, type S
 import { moduleAccessScope } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 import { getTeamMembershipBySlug, getTeamUserIdsBySlug, broadcastTeamChangeBySlug } from "@/lib/teams";
+import { getCrmMembership, hasCrmAccess } from "@/lib/crm-team";
 
 /** The "Social Media" row in the generic Team table (seeded by scripts/migrate-social-crm-to-teams.ts) that this module reads/writes through — see the Teams unification plan. */
 const TEAM_SLUG = "social-media";
@@ -97,6 +98,22 @@ export async function isRestrictedFromModule(user: PermissionUser): Promise<bool
 }
 
 /**
+ * A CRM Team member (regular or lead, not a company admin) can look up any
+ * client in their own department — the same department-scoped visibility a
+ * Permission Manager CLIENTS grant would give, but automatic for the whole
+ * team instead of needing an explicit grant row per person. Deliberately
+ * READ-only (see getSocialClientForUser) — referencing a client for CRM's
+ * own Leads/Quotations work doesn't need CRM able to edit Social Media's
+ * own client records; that still requires an explicit grant, same as before.
+ */
+export async function crmClientsScopeFor(user: PermissionUser): Promise<{ departmentId: string } | null> {
+  if (isAdmin(user)) return null;
+  const membership = await getCrmMembership(user.id);
+  if (!hasCrmAccess(user, membership)) return null;
+  return user.departmentId ? { departmentId: user.departmentId } : null;
+}
+
+/**
  * Looks up a client and checks access in one round trip — mirrors
  * getProjectForUser/getTaskForUser's "forbidden vs not found vs record"
  * three-way return so callers can distinguish a real 404 from a visibility
@@ -125,6 +142,13 @@ export async function getSocialClientForUser(
   if (scope === "all") return client;
   if (scope && (client.createdBy.departmentId === scope.departmentId || client.assignedTo?.departmentId === scope.departmentId)) {
     return client;
+  }
+
+  if (action === "READ") {
+    const crmScope = await crmClientsScopeFor(user);
+    if (crmScope && (client.createdBy.departmentId === crmScope.departmentId || client.assignedTo?.departmentId === crmScope.departmentId)) {
+      return client;
+    }
   }
 
   return "forbidden" as const;
