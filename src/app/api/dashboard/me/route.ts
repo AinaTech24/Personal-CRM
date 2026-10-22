@@ -16,7 +16,7 @@ export async function GET() {
   const monthEnd = dateFromKey(`${year}-${String(month).padStart(2, "0")}-${new Date(year, month, 0).getDate()}`);
   const now = new Date();
 
-  const [attendanceToday, monthRecords, leaveToday, tasks, leads, meetings, projectCount, memberships] =
+  const [attendanceToday, monthRecords, leaveToday, tasks, leads, meetings, recentProjects, projectCount, memberships] =
     await Promise.all([
       db.attendance.findUnique({ where: { userId_date: { userId: user.id, date: today } } }),
       db.attendance.findMany({
@@ -48,6 +48,12 @@ export async function GET() {
         select: { id: true, title: true, startsAt: true, location: true },
         orderBy: { startsAt: "asc" },
         take: 5,
+      }),
+      db.project.findMany({
+        where: { OR: [{ assignedToId: user.id }, { members: { some: { userId: user.id } } }] },
+        select: { id: true, name: true, status: true, progress: true, endDate: true },
+        orderBy: { updatedAt: "desc" },
+        take: 4,
       }),
       db.project.count({
         where: { OR: [{ assignedToId: user.id }, { members: { some: { userId: user.id } } }] },
@@ -98,7 +104,7 @@ export async function GET() {
     },
     leads: { open: leads.length, recent: leads },
     meetings: meetings.map((m) => ({ ...m, startsAt: m.startsAt })),
-    projects: projectCount,
+    projects: { total: projectCount, recent: recentProjects },
     unreadChats,
     attendanceDateKey: keyFromDate(today),
   });

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { format, formatDistanceToNowStrict, isToday, isTomorrow, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
@@ -36,13 +37,34 @@ interface MeDashboard {
     dueToday: number;
     upcoming: { id: string; title: string; status: string; priority: string; dueDate: string | null }[];
   };
-  leads: { open: number; recent: { id: string; name: string; company: string | null; status: string }[] };
+  leads: {
+    open: number;
+    recent: { id: string; name: string; company: string | null; status: string; priority: string }[];
+  };
   meetings: { id: string; title: string; startsAt: string; location: string | null }[];
-  projects: number;
+  projects: {
+    total: number;
+    recent: { id: string; name: string; status: string; progress: number; endDate: string | null }[];
+  };
   unreadChats: number;
 }
 
 const pretty = (s: string) => s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
+const PRIORITY_VARIANT: Record<string, "secondary" | "default" | "warning" | "destructive"> = {
+  LOW: "secondary",
+  MEDIUM: "default",
+  HIGH: "warning",
+  URGENT: "destructive",
+};
+
+const PROJECT_STATUS_VARIANT: Record<string, "secondary" | "default" | "warning" | "success" | "destructive"> = {
+  PLANNED: "secondary",
+  ACTIVE: "default",
+  ON_HOLD: "warning",
+  COMPLETED: "success",
+  CANCELLED: "destructive",
+};
 
 function whenLabel(iso: string) {
   const d = parseISO(iso);
@@ -182,14 +204,25 @@ export function UserDashboard({ firstName }: { firstName: string }) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Tasks due next */}
-        <Panel title="Your next tasks" href="/tasks" empty={tasks.upcoming.length === 0} emptyLabel="No open tasks — nice.">
+        <Panel
+          title="Your next tasks"
+          href="/tasks"
+          icon={<IconTasks className="h-4 w-4" />}
+          empty={tasks.upcoming.length === 0}
+          emptyLabel="No open tasks — nice."
+        >
           {tasks.upcoming.map((t) => {
             const overdue = t.dueDate && parseISO(t.dueDate) < new Date();
             return (
               <Link key={t.id} href="/tasks" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
                 <span className="min-w-0">
                   <span className="block truncate text-sm">{t.title}</span>
-                  <span className="text-xs text-muted-foreground">{pretty(t.status)}</span>
+                  <span className="mt-0.5 flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">{pretty(t.status)}</span>
+                    <Badge variant={PRIORITY_VARIANT[t.priority] ?? "default"} className="px-1.5 py-0 text-[10px]">
+                      {pretty(t.priority)}
+                    </Badge>
+                  </span>
                 </span>
                 {t.dueDate && (
                   <span className={cn("shrink-0 text-xs", overdue ? "text-destructive" : "text-muted-foreground")}>
@@ -202,7 +235,13 @@ export function UserDashboard({ firstName }: { firstName: string }) {
         </Panel>
 
         {/* Meetings */}
-        <Panel title="Upcoming meetings" href="/meetings" empty={meetings.length === 0} emptyLabel="Nothing scheduled.">
+        <Panel
+          title="Upcoming meetings"
+          href="/meetings"
+          icon={<IconCalendar className="h-4 w-4" />}
+          empty={meetings.length === 0}
+          emptyLabel="Nothing scheduled."
+        >
           {meetings.map((m) => (
             <Link key={m.id} href="/meetings" className="flex flex-col gap-0.5 px-4 py-2.5 transition-colors hover:bg-primary/5">
               <span className="truncate text-sm">{m.title}</span>
@@ -214,16 +253,27 @@ export function UserDashboard({ firstName }: { firstName: string }) {
           ))}
         </Panel>
 
-        {/* Leads + month attendance */}
+        {/* Leads + month attendance + projects */}
         <div className="flex flex-col gap-4">
-          <Panel title="Recent leads" href="/leads" empty={leads.recent.length === 0} emptyLabel="No active leads.">
+          <Panel
+            title="Recent leads"
+            href="/leads"
+            icon={<IconLeads className="h-4 w-4" />}
+            empty={leads.recent.length === 0}
+            emptyLabel="No active leads."
+          >
             {leads.recent.map((l) => (
               <Link key={l.id} href="/leads" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
                 <span className="min-w-0">
                   <span className="block truncate text-sm">{l.name}</span>
                   {l.company && <span className="block truncate text-xs text-muted-foreground">{l.company}</span>}
                 </span>
-                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px]">{pretty(l.status)}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <Badge variant={PRIORITY_VARIANT[l.priority] ?? "default"} className="px-1.5 py-0 text-[10px]">
+                    {pretty(l.priority)}
+                  </Badge>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px]">{pretty(l.status)}</span>
+                </span>
               </Link>
             ))}
           </Panel>
@@ -250,19 +300,27 @@ export function UserDashboard({ firstName }: { firstName: string }) {
             </CardContent>
           </Card>
 
-          <Link href="/projects">
-            <Card className="transition-colors hover:border-primary/40">
-              <CardContent className="flex items-center gap-3 p-4">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <IconProjects className="h-4 w-4" />
+          <Panel
+            title={`Your projects (${data.projects.total})`}
+            href="/projects"
+            icon={<IconProjects className="h-4 w-4" />}
+            empty={data.projects.recent.length === 0}
+            emptyLabel="No projects yet."
+          >
+            {data.projects.recent.map((p) => (
+              <Link key={p.id} href="/projects" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm">{p.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {p.progress}% complete{p.endDate ? ` · Due ${format(parseISO(p.endDate), "MMM d")}` : ""}
+                  </span>
                 </span>
-                <span>
-                  <span className="block text-sm font-medium">{data.projects} projects</span>
-                  <span className="block text-xs text-muted-foreground">You&apos;re a member of</span>
-                </span>
-              </CardContent>
-            </Card>
-          </Link>
+                <Badge variant={PROJECT_STATUS_VARIANT[p.status] ?? "default"} className="shrink-0">
+                  {pretty(p.status)}
+                </Badge>
+              </Link>
+            ))}
+          </Panel>
         </div>
       </div>
     </div>
@@ -311,12 +369,14 @@ function StatTile({
 function Panel({
   title,
   href,
+  icon,
   children,
   empty,
   emptyLabel,
 }: {
   title: string;
   href: string;
+  icon?: ReactNode;
   children: ReactNode;
   empty: boolean;
   emptyLabel: string;
@@ -331,7 +391,10 @@ function Panel({
       </div>
       <CardContent className="p-0">
         {empty ? (
-          <p className="px-4 py-8 text-center text-sm text-muted-foreground">{emptyLabel}</p>
+          <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+            {icon && <span className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground">{icon}</span>}
+            <p className="text-sm text-muted-foreground">{emptyLabel}</p>
+          </div>
         ) : (
           <div className="flex flex-col divide-y divide-border/50">{children}</div>
         )}
