@@ -37,6 +37,7 @@ const flagsSchema = z.object({
   canRead: z.boolean(),
   canUpdate: z.boolean(),
   canDelete: z.boolean(),
+  blocked: z.boolean(),
 });
 
 const bodySchema = z.object({

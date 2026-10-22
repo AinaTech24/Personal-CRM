@@ -149,6 +149,25 @@ const MAIN_NAV_HREF_MODULE: Partial<Record<string, ManagedModule>> = {
   "/attendance": "ATTENDANCE",
 };
 
+/**
+ * Every nav href a Permission Manager "block" (ModulePermissionFlags.blocked)
+ * can hide outright for one person — a superset of MAIN_NAV_HREF_MODULE
+ * above (that one only covers the grant-override case for the base mainNav
+ * filter; Clients isn't even part of mainNav to begin with, since it's
+ * always spliced in separately). Applied once, after every insertion path
+ * has run, so it catches a blocked module regardless of why it was added —
+ * default visibility, team membership, or an individual grant.
+ */
+const BLOCKABLE_HREF_MODULE: Partial<Record<string, ManagedModule>> = {
+  "/leads": "LEADS",
+  "/tasks": "TASKS",
+  "/projects": "PROJECTS",
+  "/meetings": "MEETINGS",
+  "/attendance": "ATTENDANCE",
+  "/messages": "MESSAGES",
+  "/clients": "CLIENTS",
+};
+
 function NavLinkItem({
   item,
   active,
@@ -343,6 +362,7 @@ export function Sidebar({
   const [pendingLeave, setPendingLeave] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
+  const [blockedModules, setBlockedModules] = useState<string[]>([]);
   // Admins see every module, so their nav is correct on first paint. Everyone
   // else has to wait for the visibility list — without this the full nav
   // renders and then items vanish as the answer arrives.
@@ -382,7 +402,9 @@ export function Sidebar({
     fetch("/api/module-visibility", { signal: controller.signal })
       .then((r) => r.json())
       .then((d) => {
-        if (active) setHiddenModules(Array.isArray(d.hiddenModules) ? d.hiddenModules : []);
+        if (!active) return;
+        setHiddenModules(Array.isArray(d.hiddenModules) ? d.hiddenModules : []);
+        setBlockedModules(Array.isArray(d.blockedModules) ? d.blockedModules : []);
       })
       .catch(() => {})
       .finally(() => {
@@ -464,6 +486,16 @@ export function Sidebar({
     visibleMainNav.splice(leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1, 0, clientsNavItem);
   }
 
+  // A Permission Manager "block" hides a module's nav link for this one
+  // person outright, regardless of why it would otherwise be visible —
+  // default, team membership, or a grant. Never applies to an admin.
+  if (!isAdmin && blockedModules.length > 0) {
+    visibleMainNav = visibleMainNav.filter((item) => {
+      const blockableModule = BLOCKABLE_HREF_MODULE[item.href];
+      return !blockableModule || !blockedModules.includes(blockableModule);
+    });
+  }
+
   // The user's own drag-to-reorder preference, applied last so it works on
   // whatever ended up actually visible for them — never hides or adds
   // anything, purely repositions.
@@ -480,7 +512,7 @@ export function Sidebar({
     : adminNav.filter((item) => {
         if (item.href === "/admin/permissions") return isDepartmentAdmin;
         const grantedModule = ADMIN_HREF_MODULE.get(item.href);
-        return !!grantedModule && managedModuleSet.has(grantedModule);
+        return !!grantedModule && managedModuleSet.has(grantedModule) && !blockedModules.includes(grantedModule);
       });
 
   // Same drag-to-reorder preference as Main — applied last so it works on

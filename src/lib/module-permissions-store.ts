@@ -18,7 +18,7 @@ export async function getUserModuleMatrix(userId: string): Promise<Record<Manage
   for (const moduleKey of MANAGED_MODULES) {
     const row = byModule.get(moduleKey);
     matrix[moduleKey] = row
-      ? { canCreate: row.canCreate, canRead: row.canRead, canUpdate: row.canUpdate, canDelete: row.canDelete }
+      ? { canCreate: row.canCreate, canRead: row.canRead, canUpdate: row.canUpdate, canDelete: row.canDelete, blocked: row.blocked }
       : { ...NO_MODULE_ACCESS };
   }
   return matrix;
@@ -30,6 +30,20 @@ export async function getUserModulePermissions(userId: string): Promise<ManagedM
     where: { userId, OR: [{ canCreate: true }, { canRead: true }, { canUpdate: true }, { canDelete: true }] },
     select: { module: true },
   });
+  return rows.map((r) => r.module);
+}
+
+/**
+ * Every module an admin has explicitly blocked for this person (see
+ * ModulePermissionFlags.blocked) — never includes anyone who's simply never
+ * been touched in Permission Manager, since that state has no row at all.
+ * The sidebar uses this to hide a module's nav link outright, overriding
+ * even baseline own-record access; nothing else (list/detail APIs, etc.)
+ * currently consults this, so direct-URL access is unaffected, matching the
+ * company-wide "Sidebar modules" hide's own existing nav-only scope.
+ */
+export async function getBlockedModules(userId: string): Promise<ManagedModule[]> {
+  const rows = await db.userModulePermission.findMany({ where: { userId, blocked: true }, select: { module: true } });
   return rows.map((r) => r.module);
 }
 
@@ -88,7 +102,7 @@ export async function getModuleGrantees(module: ManagedModule): Promise<ModuleGr
   });
   return rows.map((r) => ({
     userId: r.userId,
-    flags: { canCreate: r.canCreate, canRead: r.canRead, canUpdate: r.canUpdate, canDelete: r.canDelete },
+    flags: { canCreate: r.canCreate, canRead: r.canRead, canUpdate: r.canUpdate, canDelete: r.canDelete, blocked: r.blocked },
   }));
 }
 
