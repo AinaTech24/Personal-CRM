@@ -63,6 +63,13 @@ model UserModulePermission {
   canRead   Boolean       @default(false)
   canUpdate Boolean       @default(false)
   canDelete Boolean       @default(false)
+  /// An explicit per-person override that hides this module's nav link for
+  /// them entirely, regardless of their usual baseline own-record access —
+  /// distinct from simply holding no CRUD grant (which only withholds the
+  /// department-wide widening those four flags give; baseline access to
+  /// one's own records stays either way). Defaults false so every existing
+  /// row, and anyone never touched here at all, is unaffected.
+  blocked   Boolean       @default(false)
   createdAt DateTime      @default(now())
 
   @@unique([userId, module])

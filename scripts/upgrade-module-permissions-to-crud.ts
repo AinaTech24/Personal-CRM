@@ -17,13 +17,19 @@ import { buildPoolConfig } from "../src/lib/mysql-pool-config";
  * Idempotent: a row already carrying any explicit true/false choice (made
  * through the new Permission Manager) is left untouched, so this only ever
  * acts on a row nobody has edited since the CRUD columns were added.
+ *
+ * Excludes `blocked: true` rows — the Permission Manager's Access toggle
+ * (added later) deliberately creates all-CRUD-false rows on purpose, to
+ * hide a module for one person without granting them anything. Without
+ * this exclusion, this script would "helpfully" upgrade every one of those
+ * straight to full CRUD access on the very next deploy.
  */
 async function main() {
   const adapter = new PrismaMariaDb(buildPoolConfig(process.env.DATABASE_URL!));
   const prisma = new PrismaClient({ adapter });
 
   const result = await prisma.userModulePermission.updateMany({
-    where: { canCreate: false, canRead: false, canUpdate: false, canDelete: false },
+    where: { canCreate: false, canRead: false, canUpdate: false, canDelete: false, blocked: false },
     data: { canCreate: true, canRead: true, canUpdate: true, canDelete: true },
   });
 
