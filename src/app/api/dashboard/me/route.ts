@@ -6,6 +6,14 @@ import { toNumber } from "@/lib/billing";
 import { getCrmMembership, hasCrmAccess } from "@/lib/crm-team";
 import { getSocialMembership, hasSocialMediaAccess } from "@/lib/social-media";
 
+type Counts = Record<string, number>;
+
+function tally(rows: { status: string; _count: number }[]): Counts {
+  const out: Counts = {};
+  for (const r of rows) out[r.status] = r._count;
+  return out;
+}
+
 /**
  * Everything the signed-in user's own dashboard shows, in one round-trip —
  * plus, for a CRM or Social Media team member, a module-specific section
@@ -49,6 +57,11 @@ export async function GET() {
     socialClientCount,
     pendingContent,
     pendingContentCount,
+    taskStatusGroups,
+    leadStatusGroups,
+    projectStatusGroups,
+    quotationStatusGroups,
+    invoiceStatusGroups,
   ] = await Promise.all([
       db.attendance.findUnique({ where: { userId_date: { userId: user.id, date: today } } }),
       db.attendance.findMany({
@@ -157,6 +170,25 @@ export async function GET() {
       socialAccess
         ? db.socialContentItem.count({ where: { createdById: user.id, stage: { notIn: ["PUBLISHED", "CANCELLED"] } } })
         : Promise.resolve(0),
+      // Every status (not just the "still open" subset the lists above use)
+      // — the Overview charts show the full distribution, not just a to-do.
+      db.task.groupBy({
+        by: ["status"],
+        _count: true,
+        where: { OR: [{ assignedToId: user.id }, { assignees: { some: { id: user.id } } }] },
+      }),
+      db.lead.groupBy({ by: ["status"], _count: true, where: { assignedToId: user.id } }),
+      db.project.groupBy({
+        by: ["status"],
+        _count: true,
+        where: { OR: [{ assignedToId: user.id }, { members: { some: { userId: user.id } } }] },
+      }),
+      crmAccess
+        ? db.quotation.groupBy({ by: ["status"], _count: true, where: { createdById: user.id } })
+        : Promise.resolve([]),
+      crmAccess
+        ? db.invoice.groupBy({ by: ["status"], _count: true, where: { createdById: user.id } })
+        : Promise.resolve([]),
     ]);
 
   // A conversation counts as unread when its newest message is someone else's
@@ -197,6 +229,13 @@ export async function GET() {
     projects: { total: projectCount, recent: recentProjects },
     unreadChats,
     attendanceDateKey: keyFromDate(today),
+    charts: {
+      tasks: tally(taskStatusGroups),
+      leads: tally(leadStatusGroups),
+      projects: tally(projectStatusGroups),
+      quotations: crmAccess ? tally(quotationStatusGroups) : null,
+      invoices: crmAccess ? tally(invoiceStatusGroups) : null,
+    },
     crm: crmAccess
       ? {
           quotations: {
