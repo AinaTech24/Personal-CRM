@@ -30,7 +30,13 @@ export function ThemeToggle() {
       <Tooltip label="Theme" side="bottom">
         <DropdownMenu.Trigger asChild>
           <button
-            className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
+            // Radix moves focus back to the trigger when the menu closes —
+            // including after a plain mouse click on an option — and Chrome's
+            // focus-visible heuristic treats that programmatic .focus() as
+            // keyboard-like, leaving the global focus ring lit for a mouse
+            // interaction. Suppressed here the same way the rest of this
+            // topbar's icon buttons rely on hover alone for feedback.
+            className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-primary/5 hover:text-foreground focus-visible:outline-none"
             aria-label="Change theme"
           >
             <TriggerIcon className="h-5 w-5" />

@@ -74,7 +74,10 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
             <button
               aria-label="Account menu"
               className={cn(
-                "flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border",
+                // Same Radix focus-restoration quirk as the theme toggle —
+                // closing the menu refocuses this trigger even after a plain
+                // mouse click, lighting up the global focus ring for it.
+                "flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border outline-none focus-visible:outline-none",
                 avatar ? "bg-transparent" : "bg-primary text-primary-foreground"
               )}
             >
