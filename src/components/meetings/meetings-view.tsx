@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dropdown } from "@/components/ui/dropdown";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import { FilterMenu, type FilterFacet } from "@/components/ui/filter-menu";
 import { facetMatches, type FilterValue } from "@/lib/filter-utils";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
@@ -547,15 +547,6 @@ function MeetingDialog({
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  function toggleAttendee(id: string) {
-    setAttendeeIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   async function save() {
     if (!title.trim()) return toast.error("Title is required");
     if (!startsAt) return toast.error("Start time is required");
@@ -655,31 +646,7 @@ function MeetingDialog({
 
             <div className="flex flex-col gap-1.5">
               <Label>Attendees ({attendeeIds.size})</Label>
-              <div className="max-h-52 overflow-y-auto rounded-md border border-border">
-                {users.length === 0 ? (
-                  <p className="px-3 py-4 text-sm text-muted-foreground">No users to add.</p>
-                ) : (
-                  users.map((u) => (
-                    <label
-                      key={u.id}
-                      className={cn(
-                        "flex items-center gap-3 border-b border-border/50 px-3 py-2 last:border-0",
-                        !readOnly && "cursor-pointer hover:bg-primary/5"
-                      )}
-                    >
-                      <Checkbox
-                        checked={attendeeIds.has(u.id)}
-                        onChange={() => !readOnly && toggleAttendee(u.id)}
-                        aria-label={`Toggle ${u.name}`}
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm">{u.name}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{u.email}</span>
-                      </span>
-                    </label>
-                  ))
-                )}
-              </div>
+              <MultiUserSelect users={users} selectedIds={[...attendeeIds]} onChange={(ids) => setAttendeeIds(new Set(ids))} disabled={readOnly} />
             </div>
           </div>
         </DialogBody>

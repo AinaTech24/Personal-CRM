@@ -15,9 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dropdown } from "@/components/ui/dropdown";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import { useToast } from "@/components/providers/toast-provider";
 import {
   PROJECT_STATUSES,
+  projectAssignees,
   type AssignableUser,
   type ProjectStatus,
   type ProjectSummary,
@@ -48,7 +50,7 @@ export function EditProjectDialog({
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<ProjectStatus>("PLANNED");
   const [departmentId, setDepartmentId] = useState("");
-  const [assignedToId, setAssignedToId] = useState("");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export function EditProjectDialog({
     setDescription(project.description ?? "");
     setStatus(project.status);
     setDepartmentId(project.department.id);
-    setAssignedToId(project.assignedTo?.id ?? "");
+    setAssigneeIds(projectAssignees(project).map((a) => a.id));
   }, [project]);
 
   async function save() {
@@ -71,7 +73,7 @@ export function EditProjectDialog({
           name,
           description: description || null,
           status,
-          assignedToId: assignedToId || null,
+          assigneeIds,
           ...(isAdmin && departmentId ? { departmentId } : {}),
         }),
       });
@@ -128,13 +130,12 @@ export function EditProjectDialog({
               )}
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="ep-assigned">Assigned to</Label>
-              <Dropdown
-                id="ep-assigned"
-                value={assignedToId}
-                onChange={setAssignedToId}
-                placeholder="Unassigned"
-                options={assignableUsers.map((u) => ({ value: u.id, label: userOptionLabel(u), avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
+              <Label>Assigned to ({assigneeIds.length})</Label>
+              <MultiUserSelect
+                users={assignableUsers.map((u) => ({ id: u.id, name: userOptionLabel(u) }))}
+                selectedIds={assigneeIds}
+                onChange={setAssigneeIds}
+                emptyLabel="No one to assign."
               />
             </div>
           </div>

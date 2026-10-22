@@ -26,6 +26,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       department: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
       assignedTo: { select: { id: true, name: true } },
+      assignees: { select: { id: true, name: true } },
       members: { include: { user: { select: { id: true, name: true, email: true } } } },
       supporters: {
         include: { user: { select: { id: true, name: true, surname: true, email: true, avatarDataUrl: true } } },
@@ -62,7 +63,8 @@ const patchSchema = z.object({
   status: z.enum(["PLANNED", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"]).optional(),
   progress: z.number().int().min(0).max(100).optional(),
   estimatedHours: z.number().int().min(0).max(100_000).nullable().optional(),
-  assignedToId: z.string().nullable().optional(),
+  /** The full replacement assignee list — omit to leave assignment untouched, pass (possibly empty) to replace it entirely. */
+  assigneeIds: z.array(z.string()).optional(),
   departmentId: z.string().optional(),
   isActive: z.boolean().optional(),
   startDate: z.string().nullable().optional(),
@@ -83,6 +85,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const data = parsed.data;
   const before = access;
+  const beforeAssigneeIds = new Set([...before.assignees.map((a) => a.id), ...(before.assignedToId ? [before.assignedToId] : [])]);
+  const assigneeIds = data.assigneeIds !== undefined ? [...new Set(data.assigneeIds)] : undefined;
 
   // Moving a project to a different department is an admin-only action, same
   // as creating one already is — otherwise any member could move it out of
@@ -99,7 +103,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.status !== undefined && { status: data.status }),
       ...(data.progress !== undefined && { progress: data.progress }),
       ...(data.estimatedHours !== undefined && { estimatedHours: data.estimatedHours }),
-      ...(data.assignedToId !== undefined && { assignedToId: data.assignedToId || null }),
+      ...(assigneeIds !== undefined && {
+        assignedToId: assigneeIds[0] ?? null,
+        assignees: { set: assigneeIds.map((aid) => ({ id: aid })) },
+      }),
       ...(data.departmentId !== undefined && { departmentId: data.departmentId }),
       ...(data.isActive !== undefined && { isActive: data.isActive }),
       ...(data.startDate !== undefined && { startDate: data.startDate ? new Date(data.startDate) : null }),
@@ -111,26 +118,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await logProjectActivity(id, user.id, "status_changed", { from: before.status, to: data.status });
   }
 
-  if (data.assignedToId !== undefined && data.assignedToId !== before.assignedToId) {
-    if (data.assignedToId) {
-      // A new assignee needs membership too — otherwise they're notified
-      // about a project they then can't open (getProjectForUser only grants
-      // access to the creator, a member, or an explicit module grant, never
-      // just the assignedToId field on its own).
-      await db.projectMember.upsert({
-        where: { projectId_userId: { projectId: id, userId: data.assignedToId } },
-        create: { projectId: id, userId: data.assignedToId, role: "member" },
-        update: {},
-      });
-    }
-    if (data.assignedToId && data.assignedToId !== user.id) {
-      await notifyAndPush(
-        data.assignedToId,
-        "project_assigned",
-        { projectId: id, projectName: project.name, actorName: user.name },
-        { title: "Project assigned", body: `${user.name} assigned you the project "${project.name}"`, url: `/projects/${id}`, tag: "project-assigned" }
-      );
-    }
+  if (assigneeIds !== undefined) {
+    const newlyAdded = assigneeIds.filter((aid) => !beforeAssigneeIds.has(aid));
+    // Every new assignee needs membership too — otherwise they're notified
+    // about a project they then can't open (getProjectForUser only grants
+    // access to the creator, a member, or an explicit module grant, never
+    // just assignedToId/assignees on their own).
+    await Promise.all(
+      newlyAdded.map((aid) =>
+        db.projectMember.upsert({
+          where: { projectId_userId: { projectId: id, userId: aid } },
+          create: { projectId: id, userId: aid, role: "member" },
+          update: {},
+        })
+      )
+    );
+    await Promise.all(
+      newlyAdded
+        .filter((aid) => aid !== user.id)
+        .map((aid) =>
+          notifyAndPush(
+            aid,
+            "project_assigned",
+            { projectId: id, projectName: project.name, actorName: user.name },
+            { title: "Project assigned", body: `${user.name} assigned you the project "${project.name}"`, url: `/projects/${id}`, tag: "project-assigned" }
+          )
+        )
+    );
   }
 
   broadcastProjectChange(

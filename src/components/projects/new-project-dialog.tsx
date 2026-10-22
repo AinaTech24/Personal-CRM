@@ -16,6 +16,7 @@ import { UserField } from "@/components/ui/user-field";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dropdown } from "@/components/ui/dropdown";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { IconPlus, IconX } from "@/components/icons";
 import { PROJECT_STATUSES, type AssignableUser, type ProjectStatus } from "@/components/projects/types";
@@ -45,7 +46,7 @@ export function NewProjectDialog({
   const [description, setDescription] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [status, setStatus] = useState<ProjectStatus>("PLANNED");
-  const [assignedToId, setAssignedToId] = useState("");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [memberIds, setMemberIds] = useState<string[]>([]);
@@ -58,7 +59,7 @@ export function NewProjectDialog({
     setDescription("");
     setDepartmentId("");
     setStatus("PLANNED");
-    setAssignedToId("");
+    setAssigneeIds([]);
     setStartDate(null);
     setEndDate(null);
     setMemberIds([]);
@@ -85,7 +86,7 @@ export function NewProjectDialog({
           description: description || null,
           departmentId: departmentId || null,
           status,
-          assignedToId: assignedToId || null,
+          assigneeIds,
           startDate: startDate ? startDate.toISOString() : null,
           endDate: endDate ? endDate.toISOString() : null,
           memberIds,
@@ -154,21 +155,18 @@ export function NewProjectDialog({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="project-assigned-by">Assigned by</Label>
-                <UserField id="project-assigned-by" name={currentUserName} avatarDataUrl={currentUserAvatar} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="project-assigned-to">Assigned to</Label>
-                <Dropdown
-                  id="project-assigned-to"
-                  value={assignedToId}
-                  onChange={setAssignedToId}
-                  placeholder="Unassigned"
-                  options={assignableUsers.map((u) => ({ value: u.id, label: userOptionLabel(u), avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
-                />
-              </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="project-assigned-by">Assigned by</Label>
+              <UserField id="project-assigned-by" name={currentUserName} avatarDataUrl={currentUserAvatar} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Assign to ({assigneeIds.length})</Label>
+              <MultiUserSelect
+                users={assignableUsers.map((u) => ({ id: u.id, name: userOptionLabel(u) }))}
+                selectedIds={assigneeIds}
+                onChange={setAssigneeIds}
+                emptyLabel="No one to assign."
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">

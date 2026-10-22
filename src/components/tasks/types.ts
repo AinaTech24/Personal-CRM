@@ -10,7 +10,10 @@ export interface TaskSummary {
   priority: Priority;
   dueDate: string | null;
   remindAt: string | null;
+  /** The primary (first) assignee — kept for back-compat; prefer `assignees` for the full list. */
   assignedTo: { id: string; name: string } | null;
+  /** Everyone this task is assigned to — may be empty, one, or several. */
+  assignees?: { id: string; name: string }[];
   createdBy: { id: string; name: string };
   createdAt: string;
   updatedAt: string;
@@ -36,6 +39,7 @@ export interface TaskAttachmentItem {
 
 export interface TaskDetail extends TaskSummary {
   assignedTo: { id: string; name: string; email: string | null } | null;
+  assignees?: { id: string; name: string; email: string | null }[];
   comments: TaskCommentItem[];
   attachments: TaskAttachmentItem[];
 }
@@ -48,6 +52,12 @@ export interface AssignableUser {
   departmentId: string | null;
   avatarDataUrl?: string | null;
   role?: "SUPER_ADMIN" | "ADMIN" | "DEPARTMENT_USER" | null;
+}
+
+/** Every assignee of a task, from either shape the API returns — `assignees` when present, falling back to the single legacy `assignedTo`. */
+export function taskAssignees(task: Pick<TaskSummary, "assignedTo" | "assignees">): { id: string; name: string }[] {
+  if (task.assignees && task.assignees.length > 0) return task.assignees;
+  return task.assignedTo ? [task.assignedTo] : [];
 }
 
 export const TASK_STATUSES: { value: TaskStatus; label: string }[] = [

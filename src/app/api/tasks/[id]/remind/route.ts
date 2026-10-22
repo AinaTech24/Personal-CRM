@@ -18,13 +18,19 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const task = await getTaskForUser(user, id, "UPDATE");
   if (task === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!task) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!task.assignedToId) return NextResponse.json({ error: "This task has no assignee to remind." }, { status: 400 });
 
-  await notifyAndPush(
-    task.assignedToId,
-    "task_reminder",
-    { taskId: task.id, taskTitle: task.title, actorName: user.name },
-    { title: "Task reminder", body: `${user.name} nudged you about "${task.title}"`, url: "/tasks", tag: "task-reminder" }
+  const assigneeIds = [...new Set([...task.assignees.map((a) => a.id), ...(task.assignedToId ? [task.assignedToId] : [])])];
+  if (assigneeIds.length === 0) return NextResponse.json({ error: "This task has no assignee to remind." }, { status: 400 });
+
+  await Promise.all(
+    assigneeIds.map((aid) =>
+      notifyAndPush(
+        aid,
+        "task_reminder",
+        { taskId: task.id, taskTitle: task.title, actorName: user.name },
+        { title: "Task reminder", body: `${user.name} nudged you about "${task.title}"`, url: "/tasks", tag: "task-reminder" }
+      )
+    )
   );
 
   return NextResponse.json({ ok: true });

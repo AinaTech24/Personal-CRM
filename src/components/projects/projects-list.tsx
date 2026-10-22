@@ -25,6 +25,7 @@ import { useToast } from "@/components/providers/toast-provider";
 import {
   PROJECT_STATUSES,
   PROJECT_STATUS_VARIANT,
+  projectAssignees,
   type AssignableUser,
   type ProjectSummary,
 } from "@/components/projects/types";
@@ -165,7 +166,11 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
   const filteredProjects = useMemo(() => {
     const q = query.trim().toLowerCase();
     return projects.filter((p) => {
-      if (!facetMatches(filters.assignee, (v) => (v === UNASSIGNED ? p.assignedTo === null : p.assignedTo?.id === v))) {
+      if (
+        !facetMatches(filters.assignee, (v) =>
+          v === UNASSIGNED ? projectAssignees(p).length === 0 : projectAssignees(p).some((a) => a.id === v)
+        )
+      ) {
         return false;
       }
       if (!facetMatches(filters.status, (v) => p.status === v)) return false;
@@ -445,8 +450,10 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
                       {project._count.tasks} task{project._count.tasks === 1 ? "" : "s"}
                     </span>
                   </div>
-                  {project.assignedTo && (
-                    <p className="mt-1.5 text-xs text-muted-foreground">Assigned to {project.assignedTo.name}</p>
+                  {projectAssignees(project).length > 0 && (
+                    <p className="mt-1.5 truncate text-xs text-muted-foreground">
+                      Assigned to {projectAssignees(project).map((a) => a.name).join(", ")}
+                    </p>
                   )}
                 </Card>
 

@@ -8,9 +8,13 @@ export const TOGGLEABLE_MODULES: { key: string; label: string }[] = [
   { key: "tasks", label: "Tasks" },
   { key: "projects", label: "Projects" },
   { key: "meetings", label: "Meetings" },
+  { key: "messages", label: "Messages" },
   { key: "quotations", label: "Quotations" },
   { key: "invoices", label: "Invoices" },
+  { key: "passwords", label: "Password Manager" },
+  { key: "birthdays", label: "Birthdays" },
   { key: "attendance", label: "My Attendance" },
+  { key: "leave", label: "My Leave" },
 ];
 
 export const MODULE_KEYS = TOGGLEABLE_MODULES.map((m) => m.key);

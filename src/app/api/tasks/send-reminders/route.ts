@@ -30,18 +30,19 @@ export async function POST(req: NextRequest) {
 
   const due = await db.task.findMany({
     where: { remindAt: { lte: new Date() }, reminderSentAt: null, status: { notIn: ["COMPLETED", "CANCELLED"] } },
-    select: { id: true, title: true, assignedToId: true },
+    select: { id: true, title: true, assignedToId: true, assignees: { select: { id: true } } },
   });
 
   let sent = 0;
 
   for (const task of due) {
-    if (task.assignedToId) {
-      // notifyUser returns null when the assignee has the "tasks" category
+    const assigneeIds = [...new Set([...task.assignees.map((a) => a.id), ...(task.assignedToId ? [task.assignedToId] : [])])];
+    for (const assigneeId of assigneeIds) {
+      // notifyUser returns null when that assignee has the "tasks" category
       // turned off in Settings — push should be muted right along with it.
-      const notification = await notifyUser(task.assignedToId, "task_reminder", { taskId: task.id, taskTitle: task.title });
+      const notification = await notifyUser(assigneeId, "task_reminder", { taskId: task.id, taskTitle: task.title });
       if (notification) {
-        await sendPushToUsers([task.assignedToId], {
+        await sendPushToUsers([assigneeId], {
           title: "Task reminder",
           body: `"${task.title}" needs your attention.`,
           url: "/tasks",
