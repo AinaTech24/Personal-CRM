@@ -318,20 +318,17 @@ export function UserDashboard({ firstName }: { firstName: string }) {
             ))}
           </Panel>
 
-          <Card>
+          <Card className="transition-shadow hover:shadow-md">
             <CardContent className="p-4">
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-3 flex items-center justify-between">
                 <p className="text-sm font-medium">This month</p>
                 <Link href="/attendance" className="text-xs text-primary hover:underline">
                   Attendance
                 </Link>
               </div>
-              <div className="flex items-end gap-4">
-                <div>
-                  <p className="text-2xl font-semibold tabular-nums">{att.monthSummary.attendancePercent.toFixed(0)}%</p>
-                  <p className="text-xs text-muted-foreground">Attendance</p>
-                </div>
-                <div className="flex gap-3 text-xs">
+              <div className="flex items-center gap-4">
+                <AttendanceRing percent={att.monthSummary.attendancePercent} />
+                <div className="flex flex-col gap-1 text-xs">
                   <span className="text-emerald-500">{att.monthSummary.present} present</span>
                   <span className="text-amber-500">{att.monthSummary.halfDay} half</span>
                   <span className="text-red-500">{att.monthSummary.absent} absent</span>
@@ -348,12 +345,14 @@ export function UserDashboard({ firstName }: { firstName: string }) {
             emptyLabel="No projects yet."
           >
             {data.projects.recent.map((p) => (
-              <Link key={p.id} href="/projects" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
-                <span className="min-w-0">
-                  <span className="block truncate text-sm">{p.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {p.progress}% complete{p.endDate ? ` · Due ${format(parseISO(p.endDate), "MMM d")}` : ""}
+              <Link key={p.id} href="/projects" className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm">{p.name}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{p.progress}%</span>
                   </span>
+                  <ProgressBar value={p.progress} className="mt-1.5" />
+                  {p.endDate && <span className="mt-1 block text-xs text-muted-foreground">Due {format(parseISO(p.endDate), "MMM d")}</span>}
                 </span>
                 <Badge variant={PROJECT_STATUS_VARIANT[p.status] ?? "default"} className="shrink-0">
                   {pretty(p.status)}
@@ -504,6 +503,42 @@ export function UserDashboard({ firstName }: { firstName: string }) {
   );
 }
 
+function ProgressBar({ value, className }: { value: number; className?: string }) {
+  const pct = Math.max(0, Math.min(100, value));
+  return (
+    <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-muted", className)}>
+      <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+/** A small radial progress ring for the attendance %, in place of a plain number. */
+function AttendanceRing({ percent }: { percent: number }) {
+  const radius = 26;
+  const circumference = 2 * Math.PI * radius;
+  const pct = Math.max(0, Math.min(100, percent));
+  const offset = circumference - (pct / 100) * circumference;
+  return (
+    <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
+      <svg width="64" height="64" viewBox="0 0 64 64" className="-rotate-90">
+        <circle cx="32" cy="32" r={radius} strokeWidth="6" fill="none" className="stroke-muted" />
+        <circle
+          cx="32"
+          cy="32"
+          r={radius}
+          strokeWidth="6"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="stroke-primary transition-[stroke-dashoffset] duration-500"
+        />
+      </svg>
+      <span className="absolute text-sm font-semibold tabular-nums">{pct.toFixed(0)}%</span>
+    </div>
+  );
+}
+
 function StatTile({
   href,
   icon,
@@ -521,22 +556,29 @@ function StatTile({
 }) {
   return (
     <Link href={href}>
-      <Card className="h-full transition-colors hover:border-primary/40">
-        <CardContent className="flex flex-col gap-1 p-4">
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            {icon}
-            {label}
-          </span>
+      <Card className="h-full transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
+        <CardContent className="flex items-start gap-3 p-4">
           <span
             className={cn(
-              "text-2xl font-semibold tabular-nums",
-              tone === "danger" && "text-destructive",
-              tone === "primary" && "text-primary"
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+              tone === "danger" ? "bg-destructive/10 text-destructive" : tone === "primary" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
             )}
           >
-            {value}
+            {icon}
           </span>
-          {hint && <span className="truncate text-[11px] text-muted-foreground">{hint}</span>}
+          <span className="flex min-w-0 flex-col gap-0.5 pt-0.5">
+            <span className="truncate text-xs text-muted-foreground">{label}</span>
+            <span
+              className={cn(
+                "text-2xl font-semibold tabular-nums",
+                tone === "danger" && "text-destructive",
+                tone === "primary" && "text-primary"
+              )}
+            >
+              {value}
+            </span>
+            {hint && <span className="truncate text-[11px] text-muted-foreground">{hint}</span>}
+          </span>
         </CardContent>
       </Card>
     </Link>
@@ -559,9 +601,12 @@ function Panel({
   emptyLabel: string;
 }) {
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden transition-shadow hover:shadow-md">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <p className="text-sm font-medium">{title}</p>
+        <p className="flex items-center gap-2 text-sm font-medium">
+          {icon && <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">{icon}</span>}
+          {title}
+        </p>
         <Link href={href} className="text-xs text-primary hover:underline">
           View all
         </Link>
