@@ -423,12 +423,15 @@ export function Sidebar({
 
   // CRM team members (regular or lead, not a company admin) keep the rest of
   // the standard nav — CRM isn't a separate curated line of business the way
-  // Social Media is — and just gain "Calls" right after Leads. A lead
-  // additionally gets the Team console link itself, right after Calls.
+  // Social Media is — and just gain "Calls" right after Leads, plus a
+  // read-only "Clients" (see crmClientsScopeFor) unless an admin has hidden
+  // that module company-wide. A lead additionally gets the Team console
+  // link itself, right after those.
   if (hasCrmAccess && !isAdmin) {
     const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
     const insertAt = leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1;
-    visibleMainNav.splice(insertAt, 0, ...(isCrmLead ? [callsNavItem, crmTeamNavItem] : [callsNavItem]));
+    const crmExtras = [callsNavItem, ...(hiddenModules.includes("clients") ? [] : [clientsNavItem]), ...(isCrmLead ? [crmTeamNavItem] : [])];
+    visibleMainNav.splice(insertAt, 0, ...crmExtras);
   }
 
   // A department shared on at least one form (or a department admin) gets
@@ -441,7 +444,22 @@ export function Sidebar({
   // Someone granted the Clients module permission gets the same "Clients" link
   // a Social Media team member has — unless they already got it above (a
   // Social Media member who also holds the grant shouldn't see it twice).
-  if (!isAdmin && managedModuleSet.has("CLIENTS") && !visibleMainNav.some((item) => item.href === "/clients")) {
+  //
+  // Unlike Leads/Tasks/Projects/Meetings/Attendance (MAIN_NAV_HREF_MODULE,
+  // above), the global hide wins over the grant here rather than the other
+  // way round: those modules are shown to everyone by default and a grant
+  // only widens one person's own-record scope, so "an explicit grant now
+  // wins" was the fix for a hide silently undoing that widening. Clients was
+  // never shown by default to begin with — it only ever appears via a grant
+  // or CRM/Social Media team membership — so the hide toggle here instead
+  // works as the admin's one on/off switch over the grant-based path
+  // specifically (Social Media's own members are unaffected either way).
+  if (
+    !isAdmin &&
+    managedModuleSet.has("CLIENTS") &&
+    !hiddenModules.includes("clients") &&
+    !visibleMainNav.some((item) => item.href === "/clients")
+  ) {
     const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
     visibleMainNav.splice(leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1, 0, clientsNavItem);
   }

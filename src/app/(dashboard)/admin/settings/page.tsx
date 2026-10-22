@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { SkeletonForm } from "@/components/ui/skeleton";
+import { IconInfo } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { TOGGLEABLE_MODULES } from "@/lib/modules";
 import { cn } from "@/lib/utils";
@@ -138,6 +140,21 @@ export default function AdminSettingsPage() {
             <h2 className="text-base font-semibold">Sidebar modules</h2>
             <p className="text-sm text-muted-foreground">
               Choose which modules regular users can see in the sidebar. Admins always see everything.
+            </p>
+          </div>
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+            <IconInfo className="h-4 w-4 shrink-0 translate-y-0.5 text-muted-foreground/80" />
+            <p>
+              Hiding Leads, Tasks, Projects, Meetings, or My Attendance here only changes the default — anyone
+              individually granted that module in{" "}
+              <Link href="/admin/permissions" className="text-primary hover:underline">
+                Permission Manager
+              </Link>{" "}
+              still sees it regardless of this toggle, so it doesn&apos;t silently undo a grant someone was
+              given on purpose. Clients works the other way round: hiding it here blocks an individual grant
+              or CRM Team access from showing it, but a Social Media Team member still keeps their own
+              Clients link either way — same as Quotations staying hidden from them, and Calls staying shown
+              to CRM, regardless of this list.
             </p>
           </div>
           {loading ? (
