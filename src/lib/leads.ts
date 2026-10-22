@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { canManageRecord, isAdmin, isSuperAdmin } from "@/lib/permissions";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
+import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
@@ -15,6 +15,7 @@ function isSocialMediaTeamLead(lead: { createdById: string; assignedToId: string
 export async function getLeadForUser(user: PermissionUser, leadId: string, action: Extract<ModuleAction, "READ" | "UPDATE"> = "READ") {
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   if (!lead) return null;
+  if (await isModuleBlocked(user, "LEADS")) return "forbidden" as const;
   if (canManageRecord(user, lead)) return lead;
 
   const scope = await moduleAccessScope(user, "LEADS", action);

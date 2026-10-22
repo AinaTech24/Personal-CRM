@@ -6,11 +6,12 @@ import { isAdmin } from "@/lib/permissions";
 import { broadcastProjectChange, canDeleteProject, logProjectActivity, projectListWhere } from "@/lib/projects";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
+import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "PROJECTS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // The Social Media / CRM Team console's Projects tab explicitly asks for
   // the team-only view (scope=social-media|crm) — narrower than an Admin's
@@ -50,6 +51,7 @@ const bodySchema = z.object({
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "PROJECTS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -109,6 +111,7 @@ const bulkReassignSchema = z.object({ ids: z.array(z.string()).min(1), assignedT
 export async function PATCH(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "PROJECTS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = bulkReassignSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
@@ -173,6 +176,7 @@ const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });
 export async function DELETE(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "PROJECTS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = bulkDeleteSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

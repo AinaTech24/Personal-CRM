@@ -164,6 +164,8 @@ const BLOCKABLE_HREF_MODULE: Partial<Record<string, ManagedModule>> = {
   "/projects": "PROJECTS",
   "/meetings": "MEETINGS",
   "/attendance": "ATTENDANCE",
+  "/leave": "LEAVE",
+  "/birthdays": "BIRTHDAYS",
   "/messages": "MESSAGES",
   "/clients": "CLIENTS",
 };

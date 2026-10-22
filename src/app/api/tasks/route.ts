@@ -5,11 +5,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { broadcastTaskChange, canDeleteTask, taskListWhere } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
+import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "TASKS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // The Social Media / CRM Team console's Tasks tab explicitly asks for the
   // team-only view (scope=social-media|crm) — narrower than an Admin's
@@ -47,6 +48,7 @@ const bodySchema = z.object({
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "TASKS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -94,6 +96,7 @@ const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });
 export async function DELETE(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "TASKS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = bulkDeleteSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
