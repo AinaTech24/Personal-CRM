@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -16,16 +15,15 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { useToast } from "@/components/providers/toast-provider";
 import { usePushNotifications } from "@/components/providers/use-push-notifications";
+import { ThemeOptionRow } from "@/components/layout/theme-toggle";
 import { birthYearRange } from "@/lib/birthdays";
 import {
   IconBell,
   IconBuildingCog,
   IconChevronDown,
-  IconMoon,
   IconPower,
   IconShield,
   IconSliders,
-  IconSun,
   IconTrash,
   IconUser,
   IconX,
@@ -280,7 +278,6 @@ export function SettingsDialog({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const { theme, setTheme } = useTheme();
 
   const [section, setSection] = useState<SectionId>("profile");
   const [loading, setLoading] = useState(true);
@@ -826,19 +823,14 @@ export function SettingsDialog({
                         <h2 className="text-base font-semibold">Preferences</h2>
                         <p className="text-sm text-muted-foreground">How Aina CRM looks and feels for you.</p>
                       </div>
-                      <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
-                        <div className="flex items-center gap-2.5">
-                          {theme === "dark" ? <IconMoon className="h-4 w-4 text-muted-foreground" /> : <IconSun className="h-4 w-4 text-muted-foreground" />}
-                          <div>
-                            <p className="text-sm font-medium">Dark mode</p>
-                            <p className="text-xs text-muted-foreground">Switch between light and dark themes.</p>
-                          </div>
+                      <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+                        <div>
+                          <p className="text-sm font-medium">Theme</p>
+                          <p className="text-xs text-muted-foreground">
+                            Light, dark, or match your device&apos;s setting.
+                          </p>
                         </div>
-                        <ToggleSwitch
-                          checked={theme === "dark"}
-                          onChange={(v) => setTheme(v ? "dark" : "light")}
-                          label="Toggle dark mode"
-                        />
+                        <ThemeOptionRow />
                       </div>
 
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
