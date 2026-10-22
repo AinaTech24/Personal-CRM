@@ -25,6 +25,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import {
   TASK_STATUSES,
   PRIORITY_OPTIONS,
+  taskAssignees,
   type AssignableUser,
   type TaskAttachmentItem,
   type TaskCommentItem,
@@ -183,7 +184,7 @@ export function TaskDetailDialog({
   }
 
   const headerTitle = task?.title ?? initialSummary?.title;
-  const currentAssignees = task?.assignees ?? (task?.assignedTo ? [task.assignedTo] : []);
+  const currentAssignees = task ? taskAssignees(task) : [];
 
   return (
     <>

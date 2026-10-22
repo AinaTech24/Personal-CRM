@@ -8,6 +8,8 @@ import {
   sanitizeAttachmentFileName,
 } from "@/lib/uploads";
 import { notifyAndPush } from "@/lib/notify";
+import { requestDevice } from "@/lib/request-info";
+import { rateLimit } from "@/lib/rate-limit";
 
 interface PickedFile {
   fileName: string;
@@ -18,9 +20,25 @@ function isPickedFile(v: unknown): v is PickedFile {
   return !!v && typeof v === "object" && typeof (v as PickedFile).fileName === "string" && typeof (v as PickedFile).dataUrl === "string";
 }
 
+// 8 submissions / 10 minutes per IP per form — this endpoint is public (no
+// login, no CAPTCHA), so without a cap a scripted flood could both bloat the
+// database and spam every viewer's notification bell/push device.
+const LIMIT = 8;
+const WINDOW_MS = 10 * 60 * 1000;
+
 /** Public — no login required. Validates and stores one visitor's answers to a live form. */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+
+  const ip = requestDevice(req).ip ?? "unknown";
+  const { allowed, retryAfterSeconds } = rateLimit(`form-submit:${slug}:${ip}`, LIMIT, WINDOW_MS);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many submissions. Try again in a few minutes." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
+    );
+  }
+
   const form = await db.form.findUnique({
     where: { slug },
     include: { fields: { orderBy: { order: "asc" } }, viewerDepartments: { select: { departmentId: true } } },
