@@ -21,8 +21,11 @@ import {
   IconBuilding,
   IconImage,
 } from "@/components/icons";
+import { Dropdown } from "@/components/ui/dropdown";
 import { useToast } from "@/components/providers/toast-provider";
 import { useDashboardActivity } from "@/components/dashboard/dashboard-activity";
+import { Chart, CHART_TYPES, type Slice } from "@/components/dashboard/charts";
+import { STATUS_HEX, STATUS_ORDER, statusLabel, type DashboardEntityKey } from "@/lib/dashboard-colors";
 import { formatIstTime, formatDuration } from "@/lib/attendance-ui";
 import { cn, formatMoney } from "@/lib/utils";
 
@@ -52,6 +55,14 @@ interface MeDashboard {
     recent: { id: string; name: string; status: string; progress: number; endDate: string | null }[];
   };
   unreadChats: number;
+  /** Status-breakdown counts behind the Overview charts — quotations/invoices are null without CRM access. */
+  charts: {
+    tasks: Record<string, number>;
+    leads: Record<string, number>;
+    projects: Record<string, number>;
+    quotations: Record<string, number> | null;
+    invoices: Record<string, number> | null;
+  };
   /** Only present for a CRM Team member (or an admin) — see hasCrmAccess. */
   crm: {
     quotations: {
@@ -106,6 +117,13 @@ const INVOICE_STATUS_VARIANT: Record<string, "secondary" | "default" | "warning"
   CANCELLED: "secondary",
 };
 
+/** Non-zero {label,value,color} slices for one entity's status breakdown, in STATUS_ORDER's order. */
+function slicesFor(byStatus: Record<string, number>, key: DashboardEntityKey): Slice[] {
+  return STATUS_ORDER[key]
+    .map((s) => ({ label: statusLabel(s), value: byStatus[s] ?? 0, color: STATUS_HEX[s] ?? "#9ca3af" }))
+    .filter((s) => s.value > 0);
+}
+
 function whenLabel(iso: string) {
   const d = parseISO(iso);
   if (isToday(d)) return `Today · ${format(d, "h:mm a")}`;
@@ -119,6 +137,11 @@ export function UserDashboard({ firstName }: { firstName: string }) {
   const [data, setData] = useState<MeDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
+  const [tasksChartType, setTasksChartType] = useState("donut");
+  const [leadsChartType, setLeadsChartType] = useState("bar");
+  const [projectsChartType, setProjectsChartType] = useState("column");
+  const [quotationsChartType, setQuotationsChartType] = useState("donut");
+  const [invoicesChartType, setInvoicesChartType] = useState("bar");
 
   const load = useCallback(async () => {
     try {
@@ -169,7 +192,7 @@ export function UserDashboard({ firstName }: { firstName: string }) {
     <div className="flex flex-col gap-5">
       {/* Greeting + today's attendance */}
       <Card className="overflow-hidden">
-        <CardContent className="flex flex-col gap-4 bg-gradient-to-br from-primary/10 via-transparent to-transparent p-5 sm:flex-row sm:items-center sm:justify-between">
+        <CardContent className="flex flex-col gap-4 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-xl font-semibold">
               {greeting}, {firstName}
@@ -219,6 +242,21 @@ export function UserDashboard({ firstName }: { firstName: string }) {
 
       {/* Filtered view (period + module), shown when a module is picked. */}
       {panel}
+
+      {/* Overview — the same chart engine the admin dashboard uses, scoped
+          to this user's own records, so a quiet day still reads as a shape
+          rather than a column of empty boxes. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <ChartCard title="Your tasks" icon={<IconTasks className="h-4 w-4" />} typeValue={tasksChartType} typeOptions={CHART_TYPES.graph} onType={setTasksChartType}>
+          <Chart type={tasksChartType} data={slicesFor(data.charts.tasks, "tasks")} />
+        </ChartCard>
+        <ChartCard title="Your leads" icon={<IconLeads className="h-4 w-4" />} typeValue={leadsChartType} typeOptions={CHART_TYPES.chart} onType={setLeadsChartType}>
+          <Chart type={leadsChartType} data={slicesFor(data.charts.leads, "leads")} />
+        </ChartCard>
+        <ChartCard title="Your projects" icon={<IconProjects className="h-4 w-4" />} typeValue={projectsChartType} typeOptions={CHART_TYPES.chart} onType={setProjectsChartType}>
+          <Chart type={projectsChartType} data={slicesFor(data.charts.projects, "projects")} />
+        </ChartCard>
+      </div>
 
       {/* Headline numbers */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -366,9 +404,14 @@ export function UserDashboard({ firstName }: { firstName: string }) {
       {/* CRM Team work — only fetched/shown for a CRM member (or admin). */}
       {data.crm && (
         <div className="flex flex-col gap-4">
-          <div>
-            <h2 className="text-lg font-semibold">Your CRM work</h2>
-            <p className="text-sm text-muted-foreground">Quotations, invoices, and calls you own.</p>
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <IconQuotations className="h-4 w-4" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold">Your CRM work</h2>
+              <p className="text-sm text-muted-foreground">Quotations, invoices, and calls you own.</p>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -388,6 +431,21 @@ export function UserDashboard({ firstName }: { firstName: string }) {
               tone={data.crm.invoices.open > 0 ? "primary" : "default"}
             />
           </div>
+
+          {(data.charts.quotations || data.charts.invoices) && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {data.charts.quotations && (
+                <ChartCard title="Quotations by status" icon={<IconQuotations className="h-4 w-4" />} typeValue={quotationsChartType} typeOptions={CHART_TYPES.graph} onType={setQuotationsChartType}>
+                  <Chart type={quotationsChartType} data={slicesFor(data.charts.quotations, "quotations")} height={170} />
+                </ChartCard>
+              )}
+              {data.charts.invoices && (
+                <ChartCard title="Invoices by status" icon={<IconInvoices className="h-4 w-4" />} typeValue={invoicesChartType} typeOptions={CHART_TYPES.chart} onType={setInvoicesChartType}>
+                  <Chart type={invoicesChartType} data={slicesFor(data.charts.invoices, "invoices")} height={170} />
+                </ChartCard>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <Panel
@@ -460,9 +518,14 @@ export function UserDashboard({ firstName }: { firstName: string }) {
       {/* Social Media Team work — only fetched/shown for a Social Media member (or admin). */}
       {data.socialMedia && (
         <div className="flex flex-col gap-4">
-          <div>
-            <h2 className="text-lg font-semibold">Your Social Media work</h2>
-            <p className="text-sm text-muted-foreground">Clients you own, and content still in progress.</p>
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <IconBuilding className="h-4 w-4" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold">Your Social Media work</h2>
+              <p className="text-sm text-muted-foreground">Clients you own, and content still in progress.</p>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -536,6 +599,38 @@ function AttendanceRing({ percent }: { percent: number }) {
       </svg>
       <span className="absolute text-sm font-semibold tabular-nums">{pct.toFixed(0)}%</span>
     </div>
+  );
+}
+
+/** A chart card with its own chart-type switcher — the same visual card the admin dashboard uses, fixed to one dataset since this is a personal overview, not an aggregate explorer. */
+function ChartCard({
+  title,
+  icon,
+  typeValue,
+  typeOptions,
+  onType,
+  children,
+}: {
+  title: string;
+  icon: ReactNode;
+  typeValue: string;
+  typeOptions: readonly { value: string; label: string }[];
+  onType: (v: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="flex h-full flex-col gap-3 p-4 transition-shadow hover:shadow-md">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">{icon}</span>
+          {title}
+        </span>
+        <div className="w-32">
+          <Dropdown size="sm" value={typeValue} onChange={onType} options={[...typeOptions]} />
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col justify-center">{children}</div>
+    </Card>
   );
 }
 
