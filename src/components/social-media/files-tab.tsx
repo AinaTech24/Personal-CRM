@@ -350,7 +350,29 @@ export const FilesTab = forwardRef<TabCreateHandle, { clientId: string; onChange
           <IconChevronLeft className="h-4 w-4" />
           Back to folders
         </button>
-        <h3 className="text-sm font-semibold">{activeFolder.name}</h3>
+        <div className="flex items-center gap-1">
+          <h3 className="text-sm font-semibold">{activeFolder.name}</h3>
+          <Tooltip label="Rename folder">
+            <button
+              type="button"
+              aria-label={`Rename ${activeFolder.name}`}
+              onClick={() => openEditFolder(activeFolder)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
+            >
+              <IconPencil className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
+          <Tooltip label="Delete folder">
+            <button
+              type="button"
+              aria-label={`Delete ${activeFolder.name}`}
+              onClick={() => setDeleteFolderTarget(activeFolder)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive"
+            >
+              <IconTrash className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
+        </div>
       </div>
 
       <input

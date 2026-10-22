@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { format, formatDistanceToNowStrict, isToday, isTomorrow, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
@@ -14,11 +15,16 @@ import {
   IconProjects,
   IconCalendar,
   IconMessage,
+  IconQuotations,
+  IconInvoices,
+  IconPhone,
+  IconBuilding,
+  IconImage,
 } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { useDashboardActivity } from "@/components/dashboard/dashboard-activity";
 import { formatIstTime, formatDuration } from "@/lib/attendance-ui";
-import { cn } from "@/lib/utils";
+import { cn, formatMoney } from "@/lib/utils";
 
 interface MeDashboard {
   todayKey: string;
@@ -36,13 +42,69 @@ interface MeDashboard {
     dueToday: number;
     upcoming: { id: string; title: string; status: string; priority: string; dueDate: string | null }[];
   };
-  leads: { open: number; recent: { id: string; name: string; company: string | null; status: string }[] };
+  leads: {
+    open: number;
+    recent: { id: string; name: string; company: string | null; status: string; priority: string }[];
+  };
   meetings: { id: string; title: string; startsAt: string; location: string | null }[];
-  projects: number;
+  projects: {
+    total: number;
+    recent: { id: string; name: string; status: string; progress: number; endDate: string | null }[];
+  };
   unreadChats: number;
+  /** Only present for a CRM Team member (or an admin) — see hasCrmAccess. */
+  crm: {
+    quotations: {
+      open: number;
+      recent: { id: string; number: string; clientName: string; status: string; total: number; validUntil: string | null }[];
+    };
+    invoices: {
+      open: number;
+      recent: { id: string; number: string; clientName: string; status: string; total: number }[];
+    };
+    calls: { id: string; clientName: string; callType: string; startTime: string; nextAction: string | null }[];
+  } | null;
+  /** Only present for a Social Media Team member (or an admin) — see hasSocialMediaAccess. */
+  socialMedia: {
+    clients: number;
+    pendingContent: number;
+    content: { id: string; title: string; type: string; stage: string; scheduledFor: string | null; clientName: string }[];
+  } | null;
 }
 
 const pretty = (s: string) => s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
+const PRIORITY_VARIANT: Record<string, "secondary" | "default" | "warning" | "destructive"> = {
+  LOW: "secondary",
+  MEDIUM: "default",
+  HIGH: "warning",
+  URGENT: "destructive",
+};
+
+const PROJECT_STATUS_VARIANT: Record<string, "secondary" | "default" | "warning" | "success" | "destructive"> = {
+  PLANNED: "secondary",
+  ACTIVE: "default",
+  ON_HOLD: "warning",
+  COMPLETED: "success",
+  CANCELLED: "destructive",
+};
+
+const QUOTATION_STATUS_VARIANT: Record<string, "secondary" | "default" | "warning" | "success" | "destructive"> = {
+  DRAFT: "secondary",
+  SENT: "default",
+  APPROVED: "success",
+  REJECTED: "destructive",
+  EXPIRED: "warning",
+};
+
+const INVOICE_STATUS_VARIANT: Record<string, "secondary" | "default" | "warning" | "success" | "destructive"> = {
+  DRAFT: "secondary",
+  SENT: "default",
+  PAID: "success",
+  PARTIAL_PAYMENT: "warning",
+  OVERDUE: "destructive",
+  CANCELLED: "secondary",
+};
 
 function whenLabel(iso: string) {
   const d = parseISO(iso);
@@ -182,14 +244,25 @@ export function UserDashboard({ firstName }: { firstName: string }) {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Tasks due next */}
-        <Panel title="Your next tasks" href="/tasks" empty={tasks.upcoming.length === 0} emptyLabel="No open tasks — nice.">
+        <Panel
+          title="Your next tasks"
+          href="/tasks"
+          icon={<IconTasks className="h-4 w-4" />}
+          empty={tasks.upcoming.length === 0}
+          emptyLabel="No open tasks — nice."
+        >
           {tasks.upcoming.map((t) => {
             const overdue = t.dueDate && parseISO(t.dueDate) < new Date();
             return (
               <Link key={t.id} href="/tasks" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
                 <span className="min-w-0">
                   <span className="block truncate text-sm">{t.title}</span>
-                  <span className="text-xs text-muted-foreground">{pretty(t.status)}</span>
+                  <span className="mt-0.5 flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">{pretty(t.status)}</span>
+                    <Badge variant={PRIORITY_VARIANT[t.priority] ?? "default"} className="px-1.5 py-0 text-[10px]">
+                      {pretty(t.priority)}
+                    </Badge>
+                  </span>
                 </span>
                 {t.dueDate && (
                   <span className={cn("shrink-0 text-xs", overdue ? "text-destructive" : "text-muted-foreground")}>
@@ -202,7 +275,13 @@ export function UserDashboard({ firstName }: { firstName: string }) {
         </Panel>
 
         {/* Meetings */}
-        <Panel title="Upcoming meetings" href="/meetings" empty={meetings.length === 0} emptyLabel="Nothing scheduled.">
+        <Panel
+          title="Upcoming meetings"
+          href="/meetings"
+          icon={<IconCalendar className="h-4 w-4" />}
+          empty={meetings.length === 0}
+          emptyLabel="Nothing scheduled."
+        >
           {meetings.map((m) => (
             <Link key={m.id} href="/meetings" className="flex flex-col gap-0.5 px-4 py-2.5 transition-colors hover:bg-primary/5">
               <span className="truncate text-sm">{m.title}</span>
@@ -214,34 +293,42 @@ export function UserDashboard({ firstName }: { firstName: string }) {
           ))}
         </Panel>
 
-        {/* Leads + month attendance */}
+        {/* Leads + month attendance + projects */}
         <div className="flex flex-col gap-4">
-          <Panel title="Recent leads" href="/leads" empty={leads.recent.length === 0} emptyLabel="No active leads.">
+          <Panel
+            title="Recent leads"
+            href="/leads"
+            icon={<IconLeads className="h-4 w-4" />}
+            empty={leads.recent.length === 0}
+            emptyLabel="No active leads."
+          >
             {leads.recent.map((l) => (
               <Link key={l.id} href="/leads" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
                 <span className="min-w-0">
                   <span className="block truncate text-sm">{l.name}</span>
                   {l.company && <span className="block truncate text-xs text-muted-foreground">{l.company}</span>}
                 </span>
-                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px]">{pretty(l.status)}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <Badge variant={PRIORITY_VARIANT[l.priority] ?? "default"} className="px-1.5 py-0 text-[10px]">
+                    {pretty(l.priority)}
+                  </Badge>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px]">{pretty(l.status)}</span>
+                </span>
               </Link>
             ))}
           </Panel>
 
-          <Card>
+          <Card className="transition-shadow hover:shadow-md">
             <CardContent className="p-4">
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-3 flex items-center justify-between">
                 <p className="text-sm font-medium">This month</p>
                 <Link href="/attendance" className="text-xs text-primary hover:underline">
                   Attendance
                 </Link>
               </div>
-              <div className="flex items-end gap-4">
-                <div>
-                  <p className="text-2xl font-semibold tabular-nums">{att.monthSummary.attendancePercent.toFixed(0)}%</p>
-                  <p className="text-xs text-muted-foreground">Attendance</p>
-                </div>
-                <div className="flex gap-3 text-xs">
+              <div className="flex items-center gap-4">
+                <AttendanceRing percent={att.monthSummary.attendancePercent} />
+                <div className="flex flex-col gap-1 text-xs">
                   <span className="text-emerald-500">{att.monthSummary.present} present</span>
                   <span className="text-amber-500">{att.monthSummary.halfDay} half</span>
                   <span className="text-red-500">{att.monthSummary.absent} absent</span>
@@ -250,21 +337,204 @@ export function UserDashboard({ firstName }: { firstName: string }) {
             </CardContent>
           </Card>
 
-          <Link href="/projects">
-            <Card className="transition-colors hover:border-primary/40">
-              <CardContent className="flex items-center gap-3 p-4">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <IconProjects className="h-4 w-4" />
+          <Panel
+            title={`Your projects (${data.projects.total})`}
+            href="/projects"
+            icon={<IconProjects className="h-4 w-4" />}
+            empty={data.projects.recent.length === 0}
+            emptyLabel="No projects yet."
+          >
+            {data.projects.recent.map((p) => (
+              <Link key={p.id} href="/projects" className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm">{p.name}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{p.progress}%</span>
+                  </span>
+                  <ProgressBar value={p.progress} className="mt-1.5" />
+                  {p.endDate && <span className="mt-1 block text-xs text-muted-foreground">Due {format(parseISO(p.endDate), "MMM d")}</span>}
                 </span>
-                <span>
-                  <span className="block text-sm font-medium">{data.projects} projects</span>
-                  <span className="block text-xs text-muted-foreground">You&apos;re a member of</span>
-                </span>
-              </CardContent>
-            </Card>
-          </Link>
+                <Badge variant={PROJECT_STATUS_VARIANT[p.status] ?? "default"} className="shrink-0">
+                  {pretty(p.status)}
+                </Badge>
+              </Link>
+            ))}
+          </Panel>
         </div>
       </div>
+
+      {/* CRM Team work — only fetched/shown for a CRM member (or admin). */}
+      {data.crm && (
+        <div className="flex flex-col gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">Your CRM work</h2>
+            <p className="text-sm text-muted-foreground">Quotations, invoices, and calls you own.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatTile
+              href="/quotations"
+              icon={<IconQuotations className="h-4 w-4" />}
+              label="Open quotations"
+              value={data.crm.quotations.open}
+              hint={data.crm.quotations.open > 0 ? "Not yet approved" : "All settled"}
+            />
+            <StatTile
+              href="/invoices"
+              icon={<IconInvoices className="h-4 w-4" />}
+              label="Open invoices"
+              value={data.crm.invoices.open}
+              hint={data.crm.invoices.open > 0 ? "Awaiting payment" : "All settled"}
+              tone={data.crm.invoices.open > 0 ? "primary" : "default"}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Panel
+              title="Recent quotations"
+              href="/quotations"
+              icon={<IconQuotations className="h-4 w-4" />}
+              empty={data.crm.quotations.recent.length === 0}
+              emptyLabel="No open quotations."
+            >
+              {data.crm.quotations.recent.map((q) => (
+                <Link key={q.id} href="/quotations" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm">{q.clientName}</span>
+                    <span className="text-xs text-muted-foreground">{q.number}</span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-0.5">
+                    <span className="text-xs font-medium tabular-nums">{formatMoney(q.total)}</span>
+                    <Badge variant={QUOTATION_STATUS_VARIANT[q.status] ?? "default"} className="px-1.5 py-0 text-[10px]">
+                      {pretty(q.status)}
+                    </Badge>
+                  </span>
+                </Link>
+              ))}
+            </Panel>
+
+            <Panel
+              title="Recent invoices"
+              href="/invoices"
+              icon={<IconInvoices className="h-4 w-4" />}
+              empty={data.crm.invoices.recent.length === 0}
+              emptyLabel="No open invoices."
+            >
+              {data.crm.invoices.recent.map((i) => (
+                <Link key={i.id} href="/invoices" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm">{i.clientName}</span>
+                    <span className="text-xs text-muted-foreground">{i.number}</span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-0.5">
+                    <span className="text-xs font-medium tabular-nums">{formatMoney(i.total)}</span>
+                    <Badge variant={INVOICE_STATUS_VARIANT[i.status] ?? "default"} className="px-1.5 py-0 text-[10px]">
+                      {pretty(i.status)}
+                    </Badge>
+                  </span>
+                </Link>
+              ))}
+            </Panel>
+
+            <Panel
+              title="Recent calls"
+              href="/calls"
+              icon={<IconPhone className="h-4 w-4" />}
+              empty={data.crm.calls.length === 0}
+              emptyLabel="No calls logged yet."
+            >
+              {data.crm.calls.map((c) => (
+                <Link key={c.id} href="/calls" className="flex flex-col gap-0.5 px-4 py-2.5 transition-colors hover:bg-primary/5">
+                  <span className="truncate text-sm">{c.clientName}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {pretty(c.callType)} · {format(parseISO(c.startTime), "MMM d, h:mm a")}
+                  </span>
+                  {c.nextAction && <span className="truncate text-xs text-primary">Next: {c.nextAction}</span>}
+                </Link>
+              ))}
+            </Panel>
+          </div>
+        </div>
+      )}
+
+      {/* Social Media Team work — only fetched/shown for a Social Media member (or admin). */}
+      {data.socialMedia && (
+        <div className="flex flex-col gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">Your Social Media work</h2>
+            <p className="text-sm text-muted-foreground">Clients you own, and content still in progress.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatTile href="/clients" icon={<IconBuilding className="h-4 w-4" />} label="My clients" value={data.socialMedia.clients} hint="Created by or assigned to you" />
+            <StatTile
+              href="/clients"
+              icon={<IconImage className="h-4 w-4" />}
+              label="Content in progress"
+              value={data.socialMedia.pendingContent}
+              hint={data.socialMedia.pendingContent > 0 ? "Not yet published" : "Nothing pending"}
+              tone={data.socialMedia.pendingContent > 0 ? "primary" : "default"}
+            />
+          </div>
+
+          <Panel
+            title="Content pipeline"
+            href="/clients"
+            icon={<IconImage className="h-4 w-4" />}
+            empty={data.socialMedia.content.length === 0}
+            emptyLabel="Nothing in progress."
+          >
+            {data.socialMedia.content.map((c) => (
+              <Link key={c.id} href="/clients" className="flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-primary/5">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm">{c.title}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {c.clientName} · {pretty(c.type)}
+                    {c.scheduledFor ? ` · ${format(parseISO(c.scheduledFor), "MMM d")}` : ""}
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px]">{pretty(c.stage)}</span>
+              </Link>
+            ))}
+          </Panel>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProgressBar({ value, className }: { value: number; className?: string }) {
+  const pct = Math.max(0, Math.min(100, value));
+  return (
+    <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-muted", className)}>
+      <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+/** A small radial progress ring for the attendance %, in place of a plain number. */
+function AttendanceRing({ percent }: { percent: number }) {
+  const radius = 26;
+  const circumference = 2 * Math.PI * radius;
+  const pct = Math.max(0, Math.min(100, percent));
+  const offset = circumference - (pct / 100) * circumference;
+  return (
+    <div className="relative flex h-16 w-16 shrink-0 items-center justify-center">
+      <svg width="64" height="64" viewBox="0 0 64 64" className="-rotate-90">
+        <circle cx="32" cy="32" r={radius} strokeWidth="6" fill="none" className="stroke-muted" />
+        <circle
+          cx="32"
+          cy="32"
+          r={radius}
+          strokeWidth="6"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="stroke-primary transition-[stroke-dashoffset] duration-500"
+        />
+      </svg>
+      <span className="absolute text-sm font-semibold tabular-nums">{pct.toFixed(0)}%</span>
     </div>
   );
 }
@@ -286,22 +556,29 @@ function StatTile({
 }) {
   return (
     <Link href={href}>
-      <Card className="h-full transition-colors hover:border-primary/40">
-        <CardContent className="flex flex-col gap-1 p-4">
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            {icon}
-            {label}
-          </span>
+      <Card className="h-full transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
+        <CardContent className="flex items-start gap-3 p-4">
           <span
             className={cn(
-              "text-2xl font-semibold tabular-nums",
-              tone === "danger" && "text-destructive",
-              tone === "primary" && "text-primary"
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+              tone === "danger" ? "bg-destructive/10 text-destructive" : tone === "primary" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
             )}
           >
-            {value}
+            {icon}
           </span>
-          {hint && <span className="truncate text-[11px] text-muted-foreground">{hint}</span>}
+          <span className="flex min-w-0 flex-col gap-0.5 pt-0.5">
+            <span className="truncate text-xs text-muted-foreground">{label}</span>
+            <span
+              className={cn(
+                "text-2xl font-semibold tabular-nums",
+                tone === "danger" && "text-destructive",
+                tone === "primary" && "text-primary"
+              )}
+            >
+              {value}
+            </span>
+            {hint && <span className="truncate text-[11px] text-muted-foreground">{hint}</span>}
+          </span>
         </CardContent>
       </Card>
     </Link>
@@ -311,27 +588,35 @@ function StatTile({
 function Panel({
   title,
   href,
+  icon,
   children,
   empty,
   emptyLabel,
 }: {
   title: string;
   href: string;
+  icon?: ReactNode;
   children: ReactNode;
   empty: boolean;
   emptyLabel: string;
 }) {
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden transition-shadow hover:shadow-md">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <p className="text-sm font-medium">{title}</p>
+        <p className="flex items-center gap-2 text-sm font-medium">
+          {icon && <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">{icon}</span>}
+          {title}
+        </p>
         <Link href={href} className="text-xs text-primary hover:underline">
           View all
         </Link>
       </div>
       <CardContent className="p-0">
         {empty ? (
-          <p className="px-4 py-8 text-center text-sm text-muted-foreground">{emptyLabel}</p>
+          <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+            {icon && <span className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground">{icon}</span>}
+            <p className="text-sm text-muted-foreground">{emptyLabel}</p>
+          </div>
         ) : (
           <div className="flex flex-col divide-y divide-border/50">{children}</div>
         )}

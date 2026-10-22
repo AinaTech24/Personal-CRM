@@ -179,8 +179,8 @@ function NavLinkItem({
         href={item.href}
         onClick={onNavigate}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground",
-          active && "bg-accent text-foreground"
+          "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-primary/5 hover:text-primary",
+          active && "bg-primary/5 text-primary"
         )}
       >
         <span className="relative shrink-0">
@@ -661,8 +661,10 @@ export function Sidebar({
                 // instead of a true circle. Transitioning `width` directly
                 // settles on an exact 36×36 every time, and still animates
                 // smoothly since it's a real CSS transition, not a discrete swap.
-                "box-border flex h-9 w-full min-w-0 items-center gap-2 rounded-full border border-border bg-background px-3 text-sm text-muted-foreground transition-[width,padding,color,background-color,border-color] duration-300 ease-in-out focus-within:border-ring/50",
-                collapsed && "w-9 cursor-pointer justify-center px-0 hover:border-ring/50 hover:text-foreground"
+                "box-border flex h-9 w-full min-w-0 items-center rounded-full border border-border bg-background px-3 text-sm text-muted-foreground transition-[width,padding,color,background-color,border-color] duration-300 ease-in-out focus-within:border-ring/50",
+                collapsed
+                  ? "w-9 cursor-pointer justify-center gap-0 px-0 hover:border-ring/50 hover:text-foreground"
+                  : "gap-2"
               )}
             >
               <IconSearch className="h-4 w-4 shrink-0" />
@@ -673,28 +675,27 @@ export function Sidebar({
                 aria-label="Search sidebar modules"
                 tabIndex={collapsed ? -1 : undefined}
                 className={cn(
-                  "h-full min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground transition-opacity duration-200",
-                  collapsed ? "w-0 opacity-0" : "opacity-100"
+                  "h-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground transition-opacity duration-200",
+                  // flex-1 (not just w-0) has to be dropped too — flex-basis
+                  // overrides width, so a flex-1 input kept claiming the
+                  // circle's remaining space even at w-0, pushing the icon
+                  // off-center instead of actually collapsing to nothing.
+                  collapsed ? "w-0 flex-none opacity-0" : "min-w-0 flex-1 opacity-100"
                 )}
               />
-              {!collapsed &&
-                (navSearch ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setNavSearch("");
-                    }}
-                    aria-label="Clear sidebar search"
-                    className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    <IconX className="h-3.5 w-3.5" />
-                  </button>
-                ) : (
-                  <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70">
-                    Ctrl K
-                  </span>
-                ))}
+              {!collapsed && navSearch && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNavSearch("");
+                  }}
+                  aria-label="Clear sidebar search"
+                  className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <IconX className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           );
           return collapsed ? (

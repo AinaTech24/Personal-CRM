@@ -47,10 +47,15 @@ export async function crmTeamScopeFor(user: PermissionUser): Promise<string[] | 
  */
 export async function crmTeamOnlyScopeFor(user: PermissionUser): Promise<string[] | null> {
   const membership = await getCrmMembership(user.id);
-  if (!isCrmLead(user, membership)) return null;
-  // isCrmLead can also be true for an admin with no department-of-the-team
-  // of their own — only prefer the caller's department for a genuine lead.
-  return getCrmTeamUserIds(membership?.isLead ? user.departmentId : undefined);
+  if (isCrmLead(user, membership)) {
+    // isCrmLead can also be true for an admin with no department-of-the-team
+    // of their own — only prefer the caller's department for a genuine lead.
+    return getCrmTeamUserIds(membership?.isLead ? user.departmentId : undefined);
+  }
+  // A genuine member who isn't a lead still gets their own records, same as
+  // the main (non-team) Leads/Tasks/Meetings/Projects pages already show
+  // them — only non-members get shut out entirely.
+  return membership ? [user.id] : null;
 }
 
 /**

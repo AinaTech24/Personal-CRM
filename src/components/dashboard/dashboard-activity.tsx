@@ -430,9 +430,14 @@ export function useDashboardActivity(isAdmin = false) {
           <SkeletonList rows={4} />
         </div>
       ) : !items || items.length === 0 ? (
-        <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-          {period === "range" && (!from || !to) ? "Pick a start and end date." : "Nothing in this period."}
-        </p>
+        <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <IconLayoutGrid className="h-4 w-4" />
+          </span>
+          <p className="text-sm text-muted-foreground">
+            {period === "range" && (!from || !to) ? "Pick a start and end date." : "Nothing in this period."}
+          </p>
+        </div>
       ) : (
         <>
           {/* table-fixed + an explicit colgroup, rather than leaving column

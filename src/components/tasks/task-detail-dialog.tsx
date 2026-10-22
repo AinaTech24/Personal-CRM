@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
+import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AttachmentViewerDialog } from "@/components/tasks/attachment-viewer-dialog";
@@ -24,6 +25,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import {
   TASK_STATUSES,
   PRIORITY_OPTIONS,
+  taskAssignees,
   type AssignableUser,
   type TaskAttachmentItem,
   type TaskCommentItem,
@@ -182,6 +184,7 @@ export function TaskDetailDialog({
   }
 
   const headerTitle = task?.title ?? initialSummary?.title;
+  const currentAssignees = task ? taskAssignees(task) : [];
 
   return (
     <>
@@ -238,39 +241,50 @@ export function TaskDetailDialog({
                     options={PRIORITY_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
                   />
                 </div>
-                <div className="col-span-2 flex flex-col gap-1.5">
-                  <span className="text-xs text-muted-foreground">Assigned to</span>
-                  <Dropdown
-                    size="sm"
-                    value={task.assignedTo?.id ?? ""}
-                    disabled={savingField === "assignedToId"}
-                    onChange={(v) => patchTask({ assignedToId: v || null })}
-                    placeholder="Unassigned"
-                    options={assignableUsers.map((u) => ({ value: u.id, label: userOptionLabel(u), avatarDataUrl: u.avatarDataUrl, showAvatar: true }))}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">Assigned to ({currentAssignees.length})</span>
+                  {currentAssignees.length > 0 && (
+                    <span
+                      className="truncate text-right text-xs text-muted-foreground"
+                      title={currentAssignees.map((a) => a.name).join(", ")}
+                    >
+                      {currentAssignees.map((a) => a.name).join(", ")}
+                    </span>
+                  )}
+                </div>
+                <MultiUserSelect
+                  users={assignableUsers.map((u) => ({ id: u.id, name: userOptionLabel(u) }))}
+                  selectedIds={currentAssignees.map((u) => u.id)}
+                  onChange={(ids) => patchTask({ assigneeIds: ids })}
+                  disabled={savingField === "assigneeIds"}
+                  emptyLabel="No one to assign."
+                  className="max-h-40"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs text-muted-foreground">Due date</span>
+                  <DateTimePicker
+                    value={task.dueDate ? new Date(task.dueDate) : null}
+                    onChange={(d) => patchTask({ dueDate: d.toISOString() })}
+                    placeholder="Not set"
                   />
                 </div>
-              </div>
 
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground">Due date</span>
-                <DateTimePicker
-                  className="w-56"
-                  value={task.dueDate ? new Date(task.dueDate) : null}
-                  onChange={(d) => patchTask({ dueDate: d.toISOString() })}
-                  placeholder="Not set"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground">Remind me at</span>
-                <DateTimePicker
-                  className="w-56"
-                  value={task.remindAt ? new Date(task.remindAt) : null}
-                  onChange={(d) => patchTask({ remindAt: d.toISOString() })}
-                  placeholder="No reminder"
-                  clearable
-                  onClear={() => patchTask({ remindAt: null })}
-                />
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs text-muted-foreground">Remind me at</span>
+                  <DateTimePicker
+                    value={task.remindAt ? new Date(task.remindAt) : null}
+                    onChange={(d) => patchTask({ remindAt: d.toISOString() })}
+                    placeholder="No reminder"
+                    clearable
+                    onClear={() => patchTask({ remindAt: null })}
+                  />
+                </div>
               </div>
 
               <div className="flex flex-col gap-1.5">

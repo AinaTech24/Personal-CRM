@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     where: taskListWhere(user, teamUserIds, teamOnly, scope),
     include: {
       assignedTo: { select: { id: true, name: true } },
+      assignees: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
       _count: { select: { comments: true, attachments: true } },
     },
@@ -38,7 +39,8 @@ const bodySchema = z.object({
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
   status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELLED"]).default("TODO"),
   dueDate: z.string().optional().nullable(),
-  assignedToId: z.string().optional().nullable(),
+  /** The full assignee list — may be empty. `assignedToId` (singular, legacy) is derived from its first entry rather than read from the client, so there's only ever one source of truth for who's assigned. */
+  assigneeIds: z.array(z.string()).optional().default([]),
   remindAt: z.string().optional().nullable(),
 });
 
@@ -52,6 +54,7 @@ export async function POST(req: NextRequest) {
   }
 
   const data = parsed.data;
+  const assigneeIds = [...new Set(data.assigneeIds)];
 
   const task = await db.task.create({
     data: {
@@ -60,20 +63,26 @@ export async function POST(req: NextRequest) {
       priority: data.priority,
       status: data.status,
       dueDate: data.dueDate ? new Date(data.dueDate) : null,
-      assignedToId: data.assignedToId || null,
+      assignedToId: assigneeIds[0] ?? null,
+      assignees: { connect: assigneeIds.map((id) => ({ id })) },
       createdById: user.id,
       remindAt: data.remindAt ? new Date(data.remindAt) : null,
     },
+    include: { assignees: { select: { id: true } } },
   });
 
-  if (data.assignedToId && data.assignedToId !== user.id) {
-    await notifyAndPush(
-      data.assignedToId,
-      "task_assigned",
-      { taskId: task.id, taskTitle: task.title, actorName: user.name },
-      { title: "Task assigned", body: `${user.name} assigned you the task "${task.title}"`, url: "/tasks", tag: "task-assigned" }
-    );
-  }
+  await Promise.all(
+    assigneeIds
+      .filter((id) => id !== user.id)
+      .map((id) =>
+        notifyAndPush(
+          id,
+          "task_assigned",
+          { taskId: task.id, taskTitle: task.title, actorName: user.name },
+          { title: "Task assigned", body: `${user.name} assigned you the task "${task.title}"`, url: "/tasks", tag: "task-assigned" }
+        )
+      )
+  );
 
   broadcastTaskChange("task_created", task);
 
@@ -91,7 +100,11 @@ export async function DELETE(req: NextRequest) {
 
   const tasks = await db.task.findMany({
     where: { id: { in: parsed.data.ids } },
-    include: { createdBy: { select: { departmentId: true } }, assignedTo: { select: { departmentId: true } } },
+    include: {
+      createdBy: { select: { departmentId: true } },
+      assignedTo: { select: { departmentId: true } },
+      assignees: { select: { id: true, departmentId: true } },
+    },
   });
   const deletableFlags = await Promise.all(tasks.map((t) => canDeleteTask(user, t)));
   const deletable = tasks.filter((_t, i) => deletableFlags[i]);

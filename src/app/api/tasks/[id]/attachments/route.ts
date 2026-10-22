@@ -5,9 +5,9 @@ import { getTaskForUser } from "@/lib/tasks";
 import { saveTaskAttachment, UploadValidationError } from "@/lib/uploads";
 import { notifyAndPush } from "@/lib/notify";
 
-/** The people actually responsible for the task — creator and assignee — hear about a new attachment, not a crowd. */
-async function notifyTaskAttachment(actorId: string, actorName: string, taskId: string, taskTitle: string, fileName: string, createdById: string, assignedToId: string | null) {
-  const recipientIds = new Set([createdById, ...(assignedToId ? [assignedToId] : [])]);
+/** The people actually responsible for the task — creator and every assignee — hear about a new attachment, not a crowd. */
+async function notifyTaskAttachment(actorId: string, actorName: string, taskId: string, taskTitle: string, fileName: string, createdById: string, assigneeIds: string[]) {
+  const recipientIds = new Set([createdById, ...assigneeIds]);
   recipientIds.delete(actorId);
   await Promise.all(
     Array.from(recipientIds).map((recipientId) =>
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const access = await getTaskForUser(user, id, "UPDATE");
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const assigneeIds = [...new Set([...access.assignees.map((a) => a.id), ...(access.assignedToId ? [access.assignedToId] : [])])];
 
   // A link comes in as JSON; an upload as multipart. Branch on content type so
   // one endpoint covers both kinds of attachment.
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       include: { uploadedBy: { select: { id: true, name: true } } },
       omit: { data: true },
     });
-    await notifyTaskAttachment(user.id, user.name, id, access.title, linkAttachment.fileName, access.createdById, access.assignedToId);
+    await notifyTaskAttachment(user.id, user.name, id, access.title, linkAttachment.fileName, access.createdById, assigneeIds);
     return NextResponse.json({ attachment: linkAttachment }, { status: 201 });
   }
 
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     omit: { data: true },
   });
 
-  await notifyTaskAttachment(user.id, user.name, id, access.title, fileName, access.createdById, access.assignedToId);
+  await notifyTaskAttachment(user.id, user.name, id, access.title, fileName, access.createdById, assigneeIds);
 
   return NextResponse.json({ attachment }, { status: 201 });
 }

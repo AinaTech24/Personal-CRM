@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
       department: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },
       assignedTo: { select: { id: true, name: true } },
+      assignees: { select: { id: true, name: true } },
       _count: { select: { members: true, milestones: true, tasks: true } },
     },
     orderBy: { updatedAt: "desc" },
@@ -39,7 +40,8 @@ const bodySchema = z.object({
   description: z.string().optional().nullable(),
   departmentId: z.string().optional().nullable(),
   status: z.enum(["PLANNED", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"]).default("PLANNED"),
-  assignedToId: z.string().optional().nullable(),
+  /** The full assignee list — may be empty. `assignedToId` (singular, legacy) is derived from its first entry. */
+  assigneeIds: z.array(z.string()).optional().default([]),
   startDate: z.string().optional().nullable(),
   endDate: z.string().optional().nullable(),
   memberIds: z.array(z.string()).optional().default([]),
@@ -63,8 +65,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // The assignee is always a member of the project.
-  const memberIds = Array.from(new Set([user.id, ...(data.assignedToId ? [data.assignedToId] : []), ...data.memberIds]));
+  const assigneeIds = [...new Set(data.assigneeIds)];
+  // Every assignee is always a member of the project.
+  const memberIds = Array.from(new Set([user.id, ...assigneeIds, ...data.memberIds]));
 
   const project = await db.project.create({
     data: {
@@ -72,7 +75,8 @@ export async function POST(req: NextRequest) {
       description: data.description || null,
       departmentId,
       status: data.status,
-      assignedToId: data.assignedToId || null,
+      assignedToId: assigneeIds[0] ?? null,
+      assignees: { connect: assigneeIds.map((id) => ({ id })) },
       startDate: data.startDate ? new Date(data.startDate) : null,
       endDate: data.endDate ? new Date(data.endDate) : null,
       createdById: user.id,
@@ -83,14 +87,18 @@ export async function POST(req: NextRequest) {
   await logProjectActivity(project.id, user.id, "created");
   broadcastProjectChange("project_created", project, memberIds);
 
-  if (data.assignedToId && data.assignedToId !== user.id) {
-    await notifyAndPush(
-      data.assignedToId,
-      "project_assigned",
-      { projectId: project.id, projectName: project.name, actorName: user.name },
-      { title: "Project assigned", body: `${user.name} assigned you the project "${project.name}"`, url: `/projects/${project.id}`, tag: "project-assigned" }
-    );
-  }
+  await Promise.all(
+    assigneeIds
+      .filter((id) => id !== user.id)
+      .map((id) =>
+        notifyAndPush(
+          id,
+          "project_assigned",
+          { projectId: project.id, projectName: project.name, actorName: user.name },
+          { title: "Project assigned", body: `${user.name} assigned you the project "${project.name}"`, url: `/projects/${project.id}`, tag: "project-assigned" }
+        )
+      )
+  );
 
   return NextResponse.json({ project }, { status: 201 });
 }
@@ -123,7 +131,10 @@ export async function PATCH(req: NextRequest) {
   );
 
   for (const project of editable) {
-    await db.project.update({ where: { id: project.id }, data: { assignedToId: target.id } });
+    await db.project.update({
+      where: { id: project.id },
+      data: { assignedToId: target.id, assignees: { set: [{ id: target.id }] } },
+    });
     // Same reasoning as the single-project PATCH: a new assignee needs
     // membership too, or they can't open what they were just assigned.
     await db.projectMember.upsert({

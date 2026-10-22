@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { HoverCheckbox } from "@/components/ui/checkbox";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
-import { TASK_STATUSES, type TaskSummary } from "@/components/tasks/types";
+import { TASK_STATUSES, taskAssignees, type TaskSummary } from "@/components/tasks/types";
 import { cn } from "@/lib/utils";
 
 const PRIORITY_VARIANT = {
@@ -74,7 +74,7 @@ export function TasksListView({
                   {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "—"}
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground">
-                  {task.assignedTo ? task.assignedTo.name : "Unassigned"}
+                  {taskAssignees(task).length > 0 ? taskAssignees(task).map((a) => a.name).join(", ") : "Unassigned"}
                 </td>
                 {rowActions && (
                   <td className="px-4 py-2.5">
