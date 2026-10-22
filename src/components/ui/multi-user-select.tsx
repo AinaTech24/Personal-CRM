@@ -41,7 +41,7 @@ export function MultiUserSelect({
   }
 
   return (
-    <div className={cn("max-h-52 overflow-y-auto rounded-md border border-border", className)}>
+    <div className={cn("max-h-52 max-w-sm overflow-y-auto rounded-md border border-border", className)}>
       {users.length === 0 ? (
         <p className="px-3 py-4 text-sm text-muted-foreground">{emptyLabel}</p>
       ) : (
