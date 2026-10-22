@@ -11,6 +11,7 @@ export const TOGGLEABLE_MODULES: { key: string; label: string }[] = [
   { key: "messages", label: "Messages" },
   { key: "quotations", label: "Quotations" },
   { key: "invoices", label: "Invoices" },
+  { key: "clients", label: "Clients" },
   { key: "passwords", label: "Password Manager" },
   { key: "birthdays", label: "Birthdays" },
   { key: "attendance", label: "My Attendance" },

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { getSocialMembership, hasSocialMediaAccess, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
+import { getSocialMembership, hasSocialMediaAccess, crmClientsScopeFor, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
 import { socialClientListWhere } from "@/lib/social-media-permissions";
 import { canManageModule, moduleAccessScope } from "@/lib/module-permissions-store";
 import { notifyAndPush } from "@/lib/notify";
@@ -12,7 +12,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const membership = await getSocialMembership(user.id);
-  const clientsScope = await moduleAccessScope(user, "CLIENTS", "READ");
+  const clientsScope = (await moduleAccessScope(user, "CLIENTS", "READ")) ?? (await crmClientsScopeFor(user));
   if (!hasSocialMediaAccess(user, membership) && clientsScope === null) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
