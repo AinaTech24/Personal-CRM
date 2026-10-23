@@ -87,12 +87,18 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ expenses: rows.map(serializeExpense), summary });
 }
 
-const bodySchema = z.object({
-  category: z.enum(CATEGORIES),
-  amount: z.coerce.number().positive().max(10_000_000),
-  expenseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  description: z.string().trim().min(1).max(1000),
-});
+const bodySchema = z
+  .object({
+    category: z.enum(CATEGORIES),
+    categoryOther: z.string().trim().max(200).optional(),
+    amount: z.coerce.number().positive().max(10_000_000),
+    expenseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    description: z.string().trim().min(1).max(1000),
+  })
+  .refine((d) => d.category !== "OTHER" || !!d.categoryOther, {
+    message: "Please specify what this expense was for.",
+    path: ["categoryOther"],
+  });
 
 /** Submit a reimbursement claim — fields plus an optional receipt, as one multipart request. */
 export async function POST(req: NextRequest) {
@@ -104,11 +110,14 @@ export async function POST(req: NextRequest) {
 
   const parsed = bodySchema.safeParse({
     category: formData.get("category"),
+    categoryOther: formData.get("categoryOther") || undefined,
     amount: formData.get("amount"),
     expenseDate: formData.get("expenseDate"),
     description: formData.get("description"),
   });
-  if (!parsed.success) return NextResponse.json({ error: "Please fill in every field." }, { status: 400 });
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Please fill in every field." }, { status: 400 });
+  }
   const d = parsed.data;
 
   if (Number.isNaN(dateFromKey(d.expenseDate).getTime())) {
@@ -124,6 +133,7 @@ export async function POST(req: NextRequest) {
     data: {
       userId: user.id,
       category: d.category,
+      categoryOther: d.category === "OTHER" ? d.categoryOther : null,
       amount: d.amount,
       expenseDate: dateFromKey(d.expenseDate),
       description: d.description,

@@ -4,25 +4,22 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Dropdown } from "@/components/ui/dropdown";
 import { SkeletonCards, SkeletonTable } from "@/components/ui/skeleton";
 import { IconCheck, IconClock, IconPaperclip, IconPlus, IconWallet, IconX } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { SubmitExpenseDialog } from "@/components/expenses/submit-expense-dialog";
 import {
-  categoryLabel,
+  categoryDisplay,
   fmtAmount,
   fmtApplied,
   fmtExpenseDate,
   ExpenseStatusBadge,
+  PERIOD_OPTIONS,
+  periodWindow,
   type ExpenseRow,
 } from "@/components/expenses/expense-shared";
-
-interface Summary {
-  pending: number;
-  approved: number;
-  paid: number;
-  rejected: number;
-}
 
 function StatCard({ icon, label, value, tone }: { icon: ReactNode; label: string; value: string; tone: string }) {
   return (
@@ -41,7 +38,9 @@ function StatCard({ icon, label, value, tone }: { icon: ReactNode; label: string
 export function ExpensesView() {
   const toast = useToast();
   const [expenses, setExpenses] = useState<ExpenseRow[] | null>(null);
-  const [summary, setSummary] = useState<Summary | null>(null);
+  const [period, setPeriod] = useState("all-time");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [submitOpen, setSubmitOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<ExpenseRow | null>(null);
 
@@ -53,7 +52,6 @@ export function ExpensesView() {
     }
     const d = await res.json();
     setExpenses(d.expenses);
-    setSummary(d.summary);
   }, []);
 
   useEffect(() => {
@@ -73,6 +71,17 @@ export function ExpensesView() {
     load();
   }
 
+  const dateWindow = periodWindow(period, customFrom, customTo);
+  const inPeriod = (expenses ?? []).filter((e) => !dateWindow || (e.expenseDate >= dateWindow.from && e.expenseDate <= dateWindow.to));
+  const summary = expenses
+    ? {
+        pending: inPeriod.filter((e) => e.status === "PENDING").reduce((sum, e) => sum + e.amount, 0),
+        approved: inPeriod.filter((e) => e.status === "APPROVED").reduce((sum, e) => sum + e.amount, 0),
+        paid: inPeriod.filter((e) => e.status === "PAID").reduce((sum, e) => sum + e.amount, 0),
+        rejected: inPeriod.filter((e) => e.status === "REJECTED").reduce((sum, e) => sum + e.amount, 0),
+      }
+    : null;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -84,6 +93,17 @@ export function ExpensesView() {
           <IconPlus className="h-4 w-4" />
           Submit expense
         </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Dropdown size="sm" value={period} onChange={setPeriod} className="w-40" options={PERIOD_OPTIONS} />
+        {period === "custom" && (
+          <>
+            <DatePicker value={customFrom} clearable={false} onChange={setCustomFrom} />
+            <span className="text-xs text-muted-foreground">to</span>
+            <DatePicker value={customTo} clearable={false} onChange={setCustomTo} />
+          </>
+        )}
       </div>
 
       <section className="flex flex-col gap-3">
@@ -104,10 +124,10 @@ export function ExpensesView() {
         <h2 className="text-sm font-semibold">Claim history</h2>
         {!expenses ? (
           <SkeletonTable rows={4} columns={7} />
-        ) : expenses.length === 0 ? (
+        ) : inPeriod.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              You haven&apos;t submitted any expense claims yet.
+              {expenses.length === 0 ? "You haven't submitted any expense claims yet." : "Nothing in this period."}
             </CardContent>
           </Card>
         ) : (
@@ -125,11 +145,11 @@ export function ExpensesView() {
                     </tr>
                   </thead>
                   <tbody>
-                    {expenses.map((e) => (
+                    {inPeriod.map((e) => (
                       <tr key={e.id} className="border-b border-border/50 align-top last:border-0">
                         <td className="whitespace-nowrap px-4 py-3">{fmtApplied(e.appliedAt)}</td>
                         <td className="whitespace-nowrap px-4 py-3">{fmtExpenseDate(e.expenseDate)}</td>
-                        <td className="whitespace-nowrap px-4 py-3">{categoryLabel(e.category)}</td>
+                        <td className="px-4 py-3">{categoryDisplay(e)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{fmtAmount(e.amount)}</td>
                         <td className="max-w-64 px-4 py-3">
                           <p className="line-clamp-2 break-words" title={e.description}>

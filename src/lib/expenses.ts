@@ -19,6 +19,7 @@ export function serializeExpense(e: WithRelations) {
   return {
     id: e.id,
     category: e.category,
+    categoryOther: e.categoryOther,
     amount: toNumber(e.amount),
     expenseDate: keyFromDate(e.expenseDate),
     description: e.description,

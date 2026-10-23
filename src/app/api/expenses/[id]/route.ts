@@ -17,6 +17,7 @@ const patchSchema = z.object({
   adminNote: z.string().trim().max(1000).optional().nullable(),
   // Only used by "edit".
   category: z.enum(CATEGORIES).optional(),
+  categoryOther: z.string().trim().max(200).optional(),
   amount: z.coerce.number().positive().max(10_000_000).optional(),
   expenseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   description: z.string().trim().min(1).max(1000).optional(),
@@ -52,12 +53,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!d.category || d.amount === undefined || !d.expenseDate || !d.description) {
       return NextResponse.json({ error: "Please fill in every field." }, { status: 400 });
     }
+    if (d.category === "OTHER" && !d.categoryOther) {
+      return NextResponse.json({ error: "Please specify what this expense was for." }, { status: 400 });
+    }
     if (Number.isNaN(dateFromKey(d.expenseDate).getTime())) {
       return NextResponse.json({ error: "Invalid date." }, { status: 400 });
     }
     const updated = await db.expense.update({
       where: { id },
-      data: { category: d.category, amount: d.amount, expenseDate: dateFromKey(d.expenseDate), description: d.description },
+      data: {
+        category: d.category,
+        categoryOther: d.category === "OTHER" ? d.categoryOther : null,
+        amount: d.amount,
+        expenseDate: dateFromKey(d.expenseDate),
+        description: d.description,
+      },
       include: expenseInclude,
       omit: { receiptData: true },
     });
