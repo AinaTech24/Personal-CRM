@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Dropdown } from "@/components/ui/dropdown";
 import { SkeletonCards, SkeletonTable } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { IconCheck, IconClock, IconPaperclip, IconPlus, IconWallet, IconX } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { SubmitExpenseDialog } from "@/components/expenses/submit-expense-dialog";
@@ -89,21 +90,21 @@ export function ExpensesView() {
           <h1 className="text-xl font-semibold">My Expenses</h1>
           <p className="text-sm text-muted-foreground">Submit reimbursement claims and follow their status.</p>
         </div>
-        <Button type="button" onClick={() => setSubmitOpen(true)}>
-          <IconPlus className="h-4 w-4" />
-          Submit expense
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Dropdown size="sm" value={period} onChange={setPeriod} className="w-40" options={PERIOD_OPTIONS} />
-        {period === "custom" && (
-          <>
-            <DatePicker value={customFrom} clearable={false} onChange={setCustomFrom} />
-            <span className="text-xs text-muted-foreground">to</span>
-            <DatePicker value={customTo} clearable={false} onChange={setCustomTo} />
-          </>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Dropdown size="sm" value={period} onChange={setPeriod} className="w-40" options={PERIOD_OPTIONS} />
+          {period === "custom" && (
+            <>
+              <DatePicker value={customFrom} clearable={false} onChange={setCustomFrom} />
+              <span className="text-xs text-muted-foreground">to</span>
+              <DatePicker value={customTo} clearable={false} onChange={setCustomTo} />
+            </>
+          )}
+          <Tooltip label="Submit expense">
+            <Button type="button" size="icon" aria-label="Submit expense" onClick={() => setSubmitOpen(true)}>
+              <IconPlus className="h-4 w-4" />
+            </Button>
+          </Tooltip>
+        </div>
       </div>
 
       <section className="flex flex-col gap-3">
