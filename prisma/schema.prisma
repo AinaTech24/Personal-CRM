@@ -1865,6 +1865,10 @@ model Expense {
   userId      String
   user        User            @relation("ExpenseUser", fields: [userId], references: [id], onDelete: Cascade)
   category    ExpenseCategory @default(OTHER)
+  /// Required only when category is OTHER — what the "other" expense
+  /// actually was, so an admin reviewing claims doesn't have to rely on the
+  /// free-form description alone to tell what kind of spend this was.
+  categoryOther String?       @db.VarChar(200)
   amount      Decimal         @db.Decimal(10, 2)
   expenseDate DateTime        @db.Date
   description String          @db.Text

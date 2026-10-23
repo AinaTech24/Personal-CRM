@@ -27,17 +27,25 @@ export function SubmitExpenseDialog({
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [category, setCategory] = useState("TRAVEL");
+  const [categoryOther, setCategoryOther] = useState("");
   const [amount, setAmount] = useState("");
   const [expenseDate, setExpenseDate] = useState("");
   const [description, setDescription] = useState("");
   const [receipt, setReceipt] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const isOther = category === "OTHER";
   const amountValue = Number(amount);
-  const ready = expenseDate !== "" && amount.trim() !== "" && amountValue > 0 && description.trim() !== "";
+  const ready =
+    expenseDate !== "" &&
+    amount.trim() !== "" &&
+    amountValue > 0 &&
+    description.trim() !== "" &&
+    (!isOther || categoryOther.trim() !== "");
 
   function reset() {
     setCategory("TRAVEL");
+    setCategoryOther("");
     setAmount("");
     setExpenseDate("");
     setDescription("");
@@ -61,6 +69,7 @@ export function SubmitExpenseDialog({
     try {
       const form = new FormData();
       form.append("category", category);
+      if (isOther) form.append("categoryOther", categoryOther.trim());
       form.append("amount", amount);
       form.append("expenseDate", expenseDate);
       form.append("description", description);
@@ -91,6 +100,18 @@ export function SubmitExpenseDialog({
               <Label>Category</Label>
               <Dropdown value={category} onChange={setCategory} options={CATEGORY_OPTIONS} />
             </div>
+            {isOther && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Please specify</Label>
+                <Input
+                  value={categoryOther}
+                  onChange={(e) => setCategoryOther(e.target.value)}
+                  maxLength={200}
+                  placeholder="What kind of expense is this?"
+                  required
+                />
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label>Amount</Label>
