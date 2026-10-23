@@ -32,6 +32,7 @@ import {
   IconPhone,
   IconKey,
   IconCake,
+  IconWallet,
   IconCalendar,
   IconLayoutGrid,
   IconShield,
@@ -65,6 +66,7 @@ const mainNav: NavItem[] = [
   { href: "/birthdays", label: "Birthdays", icon: IconCake },
   { href: "/attendance", label: "My Attendance", icon: IconClock },
   { href: "/leave", label: "My Leave", icon: IconCalendar },
+  { href: "/expenses", label: "My Expenses", icon: IconWallet },
   { href: "/activity", label: "My Activity", icon: IconHistory },
 ];
 
@@ -78,6 +80,7 @@ const adminNav: NavItem[] = [
   { href: "/teams", label: "Teams", icon: IconUsers },
   { href: "/admin/attendance", label: "Attendance", icon: IconClock },
   { href: "/admin/leave", label: "Leave Requests", icon: IconCalendar },
+  { href: "/admin/expenses", label: "Expense Requests", icon: IconWallet },
   { href: "/admin/clients", label: "Client Accounts", icon: IconBuilding },
   { href: "/forms", label: "Forms", icon: IconLayoutGrid },
   { href: "/admin/email", label: "Email (SMTP)", icon: IconMail },
@@ -127,6 +130,7 @@ const MODULE_ADMIN_HREFS: Partial<Record<ManagedModule, string>> = {
   LEAVE: "/admin/leave",
   ATTENDANCE: "/admin/attendance",
   BIRTHDAYS: "/admin/birthdays",
+  EXPENSES: "/admin/expenses",
 };
 const ADMIN_HREF_MODULE = new Map<string, ManagedModule>(
   (Object.entries(MODULE_ADMIN_HREFS) as [ManagedModule, string][]).map(([module, href]) => [href, module])
@@ -168,6 +172,7 @@ const BLOCKABLE_HREF_MODULE: Partial<Record<string, ManagedModule>> = {
   "/birthdays": "BIRTHDAYS",
   "/messages": "MESSAGES",
   "/clients": "CLIENTS",
+  "/expenses": "EXPENSES",
 };
 
 function NavLinkItem({
@@ -362,6 +367,7 @@ export function Sidebar({
   const managedModuleSet = new Set(managedModules);
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingLeave, setPendingLeave] = useState(0);
+  const [pendingExpenses, setPendingExpenses] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
   const [blockedModules, setBlockedModules] = useState<string[]>([]);
@@ -587,6 +593,7 @@ export function Sidebar({
 
   const canSeeAttendanceAdmin = isAdmin || managedModuleSet.has("ATTENDANCE");
   const canSeeLeaveAdmin = isAdmin || managedModuleSet.has("LEAVE");
+  const canSeeExpensesAdmin = isAdmin || managedModuleSet.has("EXPENSES");
 
   // Poll pending attendance so the Attendance item can flag new check-ins.
   useEffect(() => {
@@ -627,6 +634,27 @@ export function Sidebar({
       if (socket) socket.off("leave_request_changed", poll);
     };
   }, [canSeeLeaveAdmin, socket]);
+
+  // Same for expense claims waiting on a decision.
+  useEffect(() => {
+    if (!canSeeExpensesAdmin) return;
+    let active = true;
+    const poll = () =>
+      fetch("/api/expenses/pending-count")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (active && d) setPendingExpenses(d.count ?? 0);
+        })
+        .catch(() => {});
+    poll();
+    const id = setInterval(poll, 45_000);
+    if (socket) socket.on("expense_request_changed", poll);
+    return () => {
+      active = false;
+      clearInterval(id);
+      if (socket) socket.off("expense_request_changed", poll);
+    };
+  }, [canSeeExpensesAdmin, socket]);
 
   // Labels stay in the DOM and fade so the grid width can slide without reflowing.
   const labelClass = cn(
@@ -818,7 +846,7 @@ export function Sidebar({
                     key={item.href}
                     item={item}
                     active={pathname.startsWith(item.href)}
-                    badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : 0}
+                    badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : item.href === "/admin/expenses" ? pendingExpenses : 0}
                     collapsed={collapsed}
                     labelClass={labelClass}
                     onNavigate={onNavigate}
@@ -869,7 +897,7 @@ export function Sidebar({
                       item={item}
                       rearranging={rearranging && !collapsed}
                       active={pathname.startsWith(item.href)}
-                      badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : 0}
+                      badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : item.href === "/admin/expenses" ? pendingExpenses : 0}
                       collapsed={collapsed}
                       labelClass={labelClass}
                       onNavigate={onNavigate}
