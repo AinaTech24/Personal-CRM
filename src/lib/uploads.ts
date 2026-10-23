@@ -50,7 +50,7 @@ function matchesSignature(buffer: Buffer, ext: string): boolean {
  * executable) is rejected here rather than stored and later served back with
  * whatever Content-Type its fake extension implies.
  */
-async function readUploadedFile(scope: "tasks" | "projects" | "reports" | "client-images", entityId: string, file: File) {
+async function readUploadedFile(scope: "tasks" | "projects" | "reports" | "client-images" | "expenses", entityId: string, file: File) {
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new UploadValidationError(`File exceeds the ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB limit`);
   }
@@ -81,6 +81,10 @@ export function saveProjectDocument(projectId: string, file: File) {
 
 export function saveReportFile(reportId: string, file: File) {
   return readUploadedFile("reports", reportId, file);
+}
+
+export function saveExpenseReceipt(expenseId: string, file: File) {
+  return readUploadedFile("expenses", expenseId, file);
 }
 
 /// Excludes SVG deliberately — it can carry a <script>, the same stored-XSS
