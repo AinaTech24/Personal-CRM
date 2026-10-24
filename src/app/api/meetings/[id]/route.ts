@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 import { combinedTeamScopeFor } from "@/lib/team-scope";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
+import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 
 const meetingInclude = {
@@ -52,6 +52,7 @@ async function canManage(user: PermissionUser, meetingId: string, action: Extrac
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "MEETINGS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const { id } = await params;
 
   const meeting = await db.meeting.findUnique({ where: { id }, include: meetingInclude });
@@ -85,6 +86,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "MEETINGS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const { id } = await params;
 
   if (!(await canManage(user, id, "UPDATE"))) {
@@ -169,6 +171,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "MEETINGS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const { id } = await params;
 
   if (!(await canManage(user, id, "DELETE"))) {

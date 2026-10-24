@@ -145,6 +145,16 @@ export function IconInvoices(props: IconProps) {
   );
 }
 
+export function IconWallet(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 7a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v2" />
+      <path d="M4 7v11a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-5" />
+      <path d="M17 12h3a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-3a2.5 2.5 0 0 1 0-5Z" />
+    </svg>
+  );
+}
+
 export function IconBuilding(props: IconProps) {
   return (
     <svg {...base(props)}>

@@ -18,7 +18,7 @@ export async function getUserModuleMatrix(userId: string): Promise<Record<Manage
   for (const moduleKey of MANAGED_MODULES) {
     const row = byModule.get(moduleKey);
     matrix[moduleKey] = row
-      ? { canCreate: row.canCreate, canRead: row.canRead, canUpdate: row.canUpdate, canDelete: row.canDelete }
+      ? { canCreate: row.canCreate, canRead: row.canRead, canUpdate: row.canUpdate, canDelete: row.canDelete, blocked: row.blocked }
       : { ...NO_MODULE_ACCESS };
   }
   return matrix;
@@ -30,6 +30,23 @@ export async function getUserModulePermissions(userId: string): Promise<ManagedM
     where: { userId, OR: [{ canCreate: true }, { canRead: true }, { canUpdate: true }, { canDelete: true }] },
     select: { module: true },
   });
+  return rows.map((r) => r.module);
+}
+
+/**
+ * Every module an admin has explicitly blocked for this person (see
+ * ModulePermissionFlags.blocked) — never includes anyone who's simply never
+ * been touched in Permission Manager, since that state has no row at all.
+ * The sidebar uses this (via /api/module-visibility) to hide a module's nav
+ * link outright. For Tasks/Projects/Leads/Meetings/Clients, the relevant
+ * list/detail/create/update/delete routes separately call the single-module
+ * isModuleBlocked() below to actually deny the data too, not just the nav
+ * link — unlike the company-wide "Sidebar modules" hide, which only ever
+ * affects the sidebar. Messages is page-gated only (see its page.tsx) since
+ * conversations are membership-based, not ownership-based.
+ */
+export async function getBlockedModules(userId: string): Promise<ManagedModule[]> {
+  const rows = await db.userModulePermission.findMany({ where: { userId, blocked: true }, select: { module: true } });
   return rows.map((r) => r.module);
 }
 
@@ -67,6 +84,22 @@ export async function moduleAccessScope(
   return user.departmentId ? { departmentId: user.departmentId } : null;
 }
 
+/**
+ * Whether an admin has explicitly blocked `module` for this person (see
+ * ModulePermissionFlags.blocked) — a real access denial, not just a nav
+ * hide: callers short-circuit to "forbidden"/empty on true, before even
+ * their own baseline own-record access would otherwise apply. Always false
+ * for an admin.
+ */
+export async function isModuleBlocked(user: PermissionUser, module: ManagedModule): Promise<boolean> {
+  if (isAdmin(user)) return false;
+  const row = await db.userModulePermission.findUnique({
+    where: { userId_module: { userId: user.id, module } },
+    select: { blocked: true },
+  });
+  return row?.blocked ?? false;
+}
+
 /** Whether this user holds any module grant at all — the floor for reaching the /admin pages that a grant (not just company-admin) can unlock. */
 export async function hasAnyModulePermission(userId: string): Promise<boolean> {
   const row = await db.userModulePermission.findFirst({
@@ -88,7 +121,7 @@ export async function getModuleGrantees(module: ManagedModule): Promise<ModuleGr
   });
   return rows.map((r) => ({
     userId: r.userId,
-    flags: { canCreate: r.canCreate, canRead: r.canRead, canUpdate: r.canUpdate, canDelete: r.canDelete },
+    flags: { canCreate: r.canCreate, canRead: r.canRead, canUpdate: r.canUpdate, canDelete: r.canDelete, blocked: r.blocked },
   }));
 }
 

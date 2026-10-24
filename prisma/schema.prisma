@@ -44,6 +44,7 @@ enum ManagedModule {
   BIRTHDAYS
   MESSAGES
   PROJECTS
+  EXPENSES
 }
 
 /// One row per (user, module), company-wide — the same shape as CrmMember
@@ -63,6 +64,13 @@ model UserModulePermission {
   canRead   Boolean       @default(false)
   canUpdate Boolean       @default(false)
   canDelete Boolean       @default(false)
+  /// An explicit per-person override that hides this module's nav link for
+  /// them entirely, regardless of their usual baseline own-record access —
+  /// distinct from simply holding no CRUD grant (which only withholds the
+  /// department-wide widening those four flags give; baseline access to
+  /// one's own records stays either way). Defaults false so every existing
+  /// row, and anyone never touched here at all, is unaffected.
+  blocked   Boolean       @default(false)
   createdAt DateTime      @default(now())
 
   @@unique([userId, module])
@@ -158,6 +166,8 @@ model User {
   leaves             UserLeave[]        @relation("UserLeaves")
   leaveRequests      LeaveRequest[]     @relation("LeaveRequestUser")
   leaveDecisions     LeaveRequest[]     @relation("LeaveRequestDecider")
+  expenses           Expense[]          @relation("ExpenseUser")
+  expenseDecisions   Expense[]          @relation("ExpenseDecider")
   clientsCreated     Client[]           @relation("ClientCreatedBy")
   formsCreated       Form[]             @relation("FormCreatedBy")
   clientTeamRoles    ClientTeamMember[] @relation("ClientTeamMemberUser")
@@ -1832,6 +1842,63 @@ model LeaveRequest {
   updatedAt   DateTime           @updatedAt
 
   @@index([userId, startDate])
+  @@index([status])
+}
+
+enum ExpenseCategory {
+  TRAVEL
+  FOOD
+  ACCOMMODATION
+  OFFICE_SUPPLIES
+  SOFTWARE
+  CLIENT_ENTERTAINMENT
+  OTHER
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+/// An employee's reimbursement claim, awaiting an admin/department-admin
+/// decision — same submit-then-decide shape as LeaveRequest just above,
+/// but with a money amount and an optional receipt instead of a date range.
+/// PAID is a separate step from APPROVED (approving says "this is a
+/// legitimate claim"; marking paid says "the money has actually moved"),
+/// so the two are tracked independently rather than collapsed into one.
+model Expense {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation("ExpenseUser", fields: [userId], references: [id], onDelete: Cascade)
+  category    ExpenseCategory @default(OTHER)
+  /// Required only when category is OTHER — what the "other" expense
+  /// actually was, so an admin reviewing claims doesn't have to rely on the
+  /// free-form description alone to tell what kind of spend this was.
+  categoryOther String?       @db.VarChar(200)
+  amount      Decimal         @db.Decimal(10, 2)
+  expenseDate DateTime        @db.Date
+  description String          @db.Text
+  status      ExpenseStatus   @default(PENDING)
+  decidedById String?
+  decidedBy   User?           @relation("ExpenseDecider", fields: [decidedById], references: [id])
+  /// The "Action Date": when an admin approved/rejected, or the user cancelled.
+  decidedAt   DateTime?
+  adminNote   String?         @db.Text
+  /// Set only once the reimbursement has actually been paid out — independent
+  /// of decidedAt, since approval and payment often happen on different days.
+  paidAt      DateTime?
+  receiptFileName String?
+  receiptFilePath String?
+  /// Base64, same MySQL-column storage as TaskAttachment/ProjectDocument —
+  /// no filesystem/S3 involved. Null when no receipt was attached.
+  receiptData     String?     @db.LongText
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, expenseDate])
   @@index([status])
 }
 

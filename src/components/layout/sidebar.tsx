@@ -32,6 +32,7 @@ import {
   IconPhone,
   IconKey,
   IconCake,
+  IconWallet,
   IconCalendar,
   IconLayoutGrid,
   IconShield,
@@ -65,6 +66,7 @@ const mainNav: NavItem[] = [
   { href: "/birthdays", label: "Birthdays", icon: IconCake },
   { href: "/attendance", label: "My Attendance", icon: IconClock },
   { href: "/leave", label: "My Leave", icon: IconCalendar },
+  { href: "/expenses", label: "My Expenses", icon: IconWallet },
   { href: "/activity", label: "My Activity", icon: IconHistory },
 ];
 
@@ -78,6 +80,7 @@ const adminNav: NavItem[] = [
   { href: "/teams", label: "Teams", icon: IconUsers },
   { href: "/admin/attendance", label: "Attendance", icon: IconClock },
   { href: "/admin/leave", label: "Leave Requests", icon: IconCalendar },
+  { href: "/admin/expenses", label: "Expense Requests", icon: IconWallet },
   { href: "/admin/clients", label: "Client Accounts", icon: IconBuilding },
   { href: "/forms", label: "Forms", icon: IconLayoutGrid },
   { href: "/admin/email", label: "Email (SMTP)", icon: IconMail },
@@ -127,6 +130,7 @@ const MODULE_ADMIN_HREFS: Partial<Record<ManagedModule, string>> = {
   LEAVE: "/admin/leave",
   ATTENDANCE: "/admin/attendance",
   BIRTHDAYS: "/admin/birthdays",
+  EXPENSES: "/admin/expenses",
 };
 const ADMIN_HREF_MODULE = new Map<string, ManagedModule>(
   (Object.entries(MODULE_ADMIN_HREFS) as [ManagedModule, string][]).map(([module, href]) => [href, module])
@@ -147,6 +151,28 @@ const MAIN_NAV_HREF_MODULE: Partial<Record<string, ManagedModule>> = {
   "/projects": "PROJECTS",
   "/meetings": "MEETINGS",
   "/attendance": "ATTENDANCE",
+};
+
+/**
+ * Every nav href a Permission Manager "block" (ModulePermissionFlags.blocked)
+ * can hide outright for one person — a superset of MAIN_NAV_HREF_MODULE
+ * above (that one only covers the grant-override case for the base mainNav
+ * filter; Clients isn't even part of mainNav to begin with, since it's
+ * always spliced in separately). Applied once, after every insertion path
+ * has run, so it catches a blocked module regardless of why it was added —
+ * default visibility, team membership, or an individual grant.
+ */
+const BLOCKABLE_HREF_MODULE: Partial<Record<string, ManagedModule>> = {
+  "/leads": "LEADS",
+  "/tasks": "TASKS",
+  "/projects": "PROJECTS",
+  "/meetings": "MEETINGS",
+  "/attendance": "ATTENDANCE",
+  "/leave": "LEAVE",
+  "/birthdays": "BIRTHDAYS",
+  "/messages": "MESSAGES",
+  "/clients": "CLIENTS",
+  "/expenses": "EXPENSES",
 };
 
 function NavLinkItem({
@@ -341,8 +367,10 @@ export function Sidebar({
   const managedModuleSet = new Set(managedModules);
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingLeave, setPendingLeave] = useState(0);
+  const [pendingExpenses, setPendingExpenses] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
+  const [blockedModules, setBlockedModules] = useState<string[]>([]);
   // Admins see every module, so their nav is correct on first paint. Everyone
   // else has to wait for the visibility list — without this the full nav
   // renders and then items vanish as the answer arrives.
@@ -382,7 +410,9 @@ export function Sidebar({
     fetch("/api/module-visibility", { signal: controller.signal })
       .then((r) => r.json())
       .then((d) => {
-        if (active) setHiddenModules(Array.isArray(d.hiddenModules) ? d.hiddenModules : []);
+        if (!active) return;
+        setHiddenModules(Array.isArray(d.hiddenModules) ? d.hiddenModules : []);
+        setBlockedModules(Array.isArray(d.blockedModules) ? d.blockedModules : []);
       })
       .catch(() => {})
       .finally(() => {
@@ -464,6 +494,16 @@ export function Sidebar({
     visibleMainNav.splice(leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1, 0, clientsNavItem);
   }
 
+  // A Permission Manager "block" hides a module's nav link for this one
+  // person outright, regardless of why it would otherwise be visible —
+  // default, team membership, or a grant. Never applies to an admin.
+  if (!isAdmin && blockedModules.length > 0) {
+    visibleMainNav = visibleMainNav.filter((item) => {
+      const blockableModule = BLOCKABLE_HREF_MODULE[item.href];
+      return !blockableModule || !blockedModules.includes(blockableModule);
+    });
+  }
+
   // The user's own drag-to-reorder preference, applied last so it works on
   // whatever ended up actually visible for them — never hides or adds
   // anything, purely repositions.
@@ -480,7 +520,7 @@ export function Sidebar({
     : adminNav.filter((item) => {
         if (item.href === "/admin/permissions") return isDepartmentAdmin;
         const grantedModule = ADMIN_HREF_MODULE.get(item.href);
-        return !!grantedModule && managedModuleSet.has(grantedModule);
+        return !!grantedModule && managedModuleSet.has(grantedModule) && !blockedModules.includes(grantedModule);
       });
 
   // Same drag-to-reorder preference as Main — applied last so it works on
@@ -553,6 +593,7 @@ export function Sidebar({
 
   const canSeeAttendanceAdmin = isAdmin || managedModuleSet.has("ATTENDANCE");
   const canSeeLeaveAdmin = isAdmin || managedModuleSet.has("LEAVE");
+  const canSeeExpensesAdmin = isAdmin || managedModuleSet.has("EXPENSES");
 
   // Poll pending attendance so the Attendance item can flag new check-ins.
   useEffect(() => {
@@ -593,6 +634,27 @@ export function Sidebar({
       if (socket) socket.off("leave_request_changed", poll);
     };
   }, [canSeeLeaveAdmin, socket]);
+
+  // Same for expense claims waiting on a decision.
+  useEffect(() => {
+    if (!canSeeExpensesAdmin) return;
+    let active = true;
+    const poll = () =>
+      fetch("/api/expenses/pending-count")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (active && d) setPendingExpenses(d.count ?? 0);
+        })
+        .catch(() => {});
+    poll();
+    const id = setInterval(poll, 45_000);
+    if (socket) socket.on("expense_request_changed", poll);
+    return () => {
+      active = false;
+      clearInterval(id);
+      if (socket) socket.off("expense_request_changed", poll);
+    };
+  }, [canSeeExpensesAdmin, socket]);
 
   // Labels stay in the DOM and fade so the grid width can slide without reflowing.
   const labelClass = cn(
@@ -784,7 +846,7 @@ export function Sidebar({
                     key={item.href}
                     item={item}
                     active={pathname.startsWith(item.href)}
-                    badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : 0}
+                    badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : item.href === "/admin/expenses" ? pendingExpenses : 0}
                     collapsed={collapsed}
                     labelClass={labelClass}
                     onNavigate={onNavigate}
@@ -835,7 +897,7 @@ export function Sidebar({
                       item={item}
                       rearranging={rearranging && !collapsed}
                       active={pathname.startsWith(item.href)}
-                      badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : 0}
+                      badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : item.href === "/admin/expenses" ? pendingExpenses : 0}
                       collapsed={collapsed}
                       labelClass={labelClass}
                       onNavigate={onNavigate}

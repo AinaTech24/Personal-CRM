@@ -150,8 +150,16 @@ function PermissionManager() {
     setDirty(true);
   }
 
+  // Deliberately independent of the four CRUD flags — hides the module's
+  // nav link for this person outright. Kept out of Quick set's Clear/Grant
+  // all (below) so fixing someone's CRUD grants never silently un-blocks them.
+  function toggleAccess(module: ManagedModule) {
+    setMatrix((prev) => ({ ...prev, [module]: { ...prev[module], blocked: !prev[module].blocked } }));
+    setDirty(true);
+  }
+
   function setModuleAll(module: ManagedModule, flags: ModulePermissionFlags) {
-    setMatrix((prev) => ({ ...prev, [module]: { ...flags } }));
+    setMatrix((prev) => ({ ...prev, [module]: { ...flags, blocked: prev[module].blocked } }));
     setDirty(true);
   }
 
@@ -198,7 +206,11 @@ function PermissionManager() {
           <h1 className="text-xl font-semibold">Permission Manager</h1>
           <p className="text-sm text-muted-foreground">
             Grant someone full create/read/update/delete access to specific modules within their own department, on top
-            of whatever their role already allows. A company Admin already has every module, company-wide.
+            of whatever their role already allows. A company Admin already has every module, company-wide. The Access
+            column is separate from those four — turning it off blocks this one person from that module entirely
+            (nav link and the module&apos;s own pages/API alike, even their own records), where the CRUD toggles only
+            ever widen their visibility beyond that. Messages is nav/page-only, since conversations work by membership
+            rather than ownership.
           </p>
         </div>
         <div className="flex gap-1 rounded-md border border-border p-0.5">
@@ -290,6 +302,7 @@ function PermissionManager() {
                               {MODULE_ACTION_LABEL[action]}
                             </th>
                           ))}
+                          <th className="whitespace-nowrap px-2 py-2 text-center font-medium">Access</th>
                           <th className="whitespace-nowrap px-2 py-2 text-right font-medium">Quick set</th>
                         </tr>
                       </thead>
@@ -299,7 +312,14 @@ function PermissionManager() {
                           const allGranted = flags.canCreate && flags.canRead && flags.canUpdate && flags.canDelete;
                           return (
                             <tr key={module} className="border-b border-border/50 last:border-0">
-                              <td className="whitespace-nowrap px-2 py-2.5 font-medium">{MODULE_LABEL[module]}</td>
+                              <td className="whitespace-nowrap px-2 py-2.5 font-medium">
+                                {MODULE_LABEL[module]}
+                                {flags.blocked && (
+                                  <span className="ml-1.5 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[10px] font-normal text-destructive">
+                                    Hidden
+                                  </span>
+                                )}
+                              </td>
                               {MODULE_ACTIONS.map((action) => (
                                 <td key={action} className="px-2 py-2.5 text-center">
                                   <ToggleSwitch
@@ -309,6 +329,13 @@ function PermissionManager() {
                                   />
                                 </td>
                               ))}
+                              <td className="px-2 py-2.5 text-center">
+                                <ToggleSwitch
+                                  checked={!flags.blocked}
+                                  onChange={() => toggleAccess(module)}
+                                  label={`${flags.blocked ? "Unhide" : "Hide"} ${MODULE_LABEL[module]} for this person`}
+                                />
+                              </td>
                               <td className="whitespace-nowrap px-2 py-2.5 text-right">
                                 <button
                                   type="button"

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { MODULE_KEYS } from "@/lib/modules";
+import { getBlockedModules } from "@/lib/module-permissions-store";
 
 const ID = "default";
 
@@ -11,13 +12,22 @@ function readHidden(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && MODULE_KEYS.includes(v)) : [];
 }
 
-/** Any signed-in user can read which modules are hidden (the sidebar needs it). */
+/**
+ * Any signed-in user can read which modules are hidden (the sidebar needs
+ * it) — alongside the company-wide hide list, this also returns the
+ * CALLER'S OWN per-person blocked modules (see
+ * module-permissions-store.ts's getBlockedModules), never anyone else's.
+ * An admin can't be blocked, so this skips the lookup for them entirely.
+ */
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const s = await db.appSettings.findUnique({ where: { id: ID }, select: { hiddenModules: true } });
-  return NextResponse.json({ hiddenModules: readHidden(s?.hiddenModules) });
+  const [s, blockedModules] = await Promise.all([
+    db.appSettings.findUnique({ where: { id: ID }, select: { hiddenModules: true } }),
+    isAdmin(user) ? Promise.resolve([]) : getBlockedModules(user.id),
+  ]);
+  return NextResponse.json({ hiddenModules: readHidden(s?.hiddenModules), blockedModules });
 }
 
 const putSchema = z.object({ hiddenModules: z.array(z.enum(MODULE_KEYS as [string, ...string[]])) });

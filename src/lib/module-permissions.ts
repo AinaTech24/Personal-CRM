@@ -18,6 +18,7 @@ export const MANAGED_MODULES: ManagedModule[] = [
   "BIRTHDAYS",
   "MESSAGES",
   "PROJECTS",
+  "EXPENSES",
 ];
 
 export const MODULE_LABEL: Record<ManagedModule, string> = {
@@ -30,6 +31,7 @@ export const MODULE_LABEL: Record<ManagedModule, string> = {
   BIRTHDAYS: "Birthdays",
   MESSAGES: "Messages",
   PROJECTS: "Projects",
+  EXPENSES: "Expenses",
 };
 
 /** The four independent actions a module grant can carry. */
@@ -44,12 +46,20 @@ export const MODULE_ACTION_LABEL: Record<ModuleAction, string> = {
   DELETE: "Delete",
 };
 
-/** One module's four action flags — the shape stored per (user, module) and shown as one row of the Permission Manager's matrix. */
+/**
+ * One module's four action flags plus `blocked` — the shape stored per
+ * (user, module) and shown as one row of the Permission Manager's matrix.
+ * `blocked` is deliberately independent of the four CRUD flags: it hides the
+ * module's nav link for this person outright, overriding even their usual
+ * baseline own-record access, where the CRUD flags only ever widen beyond
+ * that baseline.
+ */
 export interface ModulePermissionFlags {
   canCreate: boolean;
   canRead: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  blocked: boolean;
 }
 
 export const NO_MODULE_ACCESS: ModulePermissionFlags = {
@@ -57,6 +67,7 @@ export const NO_MODULE_ACCESS: ModulePermissionFlags = {
   canRead: false,
   canUpdate: false,
   canDelete: false,
+  blocked: false,
 };
 
 export const FULL_MODULE_ACCESS: ModulePermissionFlags = {
@@ -64,6 +75,7 @@ export const FULL_MODULE_ACCESS: ModulePermissionFlags = {
   canRead: true,
   canUpdate: true,
   canDelete: true,
+  blocked: false,
 };
 
 export function hasModuleAction(flags: ModulePermissionFlags, action: ModuleAction): boolean {

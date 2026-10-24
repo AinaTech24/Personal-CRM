@@ -17,6 +17,7 @@ import { useSocket } from "@/components/providers/socket-provider";
 import { Chart, CHART_TYPES, type Slice } from "@/components/dashboard/charts";
 import { useDashboardActivity } from "@/components/dashboard/dashboard-activity";
 import { useDashboardUserView } from "@/components/dashboard/dashboard-user-view";
+import { HEX, STATUS_HEX, STATUS_ORDER, statusLabel as label, type DashboardEntityKey } from "@/lib/dashboard-colors";
 
 interface EntityStat {
   total: number;
@@ -32,41 +33,7 @@ interface Stats {
   invoices: EntityStat;
 }
 
-type EntityKey = "leads" | "tasks" | "projects" | "quotations" | "invoices";
-
-function label(status: string) {
-  return status
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-const HEX = {
-  primary: "#dc2626",
-  indigo: "#f87171",
-  emerald: "#10b981",
-  amber: "#f59e0b",
-  amberLight: "#fbbf24",
-  red: "#ef4444",
-  gray: "#9ca3af",
-};
-
-const STATUS_HEX: Record<string, string> = {
-  NEW: HEX.primary, CONTACTED: HEX.indigo, MEETING: HEX.indigo, QUALIFIED: HEX.emerald, PROPOSAL_SENT: HEX.amber,
-  NEGOTIATION: HEX.amberLight, WON: HEX.emerald, LOST: HEX.red,
-  TODO: HEX.gray, IN_PROGRESS: HEX.amber, REVIEW: HEX.primary, COMPLETED: HEX.emerald, CANCELLED: HEX.red,
-  PLANNED: HEX.gray, ACTIVE: HEX.emerald, ON_HOLD: HEX.amber,
-  DRAFT: HEX.gray, SENT: HEX.primary, APPROVED: HEX.emerald, REJECTED: HEX.red, EXPIRED: HEX.amber,
-  PAID: HEX.emerald, PARTIAL_PAYMENT: HEX.amber, OVERDUE: HEX.red,
-};
-
-const STATUS_ORDER: Record<EntityKey, string[]> = {
-  leads: ["NEW", "CONTACTED", "MEETING", "QUALIFIED", "PROPOSAL_SENT", "NEGOTIATION", "WON", "LOST"],
-  tasks: ["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELLED"],
-  projects: ["PLANNED", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"],
-  quotations: ["DRAFT", "SENT", "APPROVED", "REJECTED", "EXPIRED"],
-  invoices: ["DRAFT", "SENT", "PAID", "PARTIAL_PAYMENT", "OVERDUE", "CANCELLED"],
-};
+type EntityKey = DashboardEntityKey;
 
 const ENTITY_META: { key: EntityKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: "leads", label: "Leads", icon: IconLeads },

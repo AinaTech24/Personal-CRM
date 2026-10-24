@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { canAccessSocialClient, isSocialMediaLead, isSocialMediaOnlyUser, type SocialMembership } from "@/lib/social-media-permissions";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
+import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 import { getTeamMembershipBySlug, getTeamUserIdsBySlug, broadcastTeamChangeBySlug } from "@/lib/teams";
 import { getCrmMembership, hasCrmAccess } from "@/lib/crm-team";
@@ -136,6 +136,7 @@ export async function getSocialClientForUser(
     include: { createdBy: { select: { departmentId: true } }, assignedTo: { select: { departmentId: true } } },
   });
   if (!client) return null;
+  if (await isModuleBlocked(user, "CLIENTS")) return "forbidden" as const;
   if (canAccessSocialClient(user, membership, client)) return client;
 
   const scope = await moduleAccessScope(user, "CLIENTS", action);

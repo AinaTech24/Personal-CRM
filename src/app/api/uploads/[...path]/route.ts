@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isAdmin } from "@/lib/permissions";
 import { canManageTask } from "@/lib/tasks";
 import { getProjectForUser } from "@/lib/projects";
 import { getSocialMembership, getSocialImageForUser, getSocialReportForUser } from "@/lib/social-media";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { mimeTypeFor } from "@/lib/uploads";
 
 /** Serves task attachments and project documents straight from their base64 MySQL column. */
@@ -56,6 +58,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
     if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
     fileName = image.fileName;
     data = image.data;
+  } else if (scope === "expenses") {
+    const expense = await db.expense.findFirst({
+      where: { receiptFilePath: relativePath },
+      select: { userId: true, user: { select: { departmentId: true } }, receiptFileName: true, receiptData: true },
+    });
+    if (!expense) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    let canView = isAdmin(user) || expense.userId === user.id;
+    if (!canView) {
+      const expenseScope = await moduleAccessScope(user, "EXPENSES", "READ");
+      canView = expenseScope === "all" || (expenseScope !== null && expense.user.departmentId === expenseScope.departmentId);
+    }
+    if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    fileName = expense.receiptFileName ?? "receipt";
+    data = expense.receiptData;
   } else {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

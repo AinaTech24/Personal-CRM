@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { isAdmin } from "@/lib/permissions";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
+import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
@@ -45,6 +45,7 @@ export async function getTaskForUser(user: PermissionUser, taskId: string, actio
     },
   });
   if (!task) return null;
+  if (await isModuleBlocked(user, "TASKS")) return "forbidden" as const;
   if (canManageTask(user, task)) return task;
 
   const scope = await moduleAccessScope(user, "TASKS", action);
