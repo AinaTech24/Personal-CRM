@@ -15,6 +15,7 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { copyTextFromAsync } from "@/lib/clipboard";
 import { AttachmentPreview } from "@/components/forms/attachment-preview";
 import { parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
@@ -330,9 +331,16 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">{form?.title ?? "Submissions"}</h1>
-          <p className="text-sm text-muted-foreground">Responses collected from the public form.</p>
+          <HelpDialog title="Form submissions — help">
+            <HelpSection heading="What this page is for">
+              <p>Every response collected from this form&apos;s public link, searchable and exportable to CSV. A submission can also be converted straight into a Lead.</p>
+            </HelpSection>
+            <HelpSection heading="Who can see this">
+              <p>Whoever can build forms (Admins, Super Admins, Department/CRM/Social Media leads) sees any form&apos;s submissions. Anyone else sees them only if an admin explicitly shared this particular form with their department.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         {form && (
           <div className="flex flex-wrap gap-2">

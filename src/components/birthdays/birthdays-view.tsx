@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { IconCake } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { GiftHistory } from "@/components/birthdays/gift-history";
 import { useBirthdays, type BirthdayEntry } from "@/components/birthdays/use-birthdays";
 import { BIRTHDAY_GIFTS, MAX_GIFT_LENGTH } from "@/lib/birthdays";
@@ -73,9 +74,13 @@ export function BirthdaysView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="flex items-center gap-1.5">
         <h1 className="text-xl font-semibold">Birthdays</h1>
-        <p className="text-sm text-muted-foreground">Celebrating everyone in the Aina Family.</p>
+        <HelpDialog title="Birthdays — help">
+          <HelpSection heading="What this page is for">
+            <p>See who&apos;s celebrating today and who&apos;s coming up next. On someone&apos;s birthday you can send them a wish, and an admin may send a company gift.</p>
+          </HelpSection>
+        </HelpDialog>
       </div>
 
       {today.length > 0 && (

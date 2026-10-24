@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import * as Popover from "@radix-ui/react-popover";
 import { IconFilter } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -86,7 +87,14 @@ export default function MyActivityPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">My Activity</h1>
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-xl font-semibold">My Activity</h1>
+          <HelpDialog title="My Activity — help">
+            <HelpSection heading="What this page is for">
+              <p>A personal feed of what you&apos;ve created, updated, or been assigned, across every module — filterable by module with the dropdown.</p>
+            </HelpSection>
+          </HelpDialog>
+        </div>
 
         <Popover.Root open={filterOpen} onOpenChange={setFilterOpen}>
           <Popover.Trigger asChild>

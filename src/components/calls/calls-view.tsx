@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { IconPlus, IconClock, IconPencil, IconTrash } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { cn } from "@/lib/utils";
 
 type CallType = "INCOMING" | "OUTGOING" | "MISSED";
@@ -124,9 +125,19 @@ export function CallsView({ scope }: { scope?: "crm" } = {}) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Calls</h1>
-          <p className="text-sm text-muted-foreground">Log incoming, outgoing, and missed calls with leads and clients.</p>
+          <HelpDialog title="Calls — help">
+            <HelpSection heading="What this page is for">
+              <p>Log incoming, outgoing, and missed calls against a lead or a named contact, so there&apos;s a record of who talked to whom and when.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins and CRM Team leads">
+              <p>See every call logged by anyone on the CRM team.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else">
+              <p>You see calls you personally logged.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <Button type="button" onClick={openCreate}>
           <IconPlus className="h-4 w-4" />

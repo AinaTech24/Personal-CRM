@@ -10,6 +10,7 @@ import { SkeletonCards, SkeletonTable } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { IconCheck, IconClock, IconPaperclip, IconPlus, IconWallet, IconX } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { SubmitExpenseDialog } from "@/components/expenses/submit-expense-dialog";
 import {
   categoryDisplay,
@@ -86,9 +87,16 @@ export function ExpensesView() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">My Expenses</h1>
-          <p className="text-sm text-muted-foreground">Submit reimbursement claims and follow their status.</p>
+          <HelpDialog title="My Expenses — help">
+            <HelpSection heading="What this page is for">
+              <p>Submit a reimbursement claim with a category, amount, and optional receipt, and follow it through Pending, Approved, Rejected, or Paid. Filter by period, or set a custom date range, with the dropdown above.</p>
+            </HelpSection>
+            <HelpSection heading="How approval works">
+              <p>Admins/Super Admins and anyone else holding an Expenses approval grant for your department can approve, reject, or mark your claim as paid.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Dropdown size="sm" value={period} onChange={setPeriod} className="w-40" options={PERIOD_OPTIONS} />

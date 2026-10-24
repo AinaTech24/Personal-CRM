@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SkeletonCards, SkeletonTable } from "@/components/ui/skeleton";
 import { IconCalendar, IconCheck, IconClock, IconPlus, IconX } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { ApplyLeaveDialog } from "@/components/leave/apply-leave-dialog";
 import {
   categoryLabel,
@@ -81,9 +82,16 @@ export function LeaveView() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">My Leave</h1>
-          <p className="text-sm text-muted-foreground">Apply for leave and follow your requests.</p>
+          <HelpDialog title="My Leave — help">
+            <HelpSection heading="What this page is for">
+              <p>Apply for leave and track the status of your requests — Pending, Approved, or Rejected.</p>
+            </HelpSection>
+            <HelpSection heading="How approval works">
+              <p>Every request goes to Admins/Super Admins and anyone else holding a Leave approval grant for your department; they can approve, reject, or leave a note.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <Button type="button" onClick={() => setApplyOpen(true)}>
           <IconPlus className="h-4 w-4" />

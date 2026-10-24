@@ -22,6 +22,7 @@ import { GlobalSearchBar } from "@/components/layout/global-search-bar";
 import { useSearch } from "@/components/providers/search-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
 import {
   PRIORITY_OPTIONS,
@@ -323,11 +324,25 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Tasks</h1>
-          <p className="text-sm text-muted-foreground">
-            {filteredTasks.length} task{filteredTasks.length === 1 ? "" : "s"}
-          </p>
+          <HelpDialog title="Tasks — help">
+            <HelpSection heading="What this page is for">
+              <p>A Kanban board for work items — create a task, assign one or more people, and drag it between status columns as it progresses.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>See and manage every task across every department.</p>
+            </HelpSection>
+            <HelpSection heading="Department Admins & Permission Manager grants">
+              <p>A Department Admin sees only what they&apos;re explicitly granted (Permission Manager → Tasks) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
+            </HelpSection>
+            <HelpSection heading="Team leads">
+              <p>A team lead additionally sees every task created by, or assigned to, anyone on their team.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else">
+              <p>You see tasks you created or are assigned to (including as one of several assignees).</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex items-center gap-2">
           <GlobalSearchBar placeholder="Search tasks…" />

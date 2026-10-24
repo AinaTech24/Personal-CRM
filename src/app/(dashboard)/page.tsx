@@ -28,7 +28,7 @@ export default async function DashboardHomePage() {
     return (
       <div className="flex min-h-full flex-col gap-6">
         <BirthdayBanner />
-        <DashboardStats greetingName={user?.name.split(" ")[0] ?? ""} />
+        <DashboardStats />
         <div>
           <h2 className="text-lg font-semibold">Social Media pipeline</h2>
           <p className="mb-3 text-sm text-muted-foreground">Every client with content in flight, and where each piece stands.</p>

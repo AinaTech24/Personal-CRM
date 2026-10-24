@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActionsMenu } from "@/components/ui/row-actions";
 import { useToast } from "@/components/providers/toast-provider";
 import { Tooltip } from "@/components/ui/tooltip";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { IconPencil, IconTrash, IconPlus } from "@/components/icons";
 
 interface Department {
@@ -124,9 +125,16 @@ export default function DepartmentsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Departments</h1>
-          <p className="text-sm text-muted-foreground">Organizational units such as Development, Design, Sales.</p>
+          <HelpDialog title="Departments — help">
+            <HelpSection heading="What this page is for">
+              <p>Organizational units such as Development, Design, Sales. Every person belongs to at most one department, and most modules scope a Department Admin&apos;s or module grant&apos;s visibility to it.</p>
+            </HelpSection>
+            <HelpSection heading="Who can see this">
+              <p>Admins and Super Admins can create, rename, or delete a department. A Department Admin can open their own department to manage members and permissions, but not create or delete departments.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         {isAdmin && (
           <Tooltip label="New department" side="bottom">

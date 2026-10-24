@@ -20,6 +20,7 @@ import { TeamYearHeatmap, type TeamDay } from "@/components/attendance/team-year
 import { AttendanceSettingsPanel } from "@/components/attendance/attendance-settings-panel";
 import { summarize } from "@/lib/attendance";
 import { formatIstTime, formatDuration, HALF_DAY_REASON_LABEL, STATUS_LABEL } from "@/lib/attendance-ui";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import {
   format,
   startOfWeek,
@@ -208,9 +209,19 @@ export default function AdminAttendancePage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Attendance</h1>
-          <p className="text-sm text-muted-foreground">Review, approve, and correct attendance across the team.</p>
+          <HelpDialog title="Attendance — help">
+            <HelpSection heading="What this page is for">
+              <p>Review everyone&apos;s check-in/check-out and break times, approve or correct a day&apos;s record, and export attendance to CSV.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>See and manage attendance for every department.</p>
+            </HelpSection>
+            <HelpSection heading="Department Admins & Permission Manager grants">
+              <p>See and manage attendance only where explicitly granted (Permission Manager → Attendance) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex items-center gap-2">
           <a href={exportUrl}>

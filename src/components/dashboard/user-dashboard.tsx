@@ -23,6 +23,7 @@ import {
 } from "@/components/icons";
 import { Dropdown } from "@/components/ui/dropdown";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { useDashboardActivity } from "@/components/dashboard/dashboard-activity";
 import { Chart, CHART_TYPES, type Slice } from "@/components/dashboard/charts";
 import { STATUS_HEX, STATUS_ORDER, statusLabel, type DashboardEntityKey } from "@/lib/dashboard-colors";
@@ -194,9 +195,16 @@ export function UserDashboard({ firstName }: { firstName: string }) {
       <Card className="overflow-hidden">
         <CardContent className="flex flex-col gap-4 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold">
-              {greeting}, {firstName}
-            </h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-xl font-semibold">
+                {greeting}, {firstName}
+              </h1>
+              <HelpDialog title="Dashboard — help">
+                <HelpSection heading="What this page is for">
+                  <p>Your personal overview — today&apos;s attendance, your open tasks and leads, projects you&apos;re on, and recent activity, all in one place.</p>
+                </HelpSection>
+              </HelpDialog>
+            </div>
             <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, d MMMM yyyy")}</p>
             <p className="mt-2 text-sm">
               {att.onLeave ? (

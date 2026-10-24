@@ -9,6 +9,7 @@ import { Dropdown } from "@/components/ui/dropdown";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { useToast } from "@/components/providers/toast-provider";
 import {
   MANAGED_MODULES,
@@ -217,18 +218,27 @@ function PermissionManager() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Permission Manager</h1>
-          <p className="text-sm text-muted-foreground">
-            Grant someone full create/read/update/delete access to specific modules within their own department, on top
-            of whatever their role already allows. A company Admin already has every module, company-wide. The Access
-            column is separate from those four — turning it off blocks this one person from that module entirely
-            (nav link and the module&apos;s own pages/API alike, even their own records), where the CRUD toggles only
-            ever widen their visibility beyond that. Messages is nav/page-only, since conversations work by membership
-            rather than ownership.
-            {isAdmin &&
-              " All departments (admin-only) widens a grant from just their own department to everything, company-wide — for a Department Admin who should see what an Admin sees in one specific module, without making them a full Admin."}
-          </p>
+          <HelpDialog title="Permission Manager — help">
+            <HelpSection heading="What this page is for">
+              <p>Grant someone full create/read/update/delete access to specific modules within their own department, on top of whatever their role already allows. A company Admin already has every module, company-wide.</p>
+            </HelpSection>
+            <HelpSection heading="The Access column">
+              <p>Separate from the four CRUD toggles — turning it off blocks this one person from that module entirely (nav link and the module&apos;s own pages/API alike, even their own records), where the CRUD toggles only ever widen their visibility beyond that.</p>
+            </HelpSection>
+            {isAdmin && (
+              <HelpSection heading="All departments (admin-only)">
+                <p>Widens a grant from just the person&apos;s own department to everything, company-wide — for a Department Admin who should see what an Admin sees in one specific module, without making them a full Admin. Only a company Admin can turn this on; a Department Admin or team lead editing their own people&apos;s grants never sees this column.</p>
+              </HelpSection>
+            )}
+            <HelpSection heading="Messages">
+              <p>Nav/page-only, since conversations work by membership rather than ownership — there&apos;s no department-scoped visibility to grant here.</p>
+            </HelpSection>
+            <HelpSection heading="Who can use this page">
+              <p>Admins and Super Admins can manage anyone. A Department Admin can manage people in their own department, but never grant &quot;All departments&quot; and never edit another Admin.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex gap-1 rounded-md border border-border p-0.5">
           <Button size="sm" variant={view === "person" ? "default" : "ghost"} onClick={() => setView("person")}>

@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { IconPaperclip, IconPencil, IconTrash } from "@/components/icons";
 import {
   CATEGORY_OPTIONS,
@@ -196,9 +197,19 @@ export function ExpensesAdminView({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Expense Requests</h1>
-          <p className="text-sm text-muted-foreground">Approve, reject, and mark reimbursement claims as paid.</p>
+          <HelpDialog title="Expense Requests — help">
+            <HelpSection heading="What this page is for">
+              <p>Review submitted reimbursement claims, approve or reject them, and mark an approved claim as paid once it&apos;s been reimbursed.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>See and decide on every claim across every department.</p>
+            </HelpSection>
+            <HelpSection heading="Department Admins & Permission Manager grants">
+              <p>See and decide on claims only where explicitly granted (Permission Manager → Expenses) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Dropdown size="sm" value={period} onChange={setPeriod} className="w-40" options={PERIOD_OPTIONS} />

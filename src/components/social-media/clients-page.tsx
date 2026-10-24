@@ -33,6 +33,7 @@ import {
 import { LottieIcon } from "@/components/icons/lottie-icon";
 import { Dropdown } from "@/components/ui/dropdown";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { useSocket } from "@/components/providers/socket-provider";
 import { userOptionLabel } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
@@ -416,11 +417,22 @@ export function ClientsPageClient() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Clients</h1>
-          <p className="text-sm text-muted-foreground">
-            {filteredClients.length} client{filteredClients.length === 1 ? "" : "s"}
-          </p>
+          <HelpDialog title="Clients — help">
+            <HelpSection heading="What this page is for">
+              <p>The Social Media module&apos;s own client directory — platforms, credentials, content folders, ad accounts, and monthly reports for each client you manage.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins and Social Media Team leads">
+              <p>See and manage every client.</p>
+            </HelpSection>
+            <HelpSection heading="Department Admins & Permission Manager grants">
+              <p>See and manage clients only where explicitly granted (Permission Manager → Clients) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else on the Social Media team">
+              <p>You see clients you&apos;re assigned to.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-48">
