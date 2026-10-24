@@ -283,7 +283,7 @@ export function FormsListView() {
                                 },
                                 {
                                   key: "copy-embed",
-                                  label: "Copy embed code",
+                                  label: "Embed code",
                                   icon: <IconCode className="h-4 w-4" />,
                                   onSelect: () => copyEmbedCode(r),
                                 },

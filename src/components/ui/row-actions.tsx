@@ -64,7 +64,7 @@ export function RowActionsMenu({
               key={a.key}
               onSelect={a.onSelect}
               className={cn(
-                "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-primary/5",
+                "flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-md px-2 py-1.5 text-sm outline-none hover:bg-primary/5",
                 a.destructive && "text-destructive"
               )}
             >

@@ -30,6 +30,7 @@ model Department {
   passwordEntries PasswordEntry[]
   formViewers     FormViewerDepartment[]
   forms           Form[]                 @relation("FormDepartment")
+  notes           Note[]
 }
 
 /// A module an admin can individually grant a user full ("admin-equivalent")
@@ -46,6 +47,41 @@ enum ManagedModule {
   MESSAGES
   PROJECTS
   EXPENSES
+}
+
+enum NoteColor {
+  WHITE
+  PINK
+  BLUE
+  GREEN
+  YELLOW
+  LAVENDER
+  PEACH
+  GRAY
+}
+
+/// A personal note. Visibility is its own fixed 3-tier model (Admin/Super
+/// Admin → everyone; a Department Admin → their own department; everyone
+/// else → only their own notes) — deliberately NOT routed through the
+/// Permission Manager's module-grant system, unlike most other modules.
+/// `departmentId` snapshots the author's department at creation time, same
+/// as Lead/Task/etc., so department-scoped visibility survives the author
+/// later moving departments or being deactivated.
+model Note {
+  id           String    @id @default(cuid())
+  title        String
+  content      String    @db.Text
+  color        NoteColor @default(WHITE)
+  isPinned     Boolean   @default(false)
+  authorId     String
+  author       User      @relation("NoteAuthor", fields: [authorId], references: [id])
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([authorId])
+  @@index([departmentId])
 }
 
 /// One row per (user, module), company-wide — the same shape as CrmMember
@@ -226,6 +262,7 @@ model User {
   passwordSharesReceived           PasswordEntryShare[]        @relation("PasswordEntrySharedWith")
   passwordSharesGiven              PasswordEntryShare[]        @relation("PasswordEntrySharedBy")
   passwordEntryActivities          PasswordEntryActivity[]
+  notesCreated                     Note[]                      @relation("NoteAuthor")
 }
 
 /// A browser/device push endpoint, so a user can be notified about a new
