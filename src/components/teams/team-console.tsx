@@ -170,6 +170,7 @@ export function GenericTeamConsole({ teamId }: { teamId: string }) {
           team={team}
           meId={meId}
           canManage={canManage}
+          isAdmin={isAdmin}
           addOpen={addOpen}
           setAddOpen={setAddOpen}
           inviteOpen={inviteOpen}
@@ -195,6 +196,7 @@ function MembersTab({
   team,
   meId,
   canManage,
+  isAdmin,
   addOpen,
   setAddOpen,
   inviteOpen,
@@ -205,6 +207,7 @@ function MembersTab({
   team: TeamDetail;
   meId: string | null;
   canManage: boolean;
+  isAdmin: boolean;
   addOpen: boolean;
   setAddOpen: (v: boolean) => void;
   inviteOpen: boolean;
@@ -458,7 +461,7 @@ function MembersTab({
         </DialogContent>
       </Dialog>
 
-      <ManagePermissionsDialog user={permsUser} onOpenChange={(open) => !open && setPermsUser(null)} />
+      <ManagePermissionsDialog user={permsUser} onOpenChange={(open) => !open && setPermsUser(null)} isAdmin={isAdmin} />
 
       <ConfirmDialog
         open={!!removing}

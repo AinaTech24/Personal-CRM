@@ -61,6 +61,10 @@ function PermissionManager() {
   const searchParams = useSearchParams();
 
   const [view, setView] = useState<"person" | "module">("person");
+  // Only a company Admin may grant "All departments" (company-wide scope,
+  // same breadth as an Admin, for one module) — a Department Admin reaching
+  // this page for their own people never sees that column.
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
   const [query, setQuery] = useState("");
@@ -84,6 +88,10 @@ function PermissionManager() {
 
   useEffect(() => {
     loadCandidates();
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setIsAdmin(d.user?.role === "SUPER_ADMIN" || d.user?.role === "ADMIN"))
+      .catch(() => {});
   }, [loadCandidates]);
 
   // A click from Admin > Users' own Permissions button preselects that user.
@@ -158,8 +166,15 @@ function PermissionManager() {
     setDirty(true);
   }
 
+  // Same independence as blocked: widens this grant to every department,
+  // same breadth an Admin has — never touched by Quick set either.
+  function toggleAllDepartments(module: ManagedModule) {
+    setMatrix((prev) => ({ ...prev, [module]: { ...prev[module], allDepartments: !prev[module].allDepartments } }));
+    setDirty(true);
+  }
+
   function setModuleAll(module: ManagedModule, flags: ModulePermissionFlags) {
-    setMatrix((prev) => ({ ...prev, [module]: { ...flags, blocked: prev[module].blocked } }));
+    setMatrix((prev) => ({ ...prev, [module]: { ...flags, blocked: prev[module].blocked, allDepartments: prev[module].allDepartments } }));
     setDirty(true);
   }
 
@@ -211,6 +226,8 @@ function PermissionManager() {
             (nav link and the module&apos;s own pages/API alike, even their own records), where the CRUD toggles only
             ever widen their visibility beyond that. Messages is nav/page-only, since conversations work by membership
             rather than ownership.
+            {isAdmin &&
+              " All departments (admin-only) widens a grant from just their own department to everything, company-wide — for a Department Admin who should see what an Admin sees in one specific module, without making them a full Admin."}
           </p>
         </div>
         <div className="flex gap-1 rounded-md border border-border p-0.5">
@@ -264,7 +281,7 @@ function PermissionManager() {
               {!selected ? (
                 <p className="py-10 text-center text-sm text-muted-foreground">Pick someone on the left to manage their permissions.</p>
               ) : loadingMatrix ? (
-                <SkeletonTable rows={MANAGED_MODULES.length} columns={5} />
+                <SkeletonTable rows={MANAGED_MODULES.length} columns={isAdmin ? 8 : 7} />
               ) : (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -303,6 +320,7 @@ function PermissionManager() {
                             </th>
                           ))}
                           <th className="whitespace-nowrap px-2 py-2 text-center font-medium">Access</th>
+                          {isAdmin && <th className="whitespace-nowrap px-2 py-2 text-center font-medium">All departments</th>}
                           <th className="whitespace-nowrap px-2 py-2 text-right font-medium">Quick set</th>
                         </tr>
                       </thead>
@@ -317,6 +335,11 @@ function PermissionManager() {
                                 {flags.blocked && (
                                   <span className="ml-1.5 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[10px] font-normal text-destructive">
                                     Hidden
+                                  </span>
+                                )}
+                                {flags.allDepartments && (
+                                  <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-normal text-primary">
+                                    All departments
                                   </span>
                                 )}
                               </td>
@@ -336,6 +359,15 @@ function PermissionManager() {
                                   label={`${flags.blocked ? "Unhide" : "Hide"} ${MODULE_LABEL[module]} for this person`}
                                 />
                               </td>
+                              {isAdmin && (
+                                <td className="px-2 py-2.5 text-center">
+                                  <ToggleSwitch
+                                    checked={flags.allDepartments}
+                                    onChange={() => toggleAllDepartments(module)}
+                                    label={`See every department's ${MODULE_LABEL[module]}, not just their own`}
+                                  />
+                                </td>
+                              )}
                               <td className="whitespace-nowrap px-2 py-2.5 text-right">
                                 <button
                                   type="button"
@@ -386,6 +418,11 @@ function PermissionManager() {
                         <td className="whitespace-nowrap px-2 py-2.5">
                           <span className="font-medium">{[g.name, g.surname].filter(Boolean).join(" ")}</span>
                           <span className="ml-1.5 text-xs text-muted-foreground">{g.department?.name ?? "No department"}</span>
+                          {g.flags.allDepartments && (
+                            <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-normal text-primary">
+                              All departments
+                            </span>
+                          )}
                         </td>
                         {MODULE_ACTIONS.map((action) => (
                           <td key={action} className="px-2 py-2.5 text-center">
