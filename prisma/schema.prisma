@@ -2089,6 +2089,9 @@ enum FormFieldType {
   FILE_SINGLE
   FILE_MULTI
   SECTION_HEADING
+  /// Layout-only, like SECTION_HEADING — splits the form into steps at the
+  /// public page. Never has an answer.
+  PAGE_BREAK
 }
 
 /// A form an admin built with the drag-and-drop builder (src/app/(dashboard)/forms).
@@ -2111,6 +2114,12 @@ model Form {
   /// before this field existed have none until an admin sets one.
   departmentId String?
   department   Department? @relation("FormDepartment", fields: [departmentId], references: [id])
+
+  /// Incremented once per page load at the public /f/[slug] URL — the
+  /// denominator for the analytics conversion rate (submissions / views).
+  /// A simple counter, not a per-visitor log: good enough to answer "is
+  /// this form converting," not meant to dedupe repeat visits.
+  viewCount Int @default(0)
 
   fields          FormField[]
   submissions     FormSubmission[]
@@ -2154,6 +2163,18 @@ model FormField {
   maxValue    Int?
   /// Regex source (no flags) a text-like answer must match, e.g. an EMAIL/PHONE shape.
   pattern     String?       @db.VarChar(500)
+
+  /// Conditional logic — this field (and its validation/requiredness) is
+  /// only in play when the field `conditionFieldId` points at currently
+  /// satisfies `conditionOperator`/`conditionValue`. A soft pointer, not a
+  /// relation, like the other cross-row ids in this file: a field that gets
+  /// deleted should just stop gating anything, not take its dependents down
+  /// with it. The builder only ever offers an earlier field (lower `order`)
+  /// as the target, so evaluation in display order never has to look ahead.
+  conditionFieldId String?
+  /// "equals" | "not_equals" | "contains" | "is_filled" | "is_empty"
+  conditionOperator String?
+  conditionValue    String?       @db.Text
 
   answers     FormAnswer[]
   attachments FormAttachment[]

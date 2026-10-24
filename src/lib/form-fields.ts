@@ -13,6 +13,7 @@ export const FORM_FIELD_TYPES = [
   "FILE_SINGLE",
   "FILE_MULTI",
   "SECTION_HEADING",
+  "PAGE_BREAK",
 ] as const;
 
 export type FormFieldType = (typeof FORM_FIELD_TYPES)[number];
@@ -52,6 +53,7 @@ export const FIELD_TYPE_META: Record<FormFieldType, FieldTypeMeta> = {
   FILE_SINGLE: { type: "FILE_SINGLE", label: "File Upload", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, validation: "none" },
   FILE_MULTI: { type: "FILE_MULTI", label: "Multiple Files", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, validation: "none" },
   SECTION_HEADING: { type: "SECTION_HEADING", label: "Section Heading", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false, validation: "none" },
+  PAGE_BREAK: { type: "PAGE_BREAK", label: "Page Break", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false, validation: "none" },
 };
 
 export const FIELD_PALETTE: FormFieldType[] = [
@@ -69,6 +71,7 @@ export const FIELD_PALETTE: FormFieldType[] = [
   "FILE_SINGLE",
   "FILE_MULTI",
   "SECTION_HEADING",
+  "PAGE_BREAK",
 ];
 
 /**
@@ -176,4 +179,70 @@ export function validateFieldValue(field: FieldValidationRules, value: string): 
     if (!matches) return `"${field.label}" doesn't match the required format`;
   }
   return null;
+}
+
+export const CONDITION_OPERATORS = [
+  { value: "equals", label: "is" },
+  { value: "not_equals", label: "is not" },
+  { value: "contains", label: "contains" },
+  { value: "is_filled", label: "is answered" },
+  { value: "is_empty", label: "is empty" },
+] as const;
+
+export type ConditionOperator = (typeof CONDITION_OPERATORS)[number]["value"];
+
+export interface FieldCondition {
+  conditionFieldId?: string | null;
+  conditionOperator?: string | null;
+  conditionValue?: string | null;
+}
+
+/**
+ * Whether a conditional field should currently be shown, given the other
+ * answers collected so far. No condition at all (conditionFieldId unset)
+ * always shows. `answers` maps fieldId -> the answer as one string, the
+ * same pipe-separated convention CHECKBOX already uses elsewhere — which
+ * is why "equals"/"not_equals" check membership in a pipe-split list
+ * rather than a straight `===`: it's the same comparison for an ordinary
+ * single-value answer (split("|") on a plain string is just [that string])
+ * and for a CHECKBOX's several selections, with no separate case needed.
+ */
+export function isFieldVisible(field: FieldCondition, answers: Record<string, string | undefined>): boolean {
+  if (!field.conditionFieldId || !field.conditionOperator) return true;
+  const raw = (answers[field.conditionFieldId] ?? "").trim();
+  const target = (field.conditionValue ?? "").trim().toLowerCase();
+  switch (field.conditionOperator) {
+    case "is_filled":
+      return raw.length > 0;
+    case "is_empty":
+      return raw.length === 0;
+    case "equals":
+      return raw.split("|").some((v) => v.trim().toLowerCase() === target);
+    case "not_equals":
+      return !raw.split("|").some((v) => v.trim().toLowerCase() === target);
+    case "contains":
+      return raw.toLowerCase().includes(target);
+    default:
+      return true;
+  }
+}
+
+/**
+ * Splits an ordered field list into pages at each PAGE_BREAK — the break
+ * itself is layout only, like SECTION_HEADING, and never appears in any
+ * page. Two breaks in a row (or a trailing one) would otherwise produce an
+ * empty page, so empty pages are dropped; a form with no breaks at all, or
+ * none left after dropping empties, is just one page.
+ */
+export function splitIntoPages<T extends { type: FormFieldType }>(fields: T[]): T[][] {
+  const pages: T[][] = [[]];
+  for (const f of fields) {
+    if (f.type === "PAGE_BREAK") {
+      pages.push([]);
+      continue;
+    }
+    pages[pages.length - 1].push(f);
+  }
+  const nonEmpty = pages.filter((p) => p.length > 0);
+  return nonEmpty.length ? nonEmpty : [[]];
 }

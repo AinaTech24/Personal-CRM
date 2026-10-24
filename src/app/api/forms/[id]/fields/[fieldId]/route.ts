@@ -3,7 +3,9 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageForms } from "@/lib/forms";
-import { serializeFieldOptions } from "@/lib/form-fields";
+import { CONDITION_OPERATORS, serializeFieldOptions } from "@/lib/form-fields";
+
+const CONDITION_OPERATOR_VALUES = CONDITION_OPERATORS.map((o) => o.value) as [string, ...string[]];
 
 const patchSchema = z.object({
   label: z.string().trim().min(1).max(200).optional(),
@@ -30,6 +32,9 @@ const patchSchema = z.object({
         return false;
       }
     }, "Invalid pattern"),
+  conditionFieldId: z.string().nullable().optional(),
+  conditionOperator: z.enum(CONDITION_OPERATOR_VALUES).nullable().optional(),
+  conditionValue: z.string().trim().max(500).nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string; fieldId: string }> }) {
@@ -44,6 +49,35 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const d = parsed.data;
 
+  // A condition needs both a target field and an operator — clearing the
+  // target clears the whole condition instead of leaving a dangling
+  // operator/value around.
+  let conditionPatch: { conditionFieldId: string | null; conditionOperator: string | null; conditionValue: string | null } | undefined;
+  if (d.conditionFieldId !== undefined) {
+    if (!d.conditionFieldId) {
+      conditionPatch = { conditionFieldId: null, conditionOperator: null, conditionValue: null };
+    } else {
+      // Only an earlier field (lower display order) may gate this one — the
+      // builder only offers those as options, so anything else here is either
+      // a stale client or a cross-form id, neither of which should be saved.
+      const target = await db.formField.findFirst({ where: { id: d.conditionFieldId, formId }, select: { order: true } });
+      if (!target || target.order >= existing.order) {
+        return NextResponse.json({ error: "Invalid condition target" }, { status: 400 });
+      }
+      conditionPatch = {
+        conditionFieldId: d.conditionFieldId,
+        conditionOperator: d.conditionOperator ?? existing.conditionOperator ?? "is_filled",
+        conditionValue: d.conditionValue ?? existing.conditionValue ?? "",
+      };
+    }
+  } else if (d.conditionOperator !== undefined || d.conditionValue !== undefined) {
+    conditionPatch = {
+      conditionFieldId: existing.conditionFieldId,
+      conditionOperator: d.conditionOperator !== undefined ? d.conditionOperator : existing.conditionOperator,
+      conditionValue: d.conditionValue !== undefined ? d.conditionValue || "" : existing.conditionValue,
+    };
+  }
+
   const field = await db.formField.update({
     where: { id: fieldId },
     data: {
@@ -57,6 +91,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(d.minValue !== undefined && { minValue: d.minValue }),
       ...(d.maxValue !== undefined && { maxValue: d.maxValue }),
       ...(d.pattern !== undefined && { pattern: d.pattern || null }),
+      ...(conditionPatch ?? {}),
     },
   });
 

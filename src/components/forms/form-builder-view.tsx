@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, DialogDes
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dropdown } from "@/components/ui/dropdown";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
@@ -27,7 +28,7 @@ import { SkeletonForm } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { copyTextFromAsync } from "@/lib/clipboard";
-import { FIELD_PAIR_SHORTCUTS, FIELD_PALETTE, FIELD_TYPE_META, parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
+import { CONDITION_OPERATORS, FIELD_PAIR_SHORTCUTS, FIELD_PALETTE, FIELD_TYPE_META, parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
 import {
   IconCheck,
   IconChevronDown,
@@ -55,6 +56,9 @@ interface FieldRow {
   minValue: number | null;
   maxValue: number | null;
   pattern: string | null;
+  conditionFieldId: string | null;
+  conditionOperator: string | null;
+  conditionValue: string | null;
 }
 
 interface Department {
@@ -120,7 +124,7 @@ function PaletteItem({ type, onAdd }: { type: FormFieldType; onAdd: () => void }
   );
 }
 
-function FieldSettings({ field, onChange }: { field: FieldRow; onChange: (patch: Partial<FieldRow>) => void }) {
+function FieldSettings({ field, allFields, onChange }: { field: FieldRow; allFields: FieldRow[]; onChange: (patch: Partial<FieldRow>) => void }) {
   const meta = FIELD_TYPE_META[field.type];
   const [options, setOptions] = useState(() => parseFieldOptions(field.options));
   const [newOption, setNewOption] = useState("");
@@ -256,6 +260,45 @@ function FieldSettings({ field, onChange }: { field: FieldRow; onChange: (patch:
         </div>
       )}
       {!meta.isLayoutOnly && (
+        <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3">
+          <Label className="text-xs">Show this field only if…</Label>
+          <Dropdown
+            value={field.conditionFieldId ?? ""}
+            onChange={(v) =>
+              onChange(
+                v
+                  ? { conditionFieldId: v, conditionOperator: field.conditionOperator ?? "equals", conditionValue: field.conditionValue ?? "" }
+                  : { conditionFieldId: null, conditionOperator: null, conditionValue: null }
+              )
+            }
+            options={[
+              { value: "", label: "Always show" },
+              ...allFields
+                .filter((f) => f.order < field.order && !FIELD_TYPE_META[f.type].isLayoutOnly)
+                .map((f) => ({ value: f.id, label: f.label })),
+            ]}
+          />
+          {field.conditionFieldId && (
+            <div className="flex items-center gap-1.5">
+              <Dropdown
+                value={field.conditionOperator ?? "equals"}
+                onChange={(v) => onChange({ conditionOperator: v })}
+                options={CONDITION_OPERATORS.map((o) => ({ value: o.value, label: o.label }))}
+                className="w-36"
+              />
+              {field.conditionOperator !== "is_filled" && field.conditionOperator !== "is_empty" && (
+                <Input
+                  value={field.conditionValue ?? ""}
+                  onChange={(e) => onChange({ conditionValue: e.target.value })}
+                  placeholder="Value"
+                  className="h-8"
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {!meta.isLayoutOnly && (
         <label className="flex items-center gap-2 text-xs">
           <Checkbox checked={field.required} onChange={(v) => onChange({ required: v })} />
           Required
@@ -267,12 +310,14 @@ function FieldSettings({ field, onChange }: { field: FieldRow; onChange: (patch:
 
 function SortableField({
   field,
+  allFields,
   expanded,
   onToggleExpand,
   onChange,
   onDelete,
 }: {
   field: FieldRow;
+  allFields: FieldRow[];
   expanded: boolean;
   onToggleExpand: () => void;
   onChange: (patch: Partial<FieldRow>) => void;
@@ -308,7 +353,7 @@ function SortableField({
           <IconTrash className="h-4 w-4" />
         </Button>
       </div>
-      {expanded && <FieldSettings field={field} onChange={onChange} />}
+      {expanded && <FieldSettings field={field} allFields={allFields} onChange={onChange} />}
     </div>
   );
 }
@@ -562,6 +607,7 @@ export function FormBuilderView({ formId }: { formId: string }) {
                   <SortableField
                     key={field.id}
                     field={field}
+                    allFields={form.fields}
                     expanded={expandedId === field.id}
                     onToggleExpand={() => setExpandedId((id) => (id === field.id ? null : field.id))}
                     onChange={(patch) => updateField(field.id, patch)}
