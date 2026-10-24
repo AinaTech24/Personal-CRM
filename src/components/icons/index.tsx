@@ -426,6 +426,15 @@ export function IconUser(props: IconProps) {
   );
 }
 
+export function IconBarChart(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 21h18" />
+      <path d="M7 21V10M12 21V3M17 21v-7" />
+    </svg>
+  );
+}
+
 export function IconUserPlus(props: IconProps) {
   return (
     <svg {...base(props)}>

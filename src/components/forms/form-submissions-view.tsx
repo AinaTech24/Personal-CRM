@@ -19,6 +19,7 @@ import { copyTextFromAsync } from "@/lib/clipboard";
 import { AttachmentPreview } from "@/components/forms/attachment-preview";
 import { parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
 import {
+  IconBarChart,
   IconCheck,
   IconCopy,
   IconDownload,
@@ -52,6 +53,13 @@ interface AnswerDetail {
   id: string;
   value: string;
   field: { id: string; label: string; type: string };
+}
+
+interface Analytics {
+  views: number;
+  submissions: number;
+  conversionRate: number;
+  fields: { id: string; label: string; type: string; answeredCount: number; fillRate: number }[];
 }
 
 interface AttachmentDetail {
@@ -166,6 +174,8 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
   const [convertOpen, setConvertOpen] = useState(false);
   const [leadDraft, setLeadDraft] = useState<LeadDraft>({ name: "", company: "", email: "", phone: "" });
   const [converting, setConverting] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
@@ -253,6 +263,15 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
     }
   }
 
+  function openAnalytics() {
+    setAnalyticsOpen(true);
+    setAnalytics(null);
+    fetch(`/api/forms/${formId}/analytics`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setAnalytics(d ?? null))
+      .catch(() => setAnalytics(null));
+  }
+
   function startConvert() {
     if (!detail) return;
     setLeadDraft(guessLeadDraft(detail.answers));
@@ -327,6 +346,10 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
                 <IconCheck className={cn("absolute h-4 w-4 text-emerald-500 transition-all duration-200", copied ? "scale-100 opacity-100" : "scale-50 opacity-0")} />
               </span>
               {copied ? "Copied" : "Copy form link"}
+            </Button>
+            <Button type="button" variant="outline" onClick={openAnalytics}>
+              <IconBarChart className="h-4 w-4" />
+              Analytics
             </Button>
             {!!rows?.length && (
               <Button type="button" variant="outline" asChild>
@@ -615,6 +638,58 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
               {converting ? "Creating…" : "Create Lead"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
+        <DialogContent size="lg">
+          <DialogHeader>
+            <DialogTitle>Analytics</DialogTitle>
+            <DialogDescription>
+              Fill rate is computed from submitted responses only — it shows which fields people skip when they do
+              submit, not how many people leave before finishing.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
+            {!analytics ? (
+              <SkeletonTable rows={4} columns={3} />
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-lg border border-border p-3 text-center">
+                    <p className="text-2xl font-semibold">{analytics.views}</p>
+                    <p className="text-xs text-muted-foreground">Views</p>
+                  </div>
+                  <div className="rounded-lg border border-border p-3 text-center">
+                    <p className="text-2xl font-semibold">{analytics.submissions}</p>
+                    <p className="text-xs text-muted-foreground">Submissions</p>
+                  </div>
+                  <div className="rounded-lg border border-border p-3 text-center">
+                    <p className="text-2xl font-semibold">{Math.round(analytics.conversionRate * 100)}%</p>
+                    <p className="text-xs text-muted-foreground">Conversion rate</p>
+                  </div>
+                </div>
+                {analytics.fields.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Fill rate by field</h3>
+                    {analytics.fields.map((f) => (
+                      <div key={f.id} className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="truncate">{f.label}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {f.answeredCount} / {analytics.submissions} ({Math.round(f.fillRate * 100)}%)
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full bg-emerald-600" style={{ width: `${Math.round(f.fillRate * 100)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </DialogBody>
         </DialogContent>
       </Dialog>
 

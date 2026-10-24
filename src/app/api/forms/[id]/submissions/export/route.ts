@@ -31,7 +31,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const [fields, submissions] = await Promise.all([
     db.formField.findMany({
-      where: { formId, type: { not: "SECTION_HEADING" } },
+      where: { formId, type: { notIn: ["SECTION_HEADING", "PAGE_BREAK"] } },
       orderBy: { order: "asc" },
       select: { id: true, label: true, type: true },
     }),

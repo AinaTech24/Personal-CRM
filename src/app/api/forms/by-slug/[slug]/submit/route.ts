@@ -10,7 +10,7 @@ import {
 import { notifyAndPush } from "@/lib/notify";
 import { requestDevice } from "@/lib/request-info";
 import { rateLimit } from "@/lib/rate-limit";
-import { validateFieldValue } from "@/lib/form-fields";
+import { isFieldVisible, validateFieldValue } from "@/lib/form-fields";
 
 interface PickedFile {
   fileName: string;
@@ -52,9 +52,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   const answerRows: { fieldId: string; value: string }[] = [];
   const attachmentRows: { fieldId: string; fileName: string; data: string }[] = [];
   let totalBytes = 0;
+  // Resolved answer-as-string per field, built up in display order — a
+  // conditional field's `conditionFieldId` only ever points at an earlier
+  // field (the builder enforces that), so by the time we reach it, the
+  // field it depends on has already been resolved.
+  const resolvedAnswers: Record<string, string> = {};
 
   for (const field of form.fields) {
-    if (field.type === "SECTION_HEADING") continue;
+    if (field.type === "SECTION_HEADING" || field.type === "PAGE_BREAK") continue;
+
+    // Hidden by conditional logic — never required, never stored, even if
+    // the client sent something left over from before it was hidden.
+    if (!isFieldVisible(field, resolvedAnswers)) continue;
+
     const raw = answersInput[field.id];
 
     if (field.type === "FILE_SINGLE" || field.type === "FILE_MULTI") {
@@ -81,6 +91,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         if (err instanceof AttachmentUploadError) return NextResponse.json({ error: err.message }, { status: 400 });
         throw err;
       }
+      resolvedAnswers[field.id] = files.length > 0 ? "1" : "";
       continue;
     }
 
@@ -90,6 +101,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
         return NextResponse.json({ error: `"${field.label}" is required` }, { status: 400 });
       }
       if (selected.length > 0) answerRows.push({ fieldId: field.id, value: selected.join("|") });
+      resolvedAnswers[field.id] = selected.join("|");
       continue;
     }
 
@@ -101,6 +113,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       if (problem) return NextResponse.json({ error: problem }, { status: 400 });
       answerRows.push({ fieldId: field.id, value });
     }
+    resolvedAnswers[field.id] = value;
   }
 
   const submission = await db.formSubmission.create({

@@ -64,7 +64,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   for (const [fieldId, raw] of Object.entries(parsed.data.answers)) {
     const field = fieldById.get(fieldId);
-    if (!field || field.type === "FILE_SINGLE" || field.type === "FILE_MULTI" || field.type === "SECTION_HEADING") continue;
+    if (!field || field.type === "FILE_SINGLE" || field.type === "FILE_MULTI" || field.type === "SECTION_HEADING" || field.type === "PAGE_BREAK") continue;
 
     const value = Array.isArray(raw) ? raw.filter((s) => s.trim().length > 0).join("|") : raw.trim();
     if (field.required && !value) {

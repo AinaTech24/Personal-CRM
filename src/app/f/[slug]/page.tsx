@@ -13,8 +13,8 @@ import { useToast } from "@/components/providers/toast-provider";
 import { AttachmentPreview } from "@/components/forms/attachment-preview";
 import { Tooltip } from "@/components/ui/tooltip";
 import { MAX_DATA_URL_ATTACHMENT_BYTES as MAX_ATTACHMENT_BYTES, MAX_DATA_URL_FILES_PER_FIELD as MAX_FILES_PER_FIELD } from "@/lib/uploads";
-import { parseFieldOptions, validateFieldValue, type FormFieldType } from "@/lib/form-fields";
-import { IconHelpCircle, IconX } from "@/components/icons";
+import { isFieldVisible, parseFieldOptions, splitIntoPages, validateFieldValue, type FormFieldType } from "@/lib/form-fields";
+import { IconChevronLeft, IconChevronRight, IconHelpCircle, IconX } from "@/components/icons";
 
 interface PickedFile {
   fileName: string;
@@ -34,6 +34,9 @@ interface FieldDef {
   minValue: number | null;
   maxValue: number | null;
   pattern: string | null;
+  conditionFieldId: string | null;
+  conditionOperator: string | null;
+  conditionValue: string | null;
 }
 
 interface FormDef {
@@ -56,6 +59,14 @@ function readAsDataUrl(file: File): Promise<string> {
 }
 
 type AnswerValue = string | string[] | PickedFile[];
+
+/** An answer in the same single-string shape conditional logic compares against — pipe-joined for a CHECKBOX, "1"/"" for a file field's presence, as-is for everything else. */
+function answerAsString(value: AnswerValue | undefined): string {
+  if (value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (value.length === 0) return "";
+  return typeof value[0] === "string" ? (value as string[]).join("|") : "1";
+}
 
 function FileInput({
   field,
@@ -239,6 +250,7 @@ export default function PublicFormPage() {
   const [form, setForm] = useState<FormDef | null | "not-found">(null);
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(0);
   // Read directly from the URL rather than useSearchParams(), which needs a
   // Suspense boundary — not worth adding for two optional query flags. For
   // an embed to match a light host page: ?theme=light forces light mode
@@ -262,19 +274,40 @@ export default function PublicFormPage() {
       .catch(() => setForm("not-found"));
   }, [params.slug]);
 
+  // Best-effort, fire-and-forget — counted toward the form's analytics, never
+  // something a visitor should notice or that submitting depends on.
+  useEffect(() => {
+    if (form && form !== "not-found") {
+      fetch(`/api/forms/by-slug/${params.slug}/view`, { method: "POST" }).catch(() => {});
+    }
+  }, [form, params.slug]);
+
   function setAnswer(fieldId: string, value: AnswerValue) {
     setAnswers((a) => ({ ...a, [fieldId]: value }));
   }
+
+  const pages = form && form !== "not-found" ? splitIntoPages(form.fields) : [];
+  const answerStrings: Record<string, string> = {};
+  if (form && form !== "not-found") {
+    for (const f of form.fields) answerStrings[f.id] = answerAsString(answers[f.id]);
+  }
+  const visibleFields = (pages[page] ?? []).filter((f) => isFieldVisible(f, answerStrings));
+  const onLastPage = page >= pages.length - 1;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form || form === "not-found") return;
 
-    for (const field of form.fields) {
+    for (const field of visibleFields) {
       const value = answers[field.id];
       if (typeof value !== "string" || !value.trim()) continue;
       const problem = validateFieldValue(field, value.trim());
-      if (problem) return toast.error("Couldn't submit the form", problem);
+      if (problem) return toast.error(onLastPage ? "Couldn't submit the form" : "Can't continue", problem);
+    }
+
+    if (!onLastPage) {
+      setPage((p) => p + 1);
+      return;
     }
 
     setSubmitting(true);
@@ -318,7 +351,21 @@ export default function PublicFormPage() {
             {form.description && <p className="mt-1 text-sm text-muted-foreground">{form.description}</p>}
           </div>
 
-          {form.fields.map((field) =>
+          {pages.length > 1 && (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-center text-xs text-muted-foreground">
+                Step {page + 1} of {pages.length}
+              </p>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-emerald-600 transition-all"
+                  style={{ width: `${((page + 1) / pages.length) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {visibleFields.map((field) =>
             field.type === "SECTION_HEADING" ? (
               <div key={field.id} className="border-t border-border pt-4 first:border-0 first:pt-0">
                 <h2 className="text-base font-semibold">{field.label}</h2>
@@ -339,9 +386,18 @@ export default function PublicFormPage() {
             )
           )}
 
-          <Button type="submit" disabled={submitting} className="mt-2 bg-emerald-600 hover:bg-emerald-600/90">
-            {submitting ? "Submitting..." : "Submit"}
-          </Button>
+          <div className="mt-2 flex items-center gap-2">
+            {page > 0 && (
+              <Button type="button" variant="outline" onClick={() => setPage((p) => p - 1)} disabled={submitting}>
+                <IconChevronLeft className="h-4 w-4" />
+                Back
+              </Button>
+            )}
+            <Button type="submit" disabled={submitting} className="flex-1 bg-emerald-600 hover:bg-emerald-600/90">
+              {submitting ? "Submitting..." : onLastPage ? "Submit" : "Next"}
+              {!onLastPage && !submitting && <IconChevronRight className="h-4 w-4" />}
+            </Button>
+          </div>
         </form>
       </div>
     </div>
