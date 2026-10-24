@@ -41,6 +41,7 @@ import {
   IconSearch,
   IconX,
   IconNotes,
+  IconBuildingCog,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -115,6 +116,9 @@ const callsNavItem: NavItem = { href: "/calls", label: "Calls", icon: IconPhone 
 
 /** A non-admin CRM lead's own way into the CRM Team console — mirrors teamNavItem above. */
 const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: IconUsers };
+
+/** The MFD Command Centre — company admins, plus anyone holding a Command Centre role assignment. */
+const commandCentreNavItem: NavItem = { href: "/consulting", label: "MFD Command Centre", icon: IconBuildingCog };
 
 /** A non-admin user whose department was shared on at least one form — mirrors adminNav's own entry at the same href. */
 const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: IconLayoutGrid };
@@ -345,6 +349,7 @@ export function Sidebar({
   hasCrmAccess,
   isCrmLead,
   canViewForms,
+  hasCommandCentre,
   managedModules,
   collapsed,
   onToggle,
@@ -359,6 +364,7 @@ export function Sidebar({
   hasCrmAccess: boolean;
   isCrmLead: boolean;
   canViewForms: boolean;
+  hasCommandCentre: boolean;
   managedModules: ManagedModule[];
   collapsed: boolean;
   onToggle: () => void;
@@ -474,6 +480,11 @@ export function Sidebar({
   // via adminNav.
   if (canViewForms && !isAdmin) {
     visibleMainNav.push(formsNavItem);
+  }
+
+  if (hasCommandCentre && !visibleMainNav.some((item) => item.href === "/consulting")) {
+    const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
+    visibleMainNav.splice(leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1, 0, commandCentreNavItem);
   }
 
   // Someone granted the Clients module permission gets the same "Clients" link
