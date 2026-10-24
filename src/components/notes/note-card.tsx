@@ -1,16 +1,17 @@
 "use client";
 
+import { useId } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { IconDots, IconPencil, IconPin, IconTrash } from "@/components/icons";
+import { IconDots, IconPalette, IconPencil, IconPin, IconTrash } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
-import { NOTE_COLORS, noteColorMeta, type NoteColor } from "@/lib/note-colors";
+import { NOTE_COLOR_PRESETS, contrastTextColor } from "@/lib/note-colors";
 import { cn } from "@/lib/utils";
 
 export interface NoteRow {
   id: string;
   title: string;
   content: string;
-  color: NoteColor;
+  color: string | null;
   isPinned: boolean;
   authorId: string;
   author: { id: string; name: string; surname: string | null; avatarDataUrl: string | null };
@@ -38,6 +39,56 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
+/** The color-picker row shared by the card's overflow menu and the editor dialog: preset dots + a native color-wheel picker + a reset-to-default option. */
+export function ColorPickerRow({ value, onChange }: { value: string | null; onChange: (color: string | null) => void }) {
+  const inputId = useId();
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Tooltip label="Default">
+        <button
+          type="button"
+          aria-label="Default color"
+          onClick={() => onChange(null)}
+          className={cn(
+            "flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 bg-card text-[10px] text-muted-foreground transition-transform hover:scale-110",
+            !value && "ring-2 ring-offset-1 ring-ring"
+          )}
+        >
+          ×
+        </button>
+      </Tooltip>
+      {NOTE_COLOR_PRESETS.map((hex) => (
+        <button
+          key={hex}
+          type="button"
+          aria-label={hex}
+          onClick={() => onChange(hex)}
+          style={{ backgroundColor: hex }}
+          className={cn(
+            "h-6 w-6 rounded-full border border-black/10 transition-transform hover:scale-110 dark:border-white/10",
+            value?.toLowerCase() === hex && "ring-2 ring-offset-1 ring-ring"
+          )}
+        />
+      ))}
+      <Tooltip label="Custom color">
+        <label
+          htmlFor={inputId}
+          className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-muted-foreground transition-transform hover:scale-110"
+        >
+          <IconPalette className="h-3.5 w-3.5" />
+          <input
+            id={inputId}
+            type="color"
+            value={value ?? "#ffffff"}
+            onChange={(e) => onChange(e.target.value)}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+        </label>
+      </Tooltip>
+    </div>
+  );
+}
+
 export function NoteCard({
   note,
   showAuthor,
@@ -53,12 +104,12 @@ export function NoteCard({
   showAuthor: boolean;
   onOpen: () => void;
   onTogglePin: () => void;
-  onSetColor: (color: NoteColor) => void;
+  onSetColor: (color: string | null) => void;
   onDelete: () => void;
   onToggleFloat: () => void;
   floating: boolean;
 }) {
-  const meta = noteColorMeta(note.color);
+  const textColor = note.color ? contrastTextColor(note.color) : undefined;
 
   return (
     <div
@@ -68,9 +119,10 @@ export function NoteCard({
       onKeyDown={(e) => {
         if (e.key === "Enter") onOpen();
       }}
+      style={note.color ? { backgroundColor: note.color, color: textColor, borderColor: "rgba(0,0,0,0.12)" } : undefined}
       className={cn(
         "group flex min-h-40 cursor-pointer flex-col gap-2 rounded-xl border p-4 text-left shadow-sm transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        meta.card
+        !note.color && "border-border bg-card"
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -85,9 +137,10 @@ export function NoteCard({
                   onToggleFloat();
                 }}
                 aria-label={floating ? "Hide floating note" : "Open as floating note"}
+                style={textColor ? { color: textColor } : undefined}
                 className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-black/5 dark:hover:bg-white/10",
-                  floating ? "text-primary" : "text-muted-foreground"
+                  "flex h-6 w-6 items-center justify-center rounded-md transition-colors hover:bg-black/10",
+                  !textColor && (floating ? "text-primary" : "text-muted-foreground")
                 )}
               >
                 <IconPin className="h-3.5 w-3.5" />
@@ -101,7 +154,11 @@ export function NoteCard({
                   type="button"
                   aria-label="Note actions"
                   onClick={(e) => e.stopPropagation()}
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-black/5 focus-visible:opacity-100 group-hover:opacity-100 dark:hover:bg-white/10"
+                  style={textColor ? { color: textColor } : undefined}
+                  className={cn(
+                    "flex h-6 w-6 items-center justify-center rounded-md opacity-0 transition-opacity hover:bg-black/10 focus-visible:opacity-100 group-hover:opacity-100",
+                    !textColor && "text-muted-foreground"
+                  )}
                 >
                   <IconDots className="h-4 w-4" />
                 </button>
@@ -111,7 +168,7 @@ export function NoteCard({
                   align="end"
                   sideOffset={6}
                   onClick={(e) => e.stopPropagation()}
-                  className="z-50 w-48 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
+                  className="z-50 w-56 rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
                 >
                   <DropdownMenu.Item
                     onSelect={onOpen}
@@ -128,22 +185,8 @@ export function NoteCard({
                     {note.isPinned ? "Unpin" : "Pin"}
                   </DropdownMenu.Item>
                   <div className="px-2 py-1.5">
-                    <p className="mb-1 text-xs text-muted-foreground">Color</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {NOTE_COLORS.map((c) => (
-                        <button
-                          key={c.key}
-                          type="button"
-                          aria-label={c.label}
-                          onClick={() => onSetColor(c.key)}
-                          className={cn(
-                            "h-5 w-5 rounded-full border border-black/10 transition-transform hover:scale-110 dark:border-white/10",
-                            c.swatch,
-                            note.color === c.key && "ring-2 ring-offset-1 ring-ring"
-                          )}
-                        />
-                      ))}
-                    </div>
+                    <p className="mb-1.5 text-xs text-muted-foreground">Color</p>
+                    <ColorPickerRow value={note.color} onChange={onSetColor} />
                   </div>
                   <DropdownMenu.Separator className="my-1 h-px bg-border" />
                   <DropdownMenu.Item
@@ -160,11 +203,14 @@ export function NoteCard({
         </div>
       </div>
 
-      <p className="flex-1 whitespace-pre-line text-sm text-muted-foreground line-clamp-5">
+      <p className={cn("flex-1 whitespace-pre-line text-sm line-clamp-5", !note.color && "text-muted-foreground")} style={textColor ? { opacity: 0.85 } : undefined}>
         {note.content || <span className="italic">No content</span>}
       </p>
 
-      <div className="flex items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
+      <div
+        className={cn("flex items-center justify-between gap-2 pt-1 text-xs", !note.color && "text-muted-foreground")}
+        style={textColor ? { opacity: 0.7 } : undefined}
+      >
         <span className="truncate">
           {showAuthor ? `${fullName(note.author)} · ` : ""}
           {timeAgo(note.updatedAt)}

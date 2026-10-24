@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
@@ -15,7 +15,6 @@ import { IconNotes, IconPlus, IconSearch } from "@/components/icons";
 import { NoteCard, type NoteRow } from "@/components/notes/note-card";
 import { NoteEditorDialog } from "@/components/notes/note-editor-dialog";
 import { FloatingNote, type FloatingState } from "@/components/notes/floating-note";
-import { NOTE_COLORS, type NoteColor } from "@/lib/note-colors";
 
 type QuickFilter = "all" | "pinned" | "mine";
 
@@ -41,7 +40,6 @@ interface Candidate {
 export function NotesView() {
   const toast = useToast();
   const { socket } = useSocket();
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const [meId, setMeId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -54,7 +52,6 @@ export function NotesView() {
   const [q, setQ] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [sort, setSort] = useState("updated");
-  const [color, setColor] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [authorFilter, setAuthorFilter] = useState("");
 
@@ -62,7 +59,6 @@ export function NotesView() {
   const [editingNote, setEditingNote] = useState<NoteRow | null>(null);
   const [deleting, setDeleting] = useState<NoteRow | null>(null);
   const [floating, setFloating] = useState<Record<string, FloatingState>>({});
-  const [bounds, setBounds] = useState({ width: 0, height: 0 });
 
   // Debounce free-text search so every keystroke doesn't fire a request.
   useEffect(() => {
@@ -104,14 +100,13 @@ export function NotesView() {
     if (q) params.set("q", q);
     if (quickFilter !== "all") params.set("filter", quickFilter);
     if (sort !== "updated") params.set("sort", sort);
-    if (color) params.set("color", color);
     if (departmentFilter) params.set("departmentId", departmentFilter);
     if (authorFilter) params.set("authorId", authorFilter);
 
     const res = await fetch(`/api/notes?${params.toString()}`);
     const data = await res.json().catch(() => ({}));
     if (res.ok) setNotes(data.notes ?? []);
-  }, [q, quickFilter, sort, color, departmentFilter, authorFilter]);
+  }, [q, quickFilter, sort, departmentFilter, authorFilter]);
 
   useEffect(() => {
     load();
@@ -131,22 +126,12 @@ export function NotesView() {
     };
   }, [socket, load]);
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const update = () => setBounds({ width: el.clientWidth, height: el.clientHeight });
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
   const authorOptions = useMemo(() => {
     const me = meId ? [{ value: meId, label: "Me" }] : [];
     return [{ value: "", label: "Everyone" }, ...me, ...candidates.map((c) => ({ value: c.id, label: [c.name, c.surname].filter(Boolean).join(" ") }))];
   }, [candidates, meId]);
 
-  async function createNote(data: { title: string; content: string; color: NoteColor; isPinned: boolean }) {
+  async function createNote(data: { title: string; content: string; color: string | null; isPinned: boolean }) {
     const res = await fetch("/api/notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -161,7 +146,7 @@ export function NotesView() {
     load();
   }
 
-  async function updateNote(id: string, data: Partial<{ title: string; content: string; color: NoteColor; isPinned: boolean }>) {
+  async function updateNote(id: string, data: Partial<{ title: string; content: string; color: string | null; isPinned: boolean }>) {
     const res = await fetch(`/api/notes/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -224,9 +209,8 @@ export function NotesView() {
     load();
   }
 
-  async function recolor(note: NoteRow, nextColor: NoteColor) {
+  async function recolor(note: NoteRow, nextColor: string | null) {
     await updateNote(note.id, { color: nextColor }).catch(() => {});
-    if (color && color !== nextColor) load();
   }
 
   function toggleFloat(note: NoteRow) {
@@ -244,13 +228,13 @@ export function NotesView() {
   const floatingNotes = notes?.filter((n) => n.id in floating) ?? [];
 
   return (
-    <div ref={containerRef} className="relative flex min-h-[70vh] flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Notes</h1>
           <HelpDialog title="Notes — help">
             <HelpSection heading="What this page is for">
-              <p>Capture ideas, keep track of information, and organize your notes — searchable, color-coded, and with pinned notes available as small floating panels you can drag around this page.</p>
+              <p>Capture ideas, keep track of information, and organize your notes — searchable, color-coded, and with pinned notes available as small floating panels you can drag anywhere on screen while this page is open.</p>
             </HelpSection>
             <HelpSection heading="Admins & Super Admins">
               <p>See and manage every note, across every department.</p>
@@ -292,13 +276,6 @@ export function NotesView() {
           ))}
         </div>
         <Dropdown size="sm" value={sort} onChange={setSort} options={SORT_OPTIONS} className="w-40" />
-        <Dropdown
-          size="sm"
-          value={color}
-          onChange={setColor}
-          options={[{ value: "", label: "Any color" }, ...NOTE_COLORS.map((c) => ({ value: c.key, label: c.label }))]}
-          className="w-32"
-        />
         {isAdmin && departments.length > 0 && (
           <Dropdown
             size="sm"
@@ -319,7 +296,7 @@ export function NotesView() {
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
             <IconNotes className="h-6 w-6" />
-            {q || quickFilter !== "all" || color || departmentFilter || authorFilter ? "No notes match these filters." : "No notes yet. Create one to get started."}
+            {q || quickFilter !== "all" || departmentFilter || authorFilter ? "No notes match these filters." : "No notes yet. Create one to get started."}
           </CardContent>
         </Card>
       ) : (
@@ -345,7 +322,6 @@ export function NotesView() {
           key={note.id}
           note={note}
           state={floating[note.id]}
-          bounds={bounds}
           onMove={(x, y) => setFloating((prev) => ({ ...prev, [note.id]: { ...prev[note.id], x, y } }))}
           onToggleMinimize={() =>
             setFloating((prev) => ({ ...prev, [note.id]: { ...prev[note.id], minimized: !prev[note.id].minimized } }))

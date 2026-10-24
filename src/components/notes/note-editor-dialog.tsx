@@ -6,9 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
-import { NOTE_COLORS, type NoteColor } from "@/lib/note-colors";
-import { cn } from "@/lib/utils";
-import type { NoteRow } from "@/components/notes/note-card";
+import { ColorPickerRow, type NoteRow } from "@/components/notes/note-card";
 
 export function NoteEditorDialog({
   note,
@@ -20,11 +18,11 @@ export function NoteEditorDialog({
   note: NoteRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (data: { title: string; content: string; color: NoteColor; isPinned: boolean }) => Promise<void>;
+  onSave: (data: { title: string; content: string; color: string | null; isPinned: boolean }) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [color, setColor] = useState<NoteColor>("WHITE");
+  const [color, setColor] = useState<string | null>(null);
   const [isPinned, setIsPinned] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -34,7 +32,7 @@ export function NoteEditorDialog({
     if (!open) return;
     setTitle(note?.title ?? "");
     setContent(note?.content ?? "");
-    setColor(note?.color ?? "WHITE");
+    setColor(note?.color ?? null);
     setIsPinned(note?.isPinned ?? false);
     setDirty(false);
   }, [open, note]);
@@ -87,24 +85,13 @@ export function NoteEditorDialog({
           />
           {!readOnly && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
-              <div className="flex items-center gap-1.5">
-                {NOTE_COLORS.map((c) => (
-                  <button
-                    key={c.key}
-                    type="button"
-                    aria-label={c.label}
-                    onClick={() => {
-                      setColor(c.key);
-                      setDirty(true);
-                    }}
-                    className={cn(
-                      "h-6 w-6 rounded-full border border-black/10 transition-transform hover:scale-110 dark:border-white/10",
-                      c.swatch,
-                      color === c.key && "ring-2 ring-offset-1 ring-ring"
-                    )}
-                  />
-                ))}
-              </div>
+              <ColorPickerRow
+                value={color}
+                onChange={(c) => {
+                  setColor(c);
+                  setDirty(true);
+                }}
+              />
               <label className="flex items-center gap-2 text-sm">
                 <ToggleSwitch
                   checked={isPinned}
