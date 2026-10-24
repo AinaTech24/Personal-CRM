@@ -702,3 +702,74 @@ export function IconCake(props: IconProps) {
     </svg>
   );
 }
+
+/** Form-builder field palette icons — one per field type, so the sidebar doesn't repeat the same glyph for every item. */
+export function IconTextBox(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3" y="7" width="18" height="10" rx="2" />
+      <path d="M7 12h6" />
+    </svg>
+  );
+}
+
+export function IconHash(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 9h16M4 15h16M9 4 7 20M17 4l-2 16" />
+    </svg>
+  );
+}
+
+export function IconChevronSquare(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect width="18" height="18" x="3" y="3" rx="3" />
+      <path d="m8 10 4 4 4-4" />
+    </svg>
+  );
+}
+
+export function IconRadioButton(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function IconUpload(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 14.5v-11M7.5 8l4.5-4.5L16.5 8" />
+      <path d="M4.5 16.5v2a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2" />
+    </svg>
+  );
+}
+
+export function IconFiles(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="7" y="7" width="12" height="14" rx="1.5" />
+      <path d="M5 16V6a1.5 1.5 0 0 1 1.5-1.5H14" />
+    </svg>
+  );
+}
+
+export function IconHeading(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6 5v14M18 5v14M6 12h12" />
+    </svg>
+  );
+}
+
+export function IconPageBreak(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 7V5a2 2 0 0 1 2-2h4M20 7V5a2 2 0 0 0-2-2h-4M4 17v2a2 2 0 0 0 2 2h4M20 17v2a2 2 0 0 1-2 2h-4" />
+      <path d="M4 12h16" strokeDasharray="3 3" />
+    </svg>
+  );
+}

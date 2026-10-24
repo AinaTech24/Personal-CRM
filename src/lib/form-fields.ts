@@ -39,8 +39,8 @@ export interface FieldTypeMeta {
 }
 
 export const FIELD_TYPE_META: Record<FormFieldType, FieldTypeMeta> = {
-  SHORT_TEXT: { type: "SHORT_TEXT", label: "Short Text", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
-  LONG_TEXT: { type: "LONG_TEXT", label: "Long Text", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
+  SHORT_TEXT: { type: "SHORT_TEXT", label: "Text Box", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
+  LONG_TEXT: { type: "LONG_TEXT", label: "Paragraph", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
   EMAIL: { type: "EMAIL", label: "Email", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
   PHONE: { type: "PHONE", label: "Phone", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
   LINK: { type: "LINK", label: "Link", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
@@ -48,11 +48,11 @@ export const FIELD_TYPE_META: Record<FormFieldType, FieldTypeMeta> = {
   NUMBER: { type: "NUMBER", label: "Number", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "range" },
   DATE: { type: "DATE", label: "Date", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
   DROPDOWN: { type: "DROPDOWN", label: "Dropdown", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
-  RADIO: { type: "RADIO", label: "Radio Buttons", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
+  RADIO: { type: "RADIO", label: "Radio", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
   CHECKBOX: { type: "CHECKBOX", label: "Checkboxes", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
-  FILE_SINGLE: { type: "FILE_SINGLE", label: "File Upload", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, validation: "none" },
-  FILE_MULTI: { type: "FILE_MULTI", label: "Multiple Files", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, validation: "none" },
-  SECTION_HEADING: { type: "SECTION_HEADING", label: "Section Heading", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false, validation: "none" },
+  FILE_SINGLE: { type: "FILE_SINGLE", label: "File", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, validation: "none" },
+  FILE_MULTI: { type: "FILE_MULTI", label: "Files", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, validation: "none" },
+  SECTION_HEADING: { type: "SECTION_HEADING", label: "Heading", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false, validation: "none" },
   PAGE_BREAK: { type: "PAGE_BREAK", label: "Page Break", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false, validation: "none" },
 };
 
@@ -107,6 +107,19 @@ export const FIELD_PAIR_SHORTCUTS: FieldPairShortcut[] = [
     ],
   },
 ];
+
+/**
+ * Built-in format check applied automatically for a type with a well-known
+ * shape — the builder has no UI for typing a custom regex, so this is the
+ * only source of a field's `pattern` (set once, at creation; see the fields
+ * POST route). Types without an entry here get no pattern constraint beyond
+ * their min/max length.
+ */
+export const DEFAULT_FIELD_PATTERNS: Partial<Record<FormFieldType, string>> = {
+  EMAIL: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+  PHONE: "^[0-9+()\\-\\s]{7,15}$",
+  LINK: "^https?://.+",
+};
 
 /** DROPDOWN/RADIO/CHECKBOX choices are stored as one pipe-separated string. */
 export function parseFieldOptions(options: string | null | undefined): string[] {
