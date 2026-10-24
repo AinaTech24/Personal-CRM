@@ -72,6 +72,16 @@ model UserModulePermission {
   /// one's own records stays either way). Defaults false so every existing
   /// row, and anyone never touched here at all, is unaffected.
   blocked   Boolean       @default(false)
+  /// Widens this grant's scope from "the grant holder's own department" to
+  /// company-wide — the same breadth a real Admin gets for this module.
+  /// Only a company Admin may set this (see the PUT handler for this
+  /// matrix): a Department Admin/team lead granting someone's CRUD access
+  /// is already bounded to their own department, so letting them also flip
+  /// this would let them hand a report more reach than they themselves
+  /// have. Meaningless without at least one of the CRUD flags above also
+  /// being true — moduleAccessScope only consults it once an action is
+  /// otherwise granted.
+  allDepartments Boolean  @default(false)
   createdAt DateTime      @default(now())
 
   @@unique([userId, module])

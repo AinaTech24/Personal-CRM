@@ -44,9 +44,12 @@ function emptyMatrix(): Matrix {
 export function ManagePermissionsDialog({
   user,
   onOpenChange,
+  isAdmin = false,
 }: {
   user: { id: string; name: string; surname?: string | null } | null;
   onOpenChange: (open: boolean) => void;
+  /** Only a company Admin may grant the "All departments" scope — hidden for a Department Admin/team lead editing their own people's grants. */
+  isAdmin?: boolean;
 }) {
   const toast = useToast();
   const [matrix, setMatrix] = useState<Matrix>(emptyMatrix());
@@ -105,8 +108,15 @@ export function ManagePermissionsDialog({
     setDirty(true);
   }
 
+  function toggleAllDepartments(module: ManagedModule) {
+    setMatrix((prev) => ({ ...prev, [module]: { ...prev[module], allDepartments: !prev[module].allDepartments } }));
+    setDirty(true);
+  }
+
   function setModuleAll(module: ManagedModule, flags: ModulePermissionFlags) {
-    setMatrix((prev) => ({ ...prev, [module]: { ...flags } }));
+    // Quick set is about the four CRUD actions — never silently touches the
+    // company-wide scope toggle, whichever way it's currently set.
+    setMatrix((prev) => ({ ...prev, [module]: { ...flags, allDepartments: prev[module].allDepartments } }));
     setDirty(true);
   }
 
@@ -137,6 +147,7 @@ export function ManagePermissionsDialog({
           <DialogDescription>
             Grant full create/read/update/delete access to specific modules within their own department, on top of
             whatever their role already allows.
+            {isAdmin && " Turn on \"All departments\" for a module to widen a grant to everything, company-wide — the same breadth you see."}
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
@@ -161,7 +172,7 @@ export function ManagePermissionsDialog({
             </div>
           )}
           {loading ? (
-            <SkeletonTable rows={MANAGED_MODULES.length} columns={5} />
+            <SkeletonTable rows={MANAGED_MODULES.length} columns={isAdmin ? 7 : 6} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -173,6 +184,7 @@ export function ManagePermissionsDialog({
                         {MODULE_ACTION_LABEL[action]}
                       </th>
                     ))}
+                    {isAdmin && <th className="whitespace-nowrap px-2 py-2 text-center font-medium">All departments</th>}
                     <th className="whitespace-nowrap px-2 py-2 text-right font-medium">Quick set</th>
                   </tr>
                 </thead>
@@ -192,6 +204,15 @@ export function ManagePermissionsDialog({
                             />
                           </td>
                         ))}
+                        {isAdmin && (
+                          <td className="px-2 py-2.5 text-center">
+                            <ToggleSwitch
+                              checked={flags.allDepartments}
+                              onChange={() => toggleAllDepartments(module)}
+                              label={`See every department's ${MODULE_LABEL[module]}, not just their own`}
+                            />
+                          </td>
+                        )}
                         <td className="whitespace-nowrap px-2 py-2.5 text-right">
                           <button
                             type="button"

@@ -330,7 +330,7 @@ export default function DepartmentDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <ManagePermissionsDialog user={permsUser} onOpenChange={(open) => !open && setPermsUser(null)} />
+      <ManagePermissionsDialog user={permsUser} onOpenChange={(open) => !open && setPermsUser(null)} isAdmin={isAdmin} />
 
       <Dialog open={!!resetUser} onOpenChange={(v) => !resetSending && !v && setResetUser(null)}>
         <DialogContent>
