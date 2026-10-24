@@ -302,7 +302,12 @@ export async function issueAssessment(actor: Actor, id: string, body: Rec) {
  * supersedes the previous one, and changing an already-submitted answer is
  * a correction that needs a reason (AT-11).
  */
-export async function answerQuestion(actor: Actor, id: string, body: Rec) {
+/** Set when the client contact answers through their respondent link (no login). */
+export interface ViaLink {
+  contactId: string;
+}
+
+export async function answerQuestion(actor: Actor, id: string, body: Rec, via?: ViaLink) {
   need(actor, "assessments", "U");
   return run(async (tx) => {
     const asm = await load(tx, actor, "assessments", id);
@@ -334,8 +339,12 @@ export async function answerQuestion(actor: Actor, id: string, body: Rec) {
         mfd_org_id: asm.mfd_org_id,
         assessment_id: id,
         question_id: qid,
-        respondent_contact_id: typeof body.respondent_contact_id === "string" && body.respondent_contact_id ? body.respondent_contact_id : (asm.assigned_contact_id ?? null),
-        respondent_user_id: actor.userId,
+        respondent_contact_id: via
+          ? via.contactId
+          : typeof body.respondent_contact_id === "string" && body.respondent_contact_id
+            ? body.respondent_contact_id
+            : (asm.assigned_contact_id ?? null),
+        respondent_user_id: via ? null : actor.userId,
         response_json: skip ? null : { value: body.value },
         response_state: correcting ? "corrected" : "draft",
         original_text: typeof body.original_text === "string" && body.original_text ? body.original_text : null,
@@ -354,7 +363,14 @@ export async function answerQuestion(actor: Actor, id: string, body: Rec) {
         actor_user_id: actor.userId,
         entity_event: correcting ? "corrected" : prev ? "changed" : "answered",
         occurred_at: nowIso(),
-        details_json: correcting ? { reason, supersedes: prev?.id } : prev ? { supersedes: prev.id } : null,
+        details_json:
+          correcting || prev || via
+            ? {
+                ...(correcting ? { reason } : {}),
+                ...(prev ? { supersedes: prev.id } : {}),
+                ...(via ? { via: "respondent_link", contact_id: via.contactId } : {}),
+              }
+            : null,
       },
       { system: true, trusted: true }
     );
@@ -366,7 +382,7 @@ export async function answerQuestion(actor: Actor, id: string, body: Rec) {
   });
 }
 
-export async function submitAssessment(actor: Actor, id: string, body: Rec) {
+export async function submitAssessment(actor: Actor, id: string, body: Rec, via?: ViaLink) {
   need(actor, "assessments", "U");
   return run(async (tx) => {
     const asm = await load(tx, actor, "assessments", id);
@@ -383,7 +399,15 @@ export async function submitAssessment(actor: Actor, id: string, body: Rec) {
       const at = new Date();
       await tx.ccAssessmentAnswer.updateMany({ where: { id: { in: drafts }, workspaceId: actor.workspaceId }, data: { responseState: "submitted", submittedAt: at } });
       await tx.ccAssessmentResponseEvent.createMany({
-        data: drafts.map((id) => ({ id: randomUUID(), workspaceId: actor.workspaceId, assessmentAnswerId: id, actorUserId: actor.userId, entityEvent: "submitted", occurredAt: at })),
+        data: drafts.map((id) => ({
+          id: randomUUID(),
+          workspaceId: actor.workspaceId,
+          assessmentAnswerId: id,
+          actorUserId: actor.userId,
+          entityEvent: "submitted",
+          occurredAt: at,
+          ...(via ? { detailsJson: { via: "respondent_link", contact_id: via.contactId } } : {}),
+        })),
       });
       await tx.ccAuditEvent.createMany({
         data: drafts.map((id) => ({
@@ -645,4 +669,45 @@ export async function assertFileAccess(actor: Actor, fileId: string) {
   }
   if (!refs.length && (file.uploaded_by_user_id === actor.userId || [...actor.roles].some((x) => x === "platform_admin" || x === "aina_admin"))) return file;
   throw new HttpError(404, "Not found");
+}
+
+// ---------------------------------------------------------------- respondent links (AUT-07)
+
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+/**
+ * Creates the client contact's link for an issued assessment and, when asked,
+ * emails it to them. Sending is always a person's explicit choice.
+ */
+export async function respondentLink(actor: Actor, id: string, body: Rec, origin: string) {
+  need(actor, "assessments", "U");
+  const asm = await db.$transaction((tx) => load(tx, actor, "assessments", id));
+  expectStatus(asm, "status", ["issued", "in_progress", "reopened"], "share a respondent link");
+  const { respondentToken } = await import("./respondent");
+  const { token, expiresAt } = respondentToken(asm);
+  const { getAppUrl } = await import("@/lib/app-settings");
+  const url = `${(await getAppUrl()) ?? origin}/respond/${token}`;
+
+  let emailed: string | null = null;
+  if (body.send_email) {
+    const contact = await getRec(db, "mfd_contacts", asm.assigned_contact_id as string, actor.workspaceId);
+    if (!contact?.email) throw new HttpError(422, "The respondent has no email address — copy the link instead.");
+    const org = await getRec(db, "mfd_organizations", asm.mfd_org_id as string, actor.workspaceId);
+    const { sendMail } = await import("@/lib/mailer");
+    await sendMail({
+      to: contact.email as string,
+      subject: `Aina business diagnostic — ${(org?.brand_name ?? org?.legal_name ?? "your assessment") as string}`,
+      html: `
+    <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto;">
+      <h2>Your business diagnostic</h2>
+      <p>Hi ${escapeHtml(String(contact.full_name ?? ""))}, ${escapeHtml(actor.name)} from Aina has shared assessment ${escapeHtml(asm.assessment_number as string)} with you.</p>
+      <p>Answer at your own pace — your answers save as you go, and you can submit when you're done.</p>
+      <p><a href="${url}" style="display:inline-block;padding:10px 20px;background:#dc2626;color:#fff;border-radius:6px;text-decoration:none;">Open the assessment</a></p>
+      <p style="color:#666;font-size:13px;">This link is personal to you and expires on ${new Date(expiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" })}.</p>
+    </div>`,
+    });
+    emailed = contact.email as string;
+  }
+  await db.$transaction((tx) => writeAudit(tx, actor, "assessments", id, emailed ? "respondent_link_emailed" : "respondent_link_created", null, null));
+  return { url, expires_at: expiresAt, emailed };
 }

@@ -26,13 +26,14 @@ export interface ActionDef {
   confirm?: string;
   prompts?: ActionPrompt[];
   /** Where to go with the result: "self" refreshes, "result" opens the returned record, "org" opens the converted MFD. */
-  then?: "self" | "result" | "org";
+  then?: "self" | "result" | "org" | "link";
 }
 
 /** Buttons for a record's workflow actions (POST /api/v1/{slug}/{id}/{action}). */
 export function ActionBar({ slug, table, id, rowVersion, actions }: { slug: string; table: string; id: string; rowVersion?: number; actions: ActionDef[] }) {
   const [active, setActive] = useState<ActionDef | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [link, setLink] = useState<{ url: string; note: string } | null>(null);
   const router = useRouter();
   const toast = useToast();
 
@@ -60,6 +61,10 @@ export function ActionBar({ slug, table, id, rowVersion, actions }: { slug: stri
       }
       toast.success(`${def.label} — done`);
       setActive(null);
+      if (def.then === "link" && typeof data?.url === "string") {
+        const expires = typeof data.expires_at === "string" ? new Date(data.expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : null;
+        setLink({ url: data.url, note: `${data.emailed ? `Emailed to ${data.emailed as string}. ` : ""}${expires ? `Expires ${expires}.` : ""}` });
+      }
       if (def.then === "result" && data?.id) router.push(`/consulting/${table}/${data.id as string}`);
       else if (def.then === "org" && data?.mfd_org_id) router.push(`/consulting/mfd_organizations/${data.mfd_org_id as string}`);
       router.refresh();
@@ -91,6 +96,30 @@ export function ActionBar({ slug, table, id, rowVersion, actions }: { slug: stri
         ))}
       </div>
       {active && <PromptDialog def={active} busy={busy === active.action} onClose={() => setActive(null)} onSubmit={(v, f) => run(active, v, f)} />}
+      {link && (
+        <Dialog open onOpenChange={(o) => !o && setLink(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Respondent link</DialogTitle>
+            </DialogHeader>
+            <DialogBody className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">Personal to this assessment&apos;s client contact — anyone with it can answer, so share it only with them. {link.note}</p>
+              <Input readOnly value={link.url} onFocus={(e) => e.target.select()} />
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(link.url).catch(() => {});
+                    toast.success("Link copied");
+                  }}
+                >
+                  Copy link
+                </Button>
+              </div>
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }

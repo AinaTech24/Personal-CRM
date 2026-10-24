@@ -11,6 +11,7 @@ import { completion, computeScorecard, isVisible, validateResponse, type AnswerL
 import { FieldError, normalizeInput } from "./values";
 import { downloadToken, scanBytes, verifyDownloadToken } from "./storage";
 import { AINA_DIAGNOSTIC, MATURITY_LEVELS } from "./starter";
+import { checkRespondentToken, respondentExpiry, respondentToken } from "./respondent";
 
 const actor = (roles: UserRole[], granted: string[] = [], memberId: string | null = null): Actor => ({
   userId: "u1",
@@ -193,5 +194,36 @@ describe("file storage (AT-05)", () => {
     expect(verifyDownloadToken(t, "file-1", "user-2")).toBe(false);
     expect(verifyDownloadToken(t, "file-2", "user-1")).toBe(false);
     expect(verifyDownloadToken(`1.${t.split(".")[1]}`, "file-1", "user-1")).toBe(false);
+  });
+});
+
+describe("respondent links (AUT-07)", () => {
+  beforeAll(() => {
+    process.env.JWT_SECRET ??= "test-secret-for-vitest";
+  });
+  const asm = { id: "asm-1", assigned_contact_id: "c-1", version_snapshot_hash: "h1", due_at: null, archived_at: null };
+  const now = Date.parse("2026-10-24T00:00:00Z");
+
+  it("is bound to the assessment, its respondent and the issued question set", () => {
+    const { token } = respondentToken(asm, now);
+    expect(checkRespondentToken(token, asm, now)).toBe(true);
+    expect(checkRespondentToken(token, { ...asm, assigned_contact_id: "c-2" }, now)).toBe(false);
+    expect(checkRespondentToken(token, { ...asm, version_snapshot_hash: "h2" }, now)).toBe(false);
+    expect(checkRespondentToken(token, { ...asm, id: "asm-2" }, now)).toBe(false);
+    expect(checkRespondentToken(token, { ...asm, archived_at: "2026-10-25T00:00:00Z" }, now)).toBe(false);
+    expect(checkRespondentToken(token.slice(0, -1) + (token.endsWith("A") ? "B" : "A"), asm, now)).toBe(false);
+  });
+
+  it("expires three days after the due date, capped at 30 days", () => {
+    const { token } = respondentToken({ ...asm, due_at: "2026-10-31T00:00:00Z" }, now);
+    const withDue = { ...asm, due_at: "2026-10-31T00:00:00Z" };
+    expect(checkRespondentToken(token, withDue, Date.parse("2026-11-02T00:00:00Z"))).toBe(true);
+    expect(checkRespondentToken(token, withDue, Date.parse("2026-11-04T00:00:00Z"))).toBe(false);
+    expect(respondentExpiry({ ...asm, due_at: "2027-06-01T00:00:00Z" }, now) * 1000).toBe(now + 30 * 86_400_000);
+  });
+
+  it("needs a respondent and an issued question set", () => {
+    expect(() => respondentToken({ ...asm, assigned_contact_id: null }, now)).toThrow();
+    expect(() => respondentToken({ ...asm, version_snapshot_hash: null }, now)).toThrow();
   });
 });

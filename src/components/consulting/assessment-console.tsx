@@ -44,11 +44,17 @@ export function AssessmentConsole({
   canAnswer,
   questions,
   answers,
+  endpoint,
+  respondentView = false,
 }: {
   assessmentId: string;
   canAnswer: boolean;
   questions: ConsoleQuestion[];
   answers: Record<string, ConsoleAnswer>;
+  /** Where answers are posted; defaults to the signed-in answer action. Extra fields are merged into each body. */
+  endpoint?: { url: string; extra?: Record<string, unknown> };
+  /** The client respondent's view: no internal keys or version counts. */
+  respondentView?: boolean;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -83,10 +89,10 @@ export function AssessmentConsole({
     }
     setBusy(q.id);
     try {
-      const res = await fetch(`/api/v1/assessments/${assessmentId}/answer`, {
+      const res = await fetch(endpoint?.url ?? `/api/v1/assessments/${assessmentId}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question_id: q.id, ...payload, ...(reason ? { reason } : {}) }),
+        body: JSON.stringify({ ...(endpoint?.extra ?? {}), question_id: q.id, ...payload, ...(reason ? { reason } : {}) }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) toast.error(data.error ?? "Couldn't save the answer");
@@ -121,9 +127,9 @@ export function AssessmentConsole({
                       {q.required && <span className="text-destructive"> *</span>}
                     </p>
                     <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                      <span>{q.question_key}</span>
+                      {!respondentView && <span>{q.question_key}</span>}
                       {a?.state && a.state !== "draft" && <Badge variant={a.state === "corrected" ? "warning" : "secondary"}>{a.state}</Badge>}
-                      {a && a.history > 1 && <span>{a.history} versions kept</span>}
+                      {!respondentView && a && a.history > 1 && <span>{a.history} versions kept</span>}
                       {a?.skip_reason && <span>Skipped: {a.skip_reason}</span>}
                     </p>
                   </div>

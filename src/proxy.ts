@@ -3,7 +3,8 @@ import { jwtVerify } from "jose";
 
 const SESSION_COOKIE = "aina_session";
 
-const PUBLIC_PATHS = ["/login", "/invite", "/f"];
+// /respond: MFD Command Centre respondent links (signed, expiring, one assessment each).
+const PUBLIC_PATHS = ["/login", "/invite", "/f", "/respond"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { ActionBar } from "@/components/consulting/action-bar";
-import { AssessmentConsole, type ConsoleAnswer, type ConsoleQuestion } from "@/components/consulting/assessment-console";
+import { AssessmentConsole } from "@/components/consulting/assessment-console";
 import { ChildAdd, DownloadButton, EditableRecord, RemoveLinkButton } from "@/components/consulting/detail-client";
 import { actionsFor } from "@/components/consulting/module-actions";
 import { db } from "@/lib/db";
@@ -13,8 +13,8 @@ import { AUDIT_COLUMNS, moduleDef, NAV_MODULES, TABLES } from "@/lib/mfd/catalog
 import { getRecord, HttpError, listRecords, resolveLabels } from "@/lib/mfd/engine";
 import { formatValue, humanize, statusTone } from "@/lib/mfd/format";
 import { CHILD_TABLES, tableConfig } from "@/lib/mfd/module-config";
-import { currentAnswers } from "@/lib/mfd/scoring";
-import { findRecs, getRec } from "@/lib/mfd/store";
+import { loadAnswerSheet } from "@/lib/mfd/answer-sheet";
+import { getRec } from "@/lib/mfd/store";
 import { fieldMetas } from "@/lib/mfd/ui-meta";
 import type { FieldMeta, Labels, Row } from "@/lib/mfd/ui-types";
 
@@ -171,38 +171,7 @@ async function Mfd360({ actor, orgId }: { actor: Actor; orgId: string }) {
 }
 
 async function AssessmentPanel({ actor, rec }: { actor: Actor; rec: Row }) {
-  const raw = await findRecs(db, "assessment_questions", { template_id: rec.template_id });
-  const questions: ConsoleQuestion[] = raw
-    .sort((a, b) => (a.order_no as number) - (b.order_no as number))
-    .map((q) => ({
-      id: q.id as string,
-      question_key: q.question_key as string,
-      section_name: q.section_name as string,
-      dimension: q.dimension as string,
-      question_text: q.question_text as string,
-      answer_type: q.answer_type as string,
-      required: !!q.required,
-      options_json: q.options_json,
-      visibility_rule_json: q.visibility_rule_json,
-      status: q.status as string,
-    }));
-  const all = await findRecs(db, "assessment_answers", { assessment_id: rec.id });
-  all.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
-  const current = currentAnswers(
-    all.map((a) => ({
-      id: a.id as string,
-      question_id: a.question_id as string,
-      response_json: a.response_json,
-      response_state: a.response_state as string,
-      supersedes_answer_id: (a.supersedes_answer_id as string | null) ?? null,
-      skip_reason: (a.skip_reason as string | null) ?? null,
-    }))
-  );
-  const answers: Record<string, ConsoleAnswer> = {};
-  for (const [qid, a] of current) {
-    const r = a.response_json as { value?: unknown } | null;
-    answers[qid] = { value: r?.value ?? null, skip_reason: a.skip_reason, state: a.response_state, history: all.filter((x) => x.question_id === qid).length };
-  }
+  const { questions, answers } = await loadAnswerSheet(rec);
   const canAnswer = can(actor, "assessments", "U") && ["issued", "in_progress", "reopened"].includes(rec.status as string) && !rec.archived_at;
   if (!questions.length) return <p className="text-sm text-muted-foreground">The template has no questions.</p>;
   return <AssessmentConsole assessmentId={rec.id as string} canAnswer={canAnswer} questions={questions} answers={answers} />;

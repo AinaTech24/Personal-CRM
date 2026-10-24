@@ -38,6 +38,14 @@ const ACTIONS: Record<string, Rule[]> = {
       when: (r) => st(r, "draft"),
       prompts: [{ name: "due_at", label: "Due", type: "datetime" }],
     },
+    {
+      action: "respondent-link",
+      label: "Respondent link",
+      perm: "U",
+      then: "link",
+      when: (r) => st(r, "issued", "in_progress", "reopened") && !!r.assigned_contact_id,
+      prompts: [{ name: "send_email", label: "Email", type: "checkbox", help: "Also email the link to the assigned client contact" }],
+    },
     { action: "submit", label: "Submit responses", variant: "default", perm: "U", when: (r) => st(r, "issued", "in_progress", "reopened"), confirm: "Submit the current answers for review?" },
     {
       action: "start-review",

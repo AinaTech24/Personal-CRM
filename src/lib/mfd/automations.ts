@@ -207,7 +207,12 @@ const JOBS: Record<string, Job> = {
   async "assessment.issued"(tx, actor, id) {
     const a = await getRec(tx, "assessments", id, actor.workspaceId);
     if (!a) return [];
-    return [{ memberIds: [a.assigned_consultant_id as string], code: "AUT-07", message: `${a.assessment_number as string} was issued — collect the respondent's answers`, href: href("assessments", id) }];
+    // Inviting the client is a person's call: the consultant sends the respondent link from the assessment page.
+    const message =
+      a.assessment_mode === "self_assessment" && a.assigned_contact_id
+        ? `${a.assessment_number as string} was issued — send the client their respondent link from the assessment page`
+        : `${a.assessment_number as string} was issued — collect the respondent's answers`;
+    return [{ memberIds: [a.assigned_consultant_id as string], code: "AUT-07", message, href: href("assessments", id) }];
   },
 
   // AUT-08

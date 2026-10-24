@@ -18,6 +18,7 @@ The AINA MFD Consulting CRM from `technical-spec.md` + `field-dictionary.json`, 
 | Automations AUT-01..16 | `src/lib/mfd/automations.ts` — outbox processor + jobs. They only draft work (tasks, draft engagements/scorecards/findings/reviews, document requests) and notify; nothing is approved or shared automatically. |
 | Files (GV-07, AT-05) | `src/lib/mfd/storage.ts` — 10 MB cap, extension allowlist, content-signature check, executables/scripts rejected → `quarantined`; bytes AES-256-GCM encrypted in `cc_file_blobs`; downloads only via a 120-second, user-bound HMAC link, re-checked against a record the user can read. |
 | UI | `/consulting` overview, per-module lists (search, status, archive filter, CSV), create/edit forms generated from the dictionary, record pages with workflow buttons, child records, file panel, history, **MFD 360** on each organization (AT-07), and the assessment answer sheet. |
+| Client respondent links (AUT-07) | `src/lib/mfd/respondent.ts`, page `/respond/{token}`, API `/api/respond/{token}`. On an issued assessment with a client contact, **Respondent link** gives a personal link (optionally emailed). The client answers and submits without an account; answers are recorded against the contact. The link is HMAC-signed over the assessment, contact and issued question set, expires 3 days after the due date (max 30 days), and stops working once the assessment is submitted, re-assigned or archived. Option scores are never shown to the client. |
 | Kit content | **Install AINA diagnostic template** (overview page, admins) creates scoring scheme `AINA-MATURITY` v1 and template `AINA-DIAG` v1 — the kit's 7 Functions + 10 Systems audits, 65 checkpoints on the 1–5 maturity ladder — both published. |
 
 ## Acceptance tests
@@ -30,7 +31,9 @@ Unit tests: `src/lib/mfd/mfd.test.ts` (catalog/config consistency, normalization
 - **No Prisma relations**: foreign keys are indexed columns, checked by the engine (existence, same workspace, same MFD, not archived).
 - **Object storage**: files live encrypted in MySQL (`cc_file_blobs`). Swap `putBlob/getBlob` in `storage.ts` for S3-compatible storage later.
 - **Malware scanning**: built-in checks only (allowlist, signatures, executables, script content). Plug ClamAV into `scanBytes()` for full AV.
-- **Login**: the existing login. OIDC/MFA and the MFD client portal (respondent tokens for AUT-07) are follow-ups; for now consultants enter answers in consultant-assisted mode.
+- **Login**: the existing login. OIDC/MFA and a full MFD client portal (client_owner/client_manager logins) are follow-ups; clients answer assessments through respondent links.
+- **AUT-07** creates the link on demand: inviting the client stays a consultant's explicit action (the issue notification reminds them), rather than an automatic email.
+- Link answers are attributed in the audit trail to the assessment's consultant, with `via: respondent_link` and the contact recorded on the answer and its response event.
 - **Job queue**: the outbox runs in-process right after each write, plus the scheduled sweep below — no separate worker.
 - **AUT-01**: a lead has no MFD before conversion, so the discovery step is scheduled as the lead's next follow-up (a task is created when the lead already has an MFD).
 - **AUT-06**: transcription isn't wired to a provider; the job checks consent and notifies.
