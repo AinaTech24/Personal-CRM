@@ -19,7 +19,7 @@ export interface ReminderCandidate {
 }
 
 /** Is `nowMinutes` within the last `leadMinutes` before `endMinutes`? Wraps past midnight, same as withinWindow. */
-function withinLeadWindow(nowMinutes: number, endMinutes: number, leadMinutes: number): boolean {
+export function withinLeadWindow(nowMinutes: number, endMinutes: number, leadMinutes: number): boolean {
   const start = (endMinutes - leadMinutes + 1440) % 1440;
   return start <= endMinutes ? nowMinutes >= start && nowMinutes <= endMinutes : nowMinutes >= start || nowMinutes <= endMinutes;
 }
@@ -68,4 +68,34 @@ export function computeReminders(
   }
 
   return results;
+}
+
+/** Fixed daily lunch-break nudge time and how far ahead of it to fire — 15 min, i.e. 12:45 for a 1:00 lunch. */
+export const LUNCH_REMINDER_TIME = "13:00";
+export const LUNCH_REMINDER_LEAD_MINUTES = 15;
+
+export interface LunchReminderUserState {
+  userId: string;
+  checkedIn: boolean;
+  checkedOut: boolean;
+  /** Already on a break right now — no need to tell them to take one. */
+  onBreak: boolean;
+}
+
+/**
+ * Who should be nudged to take their lunch break right now: anyone
+ * currently at work (checked in, not out, not already on a break) within
+ * the lead window before LUNCH_REMINDER_TIME. Unlike check-in/out this
+ * isn't per-shift — one fixed company-wide time, same "nudge, never an
+ * enforcement rule" reasoning as the shift windows above.
+ */
+export function computeLunchReminders(
+  users: LunchReminderUserState[],
+  nowMinutes: number,
+  opts: { time?: string; leadMinutes?: number } = {}
+): string[] {
+  const end = hhmmToMinutes(opts.time ?? LUNCH_REMINDER_TIME);
+  const lead = opts.leadMinutes ?? LUNCH_REMINDER_LEAD_MINUTES;
+  if (Number.isNaN(end) || !withinLeadWindow(nowMinutes, end, lead)) return [];
+  return users.filter((u) => u.checkedIn && !u.checkedOut && !u.onBreak).map((u) => u.userId);
 }

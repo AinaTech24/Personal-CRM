@@ -38,6 +38,7 @@ interface AdminRecord {
   date: string;
   checkIn: string | null;
   checkOut: string | null;
+  breakMinutes: number | null;
   workedMinutes: number | null;
   status: AttendanceStatus | null;
   calculatedStatus: AttendanceStatus | null;
@@ -325,6 +326,7 @@ export default function AdminAttendancePage() {
                     <th className="px-4 py-2 font-medium">Check In</th>
                     <th className="px-4 py-2 font-medium">Check Out</th>
                     <th className="px-4 py-2 font-medium">Duration</th>
+                    <th className="px-4 py-2 font-medium">Break</th>
                     <th className="px-4 py-2 font-medium">Approval</th>
                     <th className="px-4 py-2 text-right font-medium">Actions</th>
                   </tr>
@@ -353,6 +355,9 @@ export default function AdminAttendancePage() {
                       <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">{formatIstTime(r.checkIn)}</td>
                       <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">{formatIstTime(r.checkOut)}</td>
                       <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">{formatDuration(r.workedMinutes)}</td>
+                      <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">
+                        {r.breakMinutes ? formatDuration(r.breakMinutes) : "—"}
+                      </td>
                       <td className="px-4 py-2">
                         <ApprovalBadge approval={r.approvalStatus} />
                       </td>

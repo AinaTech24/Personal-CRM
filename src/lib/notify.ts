@@ -36,6 +36,7 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   task_reminder: "tasks",
   check_in_reminder: "attendance",
   check_out_reminder: "attendance",
+  lunch_break_reminder: "attendance",
   social_client_assigned: "social",
   call_assigned: "calls",
   leave_requested: "attendance",

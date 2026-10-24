@@ -98,11 +98,21 @@ export function parseWorkingWeekdays(raw: string): number[] {
     .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
 }
 
-/** Whole minutes between check-in and check-out; null if either is missing or out of order. */
-export function computeWorkedMinutes(checkIn: Date | null, checkOut: Date | null): number | null {
-  if (!checkIn || !checkOut) return null;
-  const mins = Math.round((checkOut.getTime() - checkIn.getTime()) / 60_000);
+/** Whole minutes between two instants, floored at 0 — used for both a break's own length and worked time below. */
+export function elapsedMinutes(from: Date, to: Date): number {
+  const mins = Math.round((to.getTime() - from.getTime()) / 60_000);
   return mins > 0 ? mins : 0;
+}
+
+/**
+ * Whole minutes between check-in and check-out, minus any break time taken
+ * in between; null if either end is missing. `breakMinutes` defaults to 0
+ * for callers that don't track breaks at all (e.g. existing tests).
+ */
+export function computeWorkedMinutes(checkIn: Date | null, checkOut: Date | null, breakMinutes = 0): number | null {
+  if (!checkIn || !checkOut) return null;
+  const net = elapsedMinutes(checkIn, checkOut) - Math.max(0, breakMinutes);
+  return net > 0 ? net : 0;
 }
 
 /**

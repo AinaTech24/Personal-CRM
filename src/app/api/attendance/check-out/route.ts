@@ -7,6 +7,7 @@ import {
   dateFromKey,
   computeWorkedMinutes,
   classifyStatus,
+  elapsedMinutes,
   AUTO_HALF_DAY_REASON,
 } from "@/lib/attendance";
 
@@ -31,7 +32,11 @@ export async function POST() {
   if (record.checkOut) return NextResponse.json({ error: "You've already checked out today" }, { status: 409 });
 
   const policy = await getAttendancePolicy();
-  const workedMinutes = computeWorkedMinutes(record.checkIn, now) ?? 0;
+  // A break still open at check-out time is closed here rather than left
+  // dangling — its length (checkout time minus when it started) still
+  // counts against worked time, same as a properly closed one would.
+  const breakMinutes = record.breakIn ? record.breakMinutes + elapsedMinutes(record.breakIn, now) : record.breakMinutes;
+  const workedMinutes = computeWorkedMinutes(record.checkIn, now, breakMinutes) ?? 0;
   const calculatedStatus = classifyStatus(workedMinutes, policy);
   // A full Present day that was both checked in and out needs no sign-off —
   // it's auto-approved. Half days and absences still follow the approval policy.
@@ -41,6 +46,8 @@ export async function POST() {
     where: { id: record.id },
     data: {
       checkOut: now,
+      breakIn: null,
+      breakMinutes,
       workedMinutes,
       calculatedStatus,
       // Not overridden — effective status follows the calculation.

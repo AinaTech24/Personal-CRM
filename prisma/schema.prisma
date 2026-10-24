@@ -964,6 +964,14 @@ model Attendance {
   date             DateTime           @db.Date
   checkIn          DateTime?
   checkOut         DateTime?
+  /// Set while on an open break, cleared (and its length added to breakMinutes)
+  /// on break-out — or auto-closed the same way at check-out, so a forgotten
+  /// break never leaves this dangling. Supports more than one break a day:
+  /// each break-in/break-out pair just adds its length to the running total.
+  breakIn          DateTime?
+  /// Cumulative break time today, in minutes — subtracted from the raw
+  /// checkIn→checkOut span when workedMinutes is computed.
+  breakMinutes     Int                @default(0)
   workedMinutes    Int?
   calculatedStatus AttendanceStatus?
   status           AttendanceStatus?

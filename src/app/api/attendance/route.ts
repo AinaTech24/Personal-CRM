@@ -29,6 +29,8 @@ export async function GET(req: NextRequest) {
       date: keyFromDate(r.date),
       checkIn: r.checkIn,
       checkOut: r.checkOut,
+      breakIn: r.breakIn,
+      breakMinutes: r.breakMinutes,
       workedMinutes: r.workedMinutes,
       status: r.status,
       calculatedStatus: r.calculatedStatus,

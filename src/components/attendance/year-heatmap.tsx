@@ -19,6 +19,8 @@ export interface HeatmapRecord {
   date: string; // YYYY-MM-DD
   checkIn: string | null;
   checkOut: string | null;
+  breakIn?: string | null;
+  breakMinutes?: number | null;
   workedMinutes: number | null;
   status: AttendanceStatus | null;
   halfDayReason: HalfDayReason | null;

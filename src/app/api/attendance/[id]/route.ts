@@ -62,7 +62,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (nextCheckIn && nextCheckOut && nextCheckOut <= nextCheckIn) {
       return NextResponse.json({ error: "Check-out must be after check-in" }, { status: 400 });
     }
-    const workedMinutes = computeWorkedMinutes(nextCheckIn, nextCheckOut);
+    // Uses the record's own stored break time — this endpoint edits
+    // check-in/check-out only, never break times.
+    const workedMinutes = computeWorkedMinutes(nextCheckIn, nextCheckOut, record.breakMinutes);
     const policy = await getAttendancePolicy();
     calculatedStatus = workedMinutes == null ? null : classifyStatus(workedMinutes, policy);
     data.checkIn = nextCheckIn;

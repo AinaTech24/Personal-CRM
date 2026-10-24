@@ -430,9 +430,10 @@ calls them on its own, because a single Node process has no built-in
 scheduler:
 
 - **`/api/attendance/send-reminders`** — nudges anyone within 30 minutes of
-  a shift's check-in/check-out window closing who hasn't acted yet (toast,
-  bell, and OS push). Needs to run every **~15 minutes**, comfortably under
-  that 30-minute window.
+  a shift's check-in/check-out window closing who hasn't acted yet, plus a
+  fixed 12:45 lunch-break nudge to anyone currently at work and not already
+  on a break (toast, bell, and OS push). Needs to run every **~15 minutes**,
+  comfortably under that 30-minute window.
 - **`/api/meetings/send-reminders`** — fires every meeting whose "Remind me
   at" time has passed, to the organizer and every attendee (toast, bell,
   and OS push). Needs to run every **~5 minutes** — a reminder is a specific
