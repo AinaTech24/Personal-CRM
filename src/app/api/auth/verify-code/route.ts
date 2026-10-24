@@ -47,8 +47,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid code" }, { status: 401 });
     }
 
-    // Consume the code (single use) and sign the user in.
-    await db.user.update({ where: { id: user.id }, data: { resetCode: null, resetCodeExpiresAt: null } });
+    // Consume the code (single use) and sign the user in. The WHERE clause
+    // re-checks resetCode still equals the exact hash we just verified —
+    // two concurrent requests can both pass verifyPassword above (it's a
+    // read), but only one of them can win this update, since the loser's
+    // WHERE no longer matches once the winner has already nulled it out.
+    const claimed = await db.user.updateMany({
+      where: { id: user.id, resetCode: user.resetCode },
+      data: { resetCode: null, resetCodeExpiresAt: null },
+    });
+    if (claimed.count === 0) {
+      return NextResponse.json({ error: "This code has already been used." }, { status: 409 });
+    }
     await createSessionCookie(
       {
         userId: user.id,

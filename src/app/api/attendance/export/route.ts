@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
     "Check In",
     "Check Out",
     "Duration",
+    "Break",
     "Half Day Reason",
     "Admin Note",
   ];
@@ -83,6 +84,7 @@ export async function GET(req: NextRequest) {
         formatIstTime(r.checkIn?.toISOString()),
         formatIstTime(r.checkOut?.toISOString()),
         formatDuration(r.workedMinutes),
+        r.breakMinutes > 0 ? formatDuration(r.breakMinutes) : "",
         r.halfDayReason ? HALF_DAY_REASON_LABEL[r.halfDayReason] : "",
         r.adminNote ?? "",
       ]

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getPasswordEntryForUser, logPasswordActivity } from "@/lib/passwords";
+import { decryptSecret } from "@/lib/crypto";
 
 /**
  * The only route that ever returns a password to the client — the list and
@@ -23,5 +24,5 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   await logPasswordActivity(id, user.id, "revealed");
 
-  return NextResponse.json({ password: entry.password });
+  return NextResponse.json({ password: decryptSecret(entry.password) });
 }

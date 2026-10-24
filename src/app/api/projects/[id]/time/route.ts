@@ -50,6 +50,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
 
+  // Logging time for someone else is a legitimate, existing feature (the
+  // time panel lets a project editor pick who an entry is for), but the
+  // target still has to actually be the caller themselves or a member of
+  // this project — not an arbitrary company-wide user id the client could
+  // otherwise submit directly against the API.
+  const eligibleUserIds = new Set([user.id, ...access.members.map((m) => m.userId)]);
+  if (!eligibleUserIds.has(parsed.data.userId)) {
+    return NextResponse.json({ error: "That person isn't a member of this project" }, { status: 400 });
+  }
+
   // Midnight UTC: the column is a DATE, and building the Date from local parts
   // would store the previous day for anyone west of UTC.
   const workDate = new Date(`${parsed.data.workDate}T00:00:00Z`);

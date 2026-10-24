@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { passwordEntryListWhere, canManagePasswordEntry, logPasswordActivity } from "@/lib/passwords";
 import { fetchFaviconDataUrl } from "@/lib/favicon";
+import { encryptSecret } from "@/lib/crypto";
 
 const entrySelect = {
   id: true,
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
       description: d.description?.trim() || null,
       link,
       username: d.username?.trim() || null,
-      password: d.password,
+      password: encryptSecret(d.password),
       faviconDataUrl,
       departmentId,
       createdById: user.id,

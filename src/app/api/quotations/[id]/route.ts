@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isRestrictedFromModule } from "@/lib/social-media";
-import { asJson, canAccessBillingRecord, canDeleteBillingRecord, computeTotals, pickSellerData, sellerSchemaFields, toNumber } from "@/lib/billing";
+import { asJson, BillingValidationError, canAccessBillingRecord, canDeleteBillingRecord, computeTotals, pickSellerData, sellerSchemaFields, toNumber } from "@/lib/billing";
 import { broadcastQuotationChange } from "@/lib/quotations";
 import { notifyAndPush } from "@/lib/notify";
 
@@ -103,7 +103,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       unitPrice: toNumber(i.unitPrice),
       gstRate: toNumber(i.gstRate),
     }));
-  const totals = computeTotals(itemsInput, discount);
+  let totals;
+  try {
+    totals = computeTotals(itemsInput, discount);
+  } catch (err) {
+    if (err instanceof BillingValidationError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
+  }
 
   const quotation = await db.$transaction(async (tx) => {
     if (data.items !== undefined) {

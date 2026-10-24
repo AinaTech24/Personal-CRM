@@ -51,6 +51,17 @@ export function IconMonitor(props: IconProps) {
   );
 }
 
+/** Break in/out — a coffee cup. */
+export function IconCoffee(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 9h13v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9Z" />
+      <path d="M17 10.5h1.5a2.5 2.5 0 0 1 0 5H17" />
+      <path d="M8 3c-.5 1 0 1.5-.5 2.5M12 3c-.5 1 0 1.5-.5 2.5" />
+    </svg>
+  );
+}
+
 export function IconLogOut(props: IconProps) {
   return (
     <svg {...base(props)}>

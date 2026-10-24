@@ -229,10 +229,11 @@ export function PasswordManagerView() {
           {entries && entries.length > 0 && (
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search..." className="w-48" />
           )}
-          <Button type="button" onClick={openCreate}>
-            <IconPlus className="h-4 w-4" />
-            Add source
-          </Button>
+          <Tooltip label="Add source">
+            <Button type="button" size="icon" aria-label="Add source" onClick={openCreate}>
+              <IconPlus className="h-4 w-4" />
+            </Button>
+          </Tooltip>
         </div>
       </div>
 

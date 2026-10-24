@@ -185,6 +185,11 @@ VAPID_SUBJECT="mailto:admin@ainatech.in"
 # Generate with: openssl rand -base64 32
 CRON_SECRET="PASTE_A_LONG_RANDOM_SECRET"
 
+# Encrypts Password Manager entries and the SMTP password at rest — without
+# it, saving either will fail outright (not fall back to plaintext).
+# Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+ENCRYPTION_KEY="PASTE_THE_GENERATED_64-CHARACTER_HEX_STRING"
+
 # Only read by `npm run db:seed`, once. Delete these three lines afterwards.
 SEED_ADMIN_EMAIL="you@ainatech.in"
 SEED_ADMIN_PASSWORD="a-strong-password"
@@ -221,6 +226,10 @@ Notes on those values:
 - **`APP_URL`** is also editable at Settings → Workspace → Application, and the
   stored value wins over this one. Set it correctly here anyway so invite links
   work before anyone visits the settings page.
+- **`ENCRYPTION_KEY`** must be a 64-character hex string (32 bytes) — changing
+  or losing it makes every already-saved Password Manager entry and the SMTP
+  password undecryptable (they'll need to be re-entered). `npm run build`
+  encrypts any pre-existing plaintext rows on first deploy after this is set.
 
 Install, build, seed:
 
@@ -430,9 +439,10 @@ calls them on its own, because a single Node process has no built-in
 scheduler:
 
 - **`/api/attendance/send-reminders`** — nudges anyone within 30 minutes of
-  a shift's check-in/check-out window closing who hasn't acted yet (toast,
-  bell, and OS push). Needs to run every **~15 minutes**, comfortably under
-  that 30-minute window.
+  a shift's check-in/check-out window closing who hasn't acted yet, plus a
+  fixed 12:45 lunch-break nudge to anyone currently at work and not already
+  on a break (toast, bell, and OS push). Needs to run every **~15 minutes**,
+  comfortably under that 30-minute window.
 - **`/api/meetings/send-reminders`** — fires every meeting whose "Remind me
   at" time has passed, to the organizer and every attendee (toast, bell,
   and OS push). Needs to run every **~5 minutes** — a reminder is a specific

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { computeReminders, REMINDER_LEAD_MINUTES, type ReminderUserState } from "./attendance-reminders";
+import {
+  computeReminders,
+  computeLunchReminders,
+  REMINDER_LEAD_MINUTES,
+  LUNCH_REMINDER_LEAD_MINUTES,
+  type ReminderUserState,
+  type LunchReminderUserState,
+} from "./attendance-reminders";
 import type { AttendanceShift } from "./attendance";
 
 const FULL_DAY_SHIFT: AttendanceShift = {
@@ -82,5 +89,46 @@ describe("computeReminders — multiple users and shifts", () => {
     const users = [user({ userId: "a" }), user({ userId: "b", checkedIn: true })];
     const result = computeReminders([FULL_DAY_SHIFT], users, nowMinutes);
     expect(result).toEqual([{ userId: "a", kind: "check_in_reminder", shiftName: "Full day" }]);
+  });
+});
+
+function lunchUser(overrides: Partial<LunchReminderUserState> = {}): LunchReminderUserState {
+  return { userId: "u1", checkedIn: true, checkedOut: false, onBreak: false, ...overrides };
+}
+
+describe("computeLunchReminders", () => {
+  it("fires within the lead window before 13:00 for someone at work", () => {
+    const nowMinutes = 13 * 60 - LUNCH_REMINDER_LEAD_MINUTES / 2; // 12:52:30
+    expect(computeLunchReminders([lunchUser()], nowMinutes)).toEqual(["u1"]);
+  });
+
+  it("does not fire well before the lead window opens", () => {
+    const nowMinutes = 11 * 60; // 11:00
+    expect(computeLunchReminders([lunchUser()], nowMinutes)).toEqual([]);
+  });
+
+  it("does not fire after 13:00", () => {
+    const nowMinutes = 13 * 60 + 5;
+    expect(computeLunchReminders([lunchUser()], nowMinutes)).toEqual([]);
+  });
+
+  it("does not fire for someone not checked in", () => {
+    const nowMinutes = 13 * 60 - 10;
+    expect(computeLunchReminders([lunchUser({ checkedIn: false })], nowMinutes)).toEqual([]);
+  });
+
+  it("does not fire for someone already checked out", () => {
+    const nowMinutes = 13 * 60 - 10;
+    expect(computeLunchReminders([lunchUser({ checkedOut: true })], nowMinutes)).toEqual([]);
+  });
+
+  it("does not fire for someone already on a break", () => {
+    const nowMinutes = 13 * 60 - 10;
+    expect(computeLunchReminders([lunchUser({ onBreak: true })], nowMinutes)).toEqual([]);
+  });
+
+  it("respects a custom time/lead", () => {
+    const nowMinutes = 12 * 60 - 5; // 11:55, 5 min before a 12:00 lunch
+    expect(computeLunchReminders([lunchUser()], nowMinutes, { time: "12:00", leadMinutes: 10 })).toEqual(["u1"]);
   });
 });

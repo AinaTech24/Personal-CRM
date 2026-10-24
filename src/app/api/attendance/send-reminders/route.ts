@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { istDateKey, dateFromKey, istMinutesOfDay, type AttendanceShift } from "@/lib/attendance";
-import { computeReminders, type ReminderUserState } from "@/lib/attendance-reminders";
+import { computeReminders, computeLunchReminders, type ReminderUserState } from "@/lib/attendance-reminders";
 import { notifyUser } from "@/lib/notify";
 import { sendPushToUsers } from "@/lib/push";
 import { rateLimit } from "@/lib/rate-limit";
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   const [users, leaves, attendance] = await Promise.all([
     db.user.findMany({ where: { isActive: true }, select: { id: true } }),
     db.userLeave.findMany({ where: { date }, select: { userId: true, type: true } }),
-    db.attendance.findMany({ where: { date }, select: { userId: true, checkIn: true, checkOut: true } }),
+    db.attendance.findMany({ where: { date }, select: { userId: true, checkIn: true, checkOut: true, breakIn: true } }),
   ]);
 
   const leaveByUser = new Map(leaves.map((l) => [l.userId, l.type]));
@@ -81,9 +81,17 @@ export async function POST(req: NextRequest) {
   });
 
   const candidates = computeReminders(REMINDER_WINDOWS, states, nowMinutes, { checkInLeadMinutes: CHECK_IN_LEAD_MINUTES });
+  const lunchCandidates = computeLunchReminders(
+    users.map((u) => {
+      const a = attendanceByUser.get(u.id);
+      return { userId: u.id, checkedIn: !!a?.checkIn, checkedOut: !!a?.checkOut, onBreak: !!a?.breakIn };
+    }),
+    nowMinutes
+  );
 
   let checkIn = 0;
   let checkOut = 0;
+  let lunch = 0;
 
   await Promise.all(
     candidates.map(async (c) => {
@@ -113,5 +121,23 @@ export async function POST(req: NextRequest) {
     })
   );
 
-  return NextResponse.json({ sent: checkIn + checkOut, checkIn, checkOut });
+  await Promise.all(
+    lunchCandidates.map(async (userId) => {
+      const key = `attendance-reminder:lunch_break_reminder:${userId}:${dateKey}`;
+      if (!rateLimit(key, 1, 20 * 60 * 60 * 1000).allowed) return;
+
+      const notification = await notifyUser(userId, "lunch_break_reminder", {});
+      if (!notification) return;
+
+      await sendPushToUsers([userId], {
+        title: "Lunch break",
+        body: "It's almost 1:00 — don't forget to log your lunch break.",
+        url: "/attendance",
+        tag: "attendance-reminder",
+      });
+      lunch += 1;
+    })
+  );
+
+  return NextResponse.json({ sent: checkIn + checkOut + lunch, checkIn, checkOut, lunch });
 }

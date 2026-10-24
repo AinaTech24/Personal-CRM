@@ -6,6 +6,7 @@ import { isAdmin } from "@/lib/permissions";
 import { getPasswordEntryForUser, canManagePasswordEntry, logPasswordActivity } from "@/lib/passwords";
 import { fetchFaviconDataUrl } from "@/lib/favicon";
 import { summariseChanges } from "@/lib/audit";
+import { encryptSecret } from "@/lib/crypto";
 
 const entryDetailSelect = {
   id: true,
@@ -97,7 +98,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(nextLink !== undefined && { link: nextLink }),
       ...(faviconDataUrl !== undefined && { faviconDataUrl }),
       ...(d.username !== undefined && { username: d.username?.trim() || null }),
-      ...(d.password && { password: d.password, rotationReminderSentAt: null }),
+      ...(d.password && { password: encryptSecret(d.password), rotationReminderSentAt: null }),
       ...(departmentId !== undefined && { departmentId }),
       updatedById: user.id,
     },

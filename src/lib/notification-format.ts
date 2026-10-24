@@ -12,6 +12,7 @@ import {
   IconFileSpreadsheet,
   IconKey,
   IconCake,
+  IconCoffee,
 } from "@/components/icons";
 
 export interface NotificationLike {
@@ -43,6 +44,7 @@ export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?:
   meeting_reminder: IconCalendar,
   check_in_reminder: IconClock,
   check_out_reminder: IconClock,
+  lunch_break_reminder: IconCoffee,
   social_client_assigned: IconMegaphone,
   call_assigned: IconPhone,
   leave_requested: IconCalendar,
@@ -75,6 +77,7 @@ export const NOTIFICATION_CATEGORY: Record<string, string> = {
   meeting_reminder: "meetings",
   check_in_reminder: "attendance",
   check_out_reminder: "attendance",
+  lunch_break_reminder: "attendance",
   social_client_assigned: "social",
   call_assigned: "calls",
   leave_requested: "attendance",
@@ -178,6 +181,8 @@ export function notificationMessage(n: NotificationLike): string {
       const shiftName = typeof n.payload.shiftName === "string" ? n.payload.shiftName : "your shift";
       return `Don't forget to check out for ${shiftName} — the window closes soon`;
     }
+    case "lunch_break_reminder":
+      return "It's almost 1:00 — don't forget to log your lunch break";
     case "social_client_assigned": {
       const clientName = typeof n.payload.clientName === "string" ? n.payload.clientName : "a client";
       return `${actor} assigned you the social media client "${clientName}"`;
@@ -276,7 +281,7 @@ export function notificationHref(n: NotificationLike): string | null {
   }
   if (n.type === "quotation_decided" || n.type === "quotation_submitted") return "/quotations";
   if (n.type === "meeting_invited" || n.type === "meeting_reminder") return "/meetings";
-  if (n.type === "check_in_reminder" || n.type === "check_out_reminder") return "/attendance";
+  if (n.type === "check_in_reminder" || n.type === "check_out_reminder" || n.type === "lunch_break_reminder") return "/attendance";
   if (n.type === "social_client_assigned") {
     return typeof n.payload.clientId === "string" ? `/social-media/${n.payload.clientId}` : "/social-media";
   }

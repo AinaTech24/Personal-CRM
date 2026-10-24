@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
+import { encryptSecret } from "@/lib/crypto";
 
 const SETTINGS_ID = "default";
 
@@ -70,8 +71,8 @@ export async function PUT(req: NextRequest) {
   const settings = await db.smtpSettings.upsert({
     where: { id: SETTINGS_ID },
     // Only overwrite the password when a non-empty value is supplied.
-    create: { id: SETTINGS_ID, ...base, password: d.password || null },
-    update: { ...base, ...(d.password ? { password: d.password } : {}) },
+    create: { id: SETTINGS_ID, ...base, password: d.password ? encryptSecret(d.password) : null },
+    update: { ...base, ...(d.password ? { password: encryptSecret(d.password) } : {}) },
   });
 
   return NextResponse.json({ settings: serialize(settings) });

@@ -23,6 +23,8 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
       - key: APP_URL
         sync: false
       - key: SEED_ADMIN_EMAIL

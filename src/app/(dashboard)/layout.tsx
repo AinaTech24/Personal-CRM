@@ -40,7 +40,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const managedModules = isAdmin(user) ? [] : await getUserModulePermissions(user.id);
 
   return (
-    <SocketProvider userId={user.id} departmentId={user.departmentId} isAdmin={isAdmin(user)}>
+    <SocketProvider>
       <SearchProvider>
         <DashboardShell
           isAdmin={isAdmin(user)}

@@ -45,39 +45,99 @@ app.prepare().then(() => {
     if ((prev > 0) !== isOnline) io.emit("presence", { userId, online: isOnline });
   }
 
+  // Every socket connection and room join is checked against the real,
+  // server-side session — a socket is just a browser tab, so nothing it
+  // sends (which room to join, which user it claims to be) can be trusted
+  // on its own. Both calls hit our own Next.js app over loopback, reusing
+  // the same cookie/JWT/DB session logic the rest of the app already has,
+  // rather than re-implementing it here. Guarded by CRON_SECRET, same as
+  // the reminder-sweep fetches below.
+  async function authenticateSocket(cookieHeader) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/internal/socket-auth`, {
+        headers: { cookie: cookieHeader ?? "", "x-cron-secret": process.env.CRON_SECRET },
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }
+
+  async function isConversationMember(cookieHeader, conversationId) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/internal/socket-auth`, {
+        method: "POST",
+        headers: {
+          cookie: cookieHeader ?? "",
+          "x-cron-secret": process.env.CRON_SECRET,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ conversationId }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      return !!data.member;
+    } catch {
+      return false;
+    }
+  }
+
+  io.use(async (socket, next) => {
+    const auth = await authenticateSocket(socket.handshake.headers.cookie);
+    if (!auth) {
+      next(new Error("Unauthorized"));
+      return;
+    }
+    socket.data.user = auth;
+    next();
+  });
+
   io.on("connection", (socket) => {
-    let joinedUserId = null;
+    const { id: userId, departmentId, isAdmin } = socket.data.user;
+
+    // These rooms are derived from the authenticated session, never from
+    // anything the client sends — a socket can no longer ask to join
+    // "admins" or someone else's "user:<id>"/"dept:<id>" room.
+    socket.join(`user:${userId}`);
+    if (departmentId) socket.join(`dept:${departmentId}`);
+    if (isAdmin) socket.join("admins");
+    setOnline(userId, 1);
 
     // Send the current online roster to whoever just connected.
     socket.emit("presence:init", [...online.keys()]);
 
-    socket.on("join", (room) => {
-      if (typeof room !== "string") return;
-      socket.join(room);
-      if (room.startsWith("user:") && !joinedUserId) {
-        joinedUserId = room.slice("user:".length);
-        setOnline(joinedUserId, 1);
+    // The only room a client ever gets to request itself is a conversation
+    // room, and only once we've confirmed it's actually a member — chat
+    // messages/typing indicators are the one thing here that are genuinely
+    // scoped by membership rather than by identity/department/role.
+    socket.on("join", async (room) => {
+      if (typeof room !== "string" || !room.startsWith("conv:")) return;
+      const conversationId = room.slice("conv:".length);
+      if (await isConversationMember(socket.handshake.headers.cookie, conversationId)) {
+        socket.join(room);
       }
     });
 
     socket.on("leave", (room) => {
-      if (typeof room === "string") socket.leave(room);
+      if (typeof room === "string" && room.startsWith("conv:")) socket.leave(room);
     });
 
     // Ephemeral typing indicator, relayed to others in the conversation room.
+    // Trusts only that the sender has already been let into that room above.
     socket.on("typing", (data) => {
-      if (data && typeof data.conversationId === "string") {
+      if (data && typeof data.conversationId === "string" && socket.rooms.has(`conv:${data.conversationId}`)) {
         socket.to(`conv:${data.conversationId}`).emit("typing", data);
       }
     });
     socket.on("stop_typing", (data) => {
-      if (data && typeof data.conversationId === "string") {
+      if (data && typeof data.conversationId === "string" && socket.rooms.has(`conv:${data.conversationId}`)) {
         socket.to(`conv:${data.conversationId}`).emit("stop_typing", data);
       }
     });
 
     socket.on("disconnect", () => {
-      if (joinedUserId) setOnline(joinedUserId, -1);
+      setOnline(userId, -1);
     });
   });
 

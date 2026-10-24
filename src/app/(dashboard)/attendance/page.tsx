@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Dropdown } from "@/components/ui/dropdown";
-import { IconClock, IconCheck } from "@/components/icons";
+import { IconClock, IconCheck, IconCoffee } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { SummaryCards, type AttendanceSummaryData } from "@/components/attendance/summary-cards";
 import { AttendanceLegend } from "@/components/attendance/legend";
@@ -52,18 +52,27 @@ export default function AttendancePage() {
   const today = data?.today ?? null;
   const checkedIn = !!today?.checkIn;
   const checkedOut = !!today?.checkOut;
+  const onBreak = !!today?.breakIn;
 
-  async function act(kind: "check-in" | "check-out") {
+  const ACT_META = {
+    "check-in": { success: "Checked in", error: "Couldn't check in", avatar: "/icons/Check-in.svg" },
+    "check-out": { success: "Checked out", error: "Couldn't check out", avatar: "/icons/Check-out.svg" },
+    "break-in": { success: "Break started", error: "Couldn't start your break", avatar: null },
+    "break-out": { success: "Break ended", error: "Couldn't end your break", avatar: null },
+  } as const;
+
+  async function act(kind: keyof typeof ACT_META) {
     setActing(true);
     try {
       const res = await fetch(`/api/attendance/${kind}`, { method: "POST" });
       const json = await res.json();
-      if (!res.ok) return toast.error(kind === "check-in" ? "Couldn't check in" : "Couldn't check out", json.error);
+      const meta = ACT_META[kind];
+      if (!res.ok) return toast.error(meta.error, json.error);
       toast.toast({
-        title: kind === "check-in" ? "Checked in" : "Checked out",
+        title: meta.success,
         variant: "success",
-        avatarDataUrl: kind === "check-in" ? "/icons/Check-in.svg" : "/icons/Check-out.svg",
-        iconAnimate: true,
+        avatarDataUrl: meta.avatar,
+        iconAnimate: !!meta.avatar,
       });
       // Viewing the current year is required to see today; jump there if needed.
       if (year !== CURRENT_YEAR) setYear(CURRENT_YEAR);
@@ -98,10 +107,12 @@ export default function AttendancePage() {
               {data?.todayKey && <p className="text-sm font-medium">{formatFullDate(data.todayKey)}</p>}
               <p className="text-xs text-muted-foreground">
                 {checkedOut
-                  ? `Checked out at ${formatIstTime(today?.checkOut)} · ${formatDuration(today?.workedMinutes)}`
-                  : checkedIn
-                    ? `Checked in at ${formatIstTime(today?.checkIn)}`
-                    : "Not checked in yet"}
+                  ? `Checked out at ${formatIstTime(today?.checkOut)} · ${formatDuration(today?.workedMinutes)}${today?.breakMinutes ? ` (${formatDuration(today.breakMinutes)} break)` : ""}`
+                  : onBreak
+                    ? `On a break since ${formatIstTime(today?.breakIn)}`
+                    : checkedIn
+                      ? `Checked in at ${formatIstTime(today?.checkIn)}${today?.breakMinutes ? ` · ${formatDuration(today.breakMinutes)} break so far` : ""}`
+                      : "Not checked in yet"}
               </p>
             </div>
           </div>
@@ -118,10 +129,21 @@ export default function AttendancePage() {
               </Button>
             )}
             {checkedIn && !checkedOut && (
-              <Button type="button" onClick={() => act("check-out")} disabled={acting}>
-                <IconCheck className="h-4 w-4" />
-                Check Out
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => act(onBreak ? "break-out" : "break-in")}
+                  disabled={acting}
+                >
+                  <IconCoffee className="h-4 w-4" />
+                  {onBreak ? "Break Out" : "Break In"}
+                </Button>
+                <Button type="button" onClick={() => act("check-out")} disabled={acting}>
+                  <IconCheck className="h-4 w-4" />
+                  Check Out
+                </Button>
+              </>
             )}
             {checkedOut && (
               <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -169,6 +191,7 @@ export default function AttendancePage() {
                         <th className="px-4 py-2 font-medium">Check In</th>
                         <th className="px-4 py-2 font-medium">Check Out</th>
                         <th className="px-4 py-2 font-medium">Duration</th>
+                        <th className="px-4 py-2 font-medium">Break</th>
                         <th className="px-4 py-2 font-medium">Reason</th>
                         <th className="px-4 py-2 font-medium">Approval</th>
                       </tr>
@@ -183,6 +206,9 @@ export default function AttendancePage() {
                           <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">{formatIstTime(r.checkIn)}</td>
                           <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">{formatIstTime(r.checkOut)}</td>
                           <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">{formatDuration(r.workedMinutes)}</td>
+                          <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">
+                            {r.breakMinutes ? formatDuration(r.breakMinutes) : "—"}
+                          </td>
                           <td className="px-4 py-2 text-muted-foreground">
                             {r.status === "HALF_DAY" && r.halfDayReason ? HALF_DAY_REASON_LABEL[r.halfDayReason] : "—"}
                           </td>

@@ -33,6 +33,7 @@ export default function EmailSettingsPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [revealing, setRevealing] = useState(false);
   const [hasPassword, setHasPassword] = useState(false);
   const [fromEmail, setFromEmail] = useState("");
   const [fromName, setFromName] = useState("Aina CRM");
@@ -76,6 +77,31 @@ export default function EmailSettingsPage() {
       toast.success("SMTP settings saved");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Revealing shows the REAL, stored password (decrypted server-side) — not
+  // just toggling the input's own type — since the field starts out empty
+  // whenever one is already saved (see "Leave blank to keep the existing
+  // one" above). Once typing has started, there's nothing to fetch: just
+  // flip visibility on what the admin is already entering.
+  async function toggleShowPassword() {
+    if (showPassword || password || !hasPassword) {
+      setShowPassword((v) => !v);
+      return;
+    }
+    setRevealing(true);
+    try {
+      const res = await fetch("/api/smtp-settings/reveal", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error("Couldn't reveal password", data.error);
+        return;
+      }
+      setPassword(data.password);
+      setShowPassword(true);
+    } finally {
+      setRevealing(false);
     }
   }
 
@@ -132,9 +158,10 @@ export default function EmailSettingsPage() {
                     />
                     <button
                       type="button"
-                      onClick={() => setShowPassword((v) => !v)}
+                      onClick={toggleShowPassword}
+                      disabled={revealing}
                       aria-label={showPassword ? "Hide password" : "Show password"}
-                      className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                      className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:opacity-50"
                     >
                       {showPassword ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
                     </button>
