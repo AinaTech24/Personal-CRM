@@ -10,6 +10,7 @@ import {
 import { notifyAndPush } from "@/lib/notify";
 import { requestDevice } from "@/lib/request-info";
 import { rateLimit } from "@/lib/rate-limit";
+import { validateFieldValue } from "@/lib/form-fields";
 
 interface PickedFile {
   fileName: string;
@@ -95,7 +96,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     const value = typeof raw === "string" ? raw.trim() : "";
     if (field.required && !value) return NextResponse.json({ error: `"${field.label}" is required` }, { status: 400 });
     if (value.length > 5000) return NextResponse.json({ error: `"${field.label}" is too long` }, { status: 400 });
-    if (value) answerRows.push({ fieldId: field.id, value });
+    if (value) {
+      const problem = validateFieldValue(field, value);
+      if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+      answerRows.push({ fieldId: field.id, value });
+    }
   }
 
   const submission = await db.formSubmission.create({

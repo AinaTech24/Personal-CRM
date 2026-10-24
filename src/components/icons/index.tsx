@@ -41,6 +41,15 @@ export function IconMoon(props: IconProps) {
   );
 }
 
+/** Embed code — a `</>` bracket pair. */
+export function IconCode(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 7 4 12l5 5M15 7l5 5-5 5" />
+    </svg>
+  );
+}
+
 /** "Match system" theme option — a plain monitor, no sun/moon rays. */
 export function IconMonitor(props: IconProps) {
   return (
@@ -413,6 +422,16 @@ export function IconUser(props: IconProps) {
     <svg {...base(props)}>
       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
       <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+export function IconUserPlus(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M19 8v6M22 11h-6" />
     </svg>
   );
 }

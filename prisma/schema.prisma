@@ -2146,6 +2146,14 @@ model FormField {
   order       Int
   /// Pipe-separated choices for DROPDOWN/RADIO/CHECKBOX, e.g. "Red|Green|Blue".
   options     String?       @db.Text
+  /// Character-length bounds, for text-like field types.
+  minLength   Int?
+  maxLength   Int?
+  /// Value bounds, for NUMBER fields.
+  minValue    Int?
+  maxValue    Int?
+  /// Regex source (no flags) a text-like answer must match, e.g. an EMAIL/PHONE shape.
+  pattern     String?       @db.VarChar(500)
 
   answers     FormAnswer[]
   attachments FormAttachment[]
@@ -2168,6 +2176,12 @@ model FormSubmission {
   attachments FormAttachment[]
 
   createdAt DateTime @default(now())
+
+  /// Set once this submission has been turned into a Lead, so "Convert to
+  /// Lead" shows as already-done instead of creating a second Lead from the
+  /// same response. A soft pointer, not a relation — Lead is a separate
+  /// domain this submission just happens to have fed once.
+  convertedLeadId String?
 
   @@index([formId, createdAt])
 }

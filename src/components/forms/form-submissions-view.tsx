@@ -27,7 +27,9 @@ import {
   IconEyeOff,
   IconFileSpreadsheet,
   IconPencil,
+  IconSearch,
   IconTrash,
+  IconUserPlus,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
@@ -62,8 +64,29 @@ interface AttachmentDetail {
 interface SubmissionDetail {
   id: string;
   createdAt: string;
+  convertedLeadId: string | null;
   answers: AnswerDetail[];
   attachments: AttachmentDetail[];
+}
+
+interface LeadDraft {
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+}
+
+/** Best-effort guess at name/email/phone/company from a submission's answers, for the Convert to Lead dialog to pre-fill — the admin reviews and can fix any of it before the Lead is actually created. */
+function guessLeadDraft(answers: AnswerDetail[]): LeadDraft {
+  const byType = (type: string) => answers.find((a) => a.field.type === type)?.value ?? "";
+  const byLabel = (needle: string) => answers.find((a) => a.field.label.toLowerCase().includes(needle))?.value ?? "";
+  const nameAnswer = byLabel("name") || answers.find((a) => a.field.type === "SHORT_TEXT")?.value || "";
+  return {
+    name: nameAnswer,
+    company: byLabel("company"),
+    email: byType("EMAIL"),
+    phone: byType("PHONE"),
+  };
 }
 
 /** One editable answer field inside the edit dialog — mirrors the public form's own input-per-type rendering. */
@@ -139,6 +162,10 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState<SubmissionRow | null>(null);
   const [revealedAnswerIds, setRevealedAnswerIds] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [leadDraft, setLeadDraft] = useState<LeadDraft>({ name: "", company: "", email: "", phone: "" });
+  const [converting, setConverting] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
@@ -226,6 +253,31 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
     }
   }
 
+  function startConvert() {
+    if (!detail) return;
+    setLeadDraft(guessLeadDraft(detail.answers));
+    setConvertOpen(true);
+  }
+
+  async function confirmConvert() {
+    if (!detail || !leadDraft.name.trim()) return;
+    setConverting(true);
+    try {
+      const res = await fetch(`/api/forms/${formId}/submissions/${detail.id}/convert-to-lead`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(leadDraft),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't create the lead", data.error);
+      setDetail((d) => (d ? { ...d, convertedLeadId: data.lead.id } : d));
+      setConvertOpen(false);
+      toast.success("Lead created", leadDraft.name);
+    } finally {
+      setConverting(false);
+    }
+  }
+
   async function confirmDelete() {
     if (!deleting) return;
     const res = await fetch(`/api/forms/${formId}/submissions/${deleting.id}`, { method: "DELETE" });
@@ -235,6 +287,18 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
     if (openId === deleting.id) setOpenId(null);
     load();
   }
+
+  // Filters against whatever's actually visible in the table — the preview
+  // answers and the formatted date — not a separate server round trip for
+  // something this list already has in hand.
+  const q = search.trim().toLowerCase();
+  const filteredRows = !q
+    ? rows
+    : (rows ?? []).filter(
+        (r) =>
+          r.answers.some((a) => a.value.toLowerCase().includes(q)) ||
+          format(parseISO(r.createdAt), "dd MMM yyyy, h:mm a").toLowerCase().includes(q)
+      );
 
   // Group attachments by their field so the detail view reads like the public form's own layout.
   const attachmentsByField = new Map<string, { label: string; items: AttachmentDetail[] }>();
@@ -264,9 +328,29 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
               </span>
               {copied ? "Copied" : "Copy form link"}
             </Button>
+            {!!rows?.length && (
+              <Button type="button" variant="outline" asChild>
+                <a href={`/api/forms/${formId}/submissions/export`} download>
+                  <IconDownload className="h-4 w-4" />
+                  Export CSV
+                </a>
+              </Button>
+            )}
           </div>
         )}
       </div>
+
+      {!!rows?.length && (
+        <div className="relative w-full sm:w-64">
+          <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search submissions…"
+            className="pl-8"
+          />
+        </div>
+      )}
 
       {!rows ? (
         <SkeletonTable rows={5} columns={4} />
@@ -275,6 +359,12 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-sm text-muted-foreground">
             <IconFileSpreadsheet className="h-6 w-6" />
             No submissions yet. Share the form link to start collecting them.
+          </CardContent>
+        </Card>
+      ) : filteredRows && filteredRows.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-sm text-muted-foreground">
+            No submissions match &ldquo;{search}&rdquo;.
           </CardContent>
         </Card>
       ) : (
@@ -291,7 +381,7 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
+                  {filteredRows!.map((r) => (
                     <tr key={r.id} onClick={() => setOpenId(r.id)} className="cursor-pointer border-b border-border/50 last:border-0 hover:bg-primary/5">
                       <td className="px-4 py-3">
                         {r.answers.length > 0 ? (
@@ -346,10 +436,25 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
               {detail && <DialogDescription>Submitted {format(parseISO(detail.createdAt), "dd MMM yyyy, h:mm a")}</DialogDescription>}
             </div>
             {detail && form?.canEdit && !editMode && (
-              <Button type="button" size="sm" variant="outline" onClick={startEdit}>
-                <IconPencil className="h-3.5 w-3.5" />
-                Edit
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                {detail.convertedLeadId ? (
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <a href="/leads">
+                      <IconUserPlus className="h-3.5 w-3.5" />
+                      View lead
+                    </a>
+                  </Button>
+                ) : (
+                  <Button type="button" size="sm" variant="outline" onClick={startConvert}>
+                    <IconUserPlus className="h-3.5 w-3.5" />
+                    Convert to Lead
+                  </Button>
+                )}
+                <Button type="button" size="sm" variant="outline" onClick={startEdit}>
+                  <IconPencil className="h-3.5 w-3.5" />
+                  Edit
+                </Button>
+              </div>
             )}
           </DialogHeader>
           <DialogBody className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
@@ -477,6 +582,41 @@ export function FormSubmissionsView({ formId }: { formId: string }) {
         confirmLabel="Delete"
         onConfirm={confirmDelete}
       />
+
+      <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Convert to Lead</DialogTitle>
+            <DialogDescription>Pre-filled from the submission&apos;s answers — review and fix anything before creating the lead.</DialogDescription>
+          </DialogHeader>
+          <DialogBody className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Name *</Label>
+              <Input value={leadDraft.name} onChange={(e) => setLeadDraft((d) => ({ ...d, name: e.target.value }))} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Company</Label>
+              <Input value={leadDraft.company} onChange={(e) => setLeadDraft((d) => ({ ...d, company: e.target.value }))} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Email</Label>
+              <Input type="email" value={leadDraft.email} onChange={(e) => setLeadDraft((d) => ({ ...d, email: e.target.value }))} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs">Phone</Label>
+              <Input type="tel" value={leadDraft.phone} onChange={(e) => setLeadDraft((d) => ({ ...d, phone: e.target.value }))} />
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={converting} onClick={() => setConvertOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" disabled={converting || !leadDraft.name.trim()} onClick={confirmConvert}>
+              {converting ? "Creating…" : "Create Lead"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent size="lg" className="h-[90dvh] max-h-[90dvh]">

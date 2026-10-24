@@ -28,23 +28,30 @@ export interface FieldTypeMeta {
   isLayoutOnly: boolean;
   /** PASSWORD — masked everywhere the answer is shown (typing it in, and every admin view), not just stored as plain text like everything else already is. */
   isSensitive: boolean;
+  /**
+   * Which validation rules the builder offers for this type: "length" for
+   * minLength/maxLength/pattern on a text-like answer, "range" for
+   * minValue/maxValue on NUMBER, "none" for types with no free-text value
+   * to constrain (DATE, choices, files, the layout-only heading).
+   */
+  validation: "length" | "range" | "none";
 }
 
 export const FIELD_TYPE_META: Record<FormFieldType, FieldTypeMeta> = {
-  SHORT_TEXT: { type: "SHORT_TEXT", label: "Short Text", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
-  LONG_TEXT: { type: "LONG_TEXT", label: "Long Text", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
-  EMAIL: { type: "EMAIL", label: "Email", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
-  PHONE: { type: "PHONE", label: "Phone", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
-  LINK: { type: "LINK", label: "Link", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
-  PASSWORD: { type: "PASSWORD", label: "Password", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: true },
-  NUMBER: { type: "NUMBER", label: "Number", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
-  DATE: { type: "DATE", label: "Date", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false },
-  DROPDOWN: { type: "DROPDOWN", label: "Dropdown", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false },
-  RADIO: { type: "RADIO", label: "Radio Buttons", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false },
-  CHECKBOX: { type: "CHECKBOX", label: "Checkboxes", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false },
-  FILE_SINGLE: { type: "FILE_SINGLE", label: "File Upload", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false },
-  FILE_MULTI: { type: "FILE_MULTI", label: "Multiple Files", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false },
-  SECTION_HEADING: { type: "SECTION_HEADING", label: "Section Heading", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false },
+  SHORT_TEXT: { type: "SHORT_TEXT", label: "Short Text", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
+  LONG_TEXT: { type: "LONG_TEXT", label: "Long Text", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
+  EMAIL: { type: "EMAIL", label: "Email", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
+  PHONE: { type: "PHONE", label: "Phone", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
+  LINK: { type: "LINK", label: "Link", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
+  PASSWORD: { type: "PASSWORD", label: "Password", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: true, validation: "length" },
+  NUMBER: { type: "NUMBER", label: "Number", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "range" },
+  DATE: { type: "DATE", label: "Date", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
+  DROPDOWN: { type: "DROPDOWN", label: "Dropdown", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
+  RADIO: { type: "RADIO", label: "Radio Buttons", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
+  CHECKBOX: { type: "CHECKBOX", label: "Checkboxes", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
+  FILE_SINGLE: { type: "FILE_SINGLE", label: "File Upload", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, validation: "none" },
+  FILE_MULTI: { type: "FILE_MULTI", label: "Multiple Files", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, validation: "none" },
+  SECTION_HEADING: { type: "SECTION_HEADING", label: "Section Heading", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false, validation: "none" },
 };
 
 export const FIELD_PALETTE: FormFieldType[] = [
@@ -123,4 +130,50 @@ export function attachmentKindFor(fileName: string): AttachmentKind {
   if (SPREADSHEET_EXTENSIONS.has(ext)) return "spreadsheet";
   if (ARCHIVE_EXTENSIONS.has(ext)) return "archive";
   return "file";
+}
+
+/** The subset of a FormField's columns a validity check needs — matches the Prisma shape directly. */
+export interface FieldValidationRules {
+  type: FormFieldType;
+  label: string;
+  minLength?: number | null;
+  maxLength?: number | null;
+  minValue?: number | null;
+  maxValue?: number | null;
+  pattern?: string | null;
+}
+
+/**
+ * The one place min/max/pattern rules are actually checked, shared by the
+ * public form's client-side submit handler (for instant feedback) and the
+ * submit API route (the real gate — the client check never substitutes for
+ * this). Only called on a non-empty trimmed string; required/empty-value
+ * handling stays with each caller since file/checkbox fields have their own
+ * notion of "empty" this helper doesn't need to know about. Returns the
+ * first problem found, or null when the value is acceptable.
+ */
+export function validateFieldValue(field: FieldValidationRules, value: string): string | null {
+  if (field.type === "NUMBER") {
+    const n = Number(value);
+    if (Number.isNaN(n)) return `"${field.label}" must be a number`;
+    if (field.minValue != null && n < field.minValue) return `"${field.label}" must be at least ${field.minValue}`;
+    if (field.maxValue != null && n > field.maxValue) return `"${field.label}" must be at most ${field.maxValue}`;
+    return null;
+  }
+  if (field.minLength != null && value.length < field.minLength) {
+    return `"${field.label}" must be at least ${field.minLength} character${field.minLength === 1 ? "" : "s"}`;
+  }
+  if (field.maxLength != null && value.length > field.maxLength) {
+    return `"${field.label}" must be at most ${field.maxLength} character${field.maxLength === 1 ? "" : "s"}`;
+  }
+  if (field.pattern) {
+    let matches = true;
+    try {
+      matches = new RegExp(field.pattern).test(value);
+    } catch {
+      // An invalid pattern (shouldn't happen - the builder validates it before saving) never blocks a real submission.
+    }
+    if (!matches) return `"${field.label}" doesn't match the required format`;
+  }
+  return null;
 }

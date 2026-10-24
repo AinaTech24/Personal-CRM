@@ -13,7 +13,7 @@ import { useToast } from "@/components/providers/toast-provider";
 import { AttachmentPreview } from "@/components/forms/attachment-preview";
 import { Tooltip } from "@/components/ui/tooltip";
 import { MAX_DATA_URL_ATTACHMENT_BYTES as MAX_ATTACHMENT_BYTES, MAX_DATA_URL_FILES_PER_FIELD as MAX_FILES_PER_FIELD } from "@/lib/uploads";
-import { parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
+import { parseFieldOptions, validateFieldValue, type FormFieldType } from "@/lib/form-fields";
 import { IconHelpCircle, IconX } from "@/components/icons";
 
 interface PickedFile {
@@ -29,6 +29,11 @@ interface FieldDef {
   helpText: string | null;
   required: boolean;
   options: string | null;
+  minLength: number | null;
+  maxLength: number | null;
+  minValue: number | null;
+  maxValue: number | null;
+  pattern: string | null;
 }
 
 interface FormDef {
@@ -118,16 +123,41 @@ function FileInput({
   );
 }
 
+/** The constraint-validation props a text-like field's minLength/maxLength/pattern rules translate to. */
+function lengthConstraints(field: FieldDef) {
+  return {
+    minLength: field.minLength ?? undefined,
+    maxLength: field.maxLength ?? undefined,
+    pattern: field.pattern ?? undefined,
+    title: field.pattern ? "Doesn't match the required format" : undefined,
+  };
+}
+
 function FieldInput({ field, value, onChange }: { field: FieldDef; value: AnswerValue | undefined; onChange: (v: AnswerValue) => void }) {
   switch (field.type) {
     case "LONG_TEXT":
-      return <Textarea rows={4} value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? undefined} />;
+      return (
+        <Textarea
+          rows={4}
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.required}
+          placeholder={field.placeholder ?? undefined}
+          {...lengthConstraints(field)}
+        />
+      );
     case "EMAIL":
-      return <Input type="email" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? undefined} />;
+      return (
+        <Input type="email" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? undefined} {...lengthConstraints(field)} />
+      );
     case "PHONE":
-      return <Input type="tel" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? undefined} />;
+      return (
+        <Input type="tel" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? undefined} {...lengthConstraints(field)} />
+      );
     case "LINK":
-      return <Input type="url" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? "https://..."} />;
+      return (
+        <Input type="url" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? "https://..."} {...lengthConstraints(field)} />
+      );
     case "PASSWORD":
       return (
         <Input
@@ -137,10 +167,21 @@ function FieldInput({ field, value, onChange }: { field: FieldDef; value: Answer
           onChange={(e) => onChange(e.target.value)}
           required={field.required}
           placeholder={field.placeholder ?? undefined}
+          {...lengthConstraints(field)}
         />
       );
     case "NUMBER":
-      return <Input type="number" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? undefined} />;
+      return (
+        <Input
+          type="number"
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.required}
+          placeholder={field.placeholder ?? undefined}
+          min={field.minValue ?? undefined}
+          max={field.maxValue ?? undefined}
+        />
+      );
     case "DATE":
       return <Input type="date" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} />;
     case "DROPDOWN":
@@ -185,7 +226,9 @@ function FieldInput({ field, value, onChange }: { field: FieldDef; value: Answer
       return <FileInput field={field} files={files} onChange={onChange} />;
     }
     default:
-      return <Input value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? undefined} />;
+      return (
+        <Input value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} placeholder={field.placeholder ?? undefined} {...lengthConstraints(field)} />
+      );
   }
 }
 
@@ -226,6 +269,14 @@ export default function PublicFormPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form || form === "not-found") return;
+
+    for (const field of form.fields) {
+      const value = answers[field.id];
+      if (typeof value !== "string" || !value.trim()) continue;
+      const problem = validateFieldValue(field, value.trim());
+      if (problem) return toast.error("Couldn't submit the form", problem);
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch(`/api/forms/by-slug/${params.slug}/submit`, {

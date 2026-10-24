@@ -23,6 +23,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     select: {
       id: true,
       createdAt: true,
+      convertedLeadId: true,
       answers: {
         orderBy: { field: { order: "asc" } },
         select: { id: true, value: true, field: { select: { id: true, label: true, type: true } } },
