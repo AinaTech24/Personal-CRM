@@ -18,6 +18,7 @@ import { IconPencil, IconTrash, IconBell } from "@/components/icons";
 import { NewTaskDialog } from "@/components/tasks/new-task-dialog";
 import { TaskDetailDialog } from "@/components/tasks/task-detail-dialog";
 import { TasksListView } from "@/components/tasks/tasks-list-view";
+import { GlobalSearchBar } from "@/components/layout/global-search-bar";
 import { useSearch } from "@/components/providers/search-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -329,6 +330,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <GlobalSearchBar placeholder="Search tasks…" />
           <AnimatePresence initial={false}>
             {selectedIds.size > 0 ? (
               <SelectionBar

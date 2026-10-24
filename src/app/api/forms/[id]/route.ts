@@ -7,6 +7,7 @@ import { canManageForms, canViewFormSubmissions } from "@/lib/forms";
 const formInclude = {
   fields: { orderBy: { order: "asc" as const } },
   viewerDepartments: { select: { departmentId: true, department: { select: { id: true, name: true } } } },
+  department: { select: { id: true, name: true } },
 };
 
 /** The builder (admin) loads a form this way; a viewer-department's submissions page also needs the field list to label columns. */
@@ -34,6 +35,8 @@ const patchSchema = z.object({
   lockSlug: z.boolean().optional(),
   /** Replaces the full set of departments (besides Admins) who can view this form's submissions. */
   viewerDepartmentIds: z.array(z.string()).optional(),
+  /** Which department this form was built for — distinct from viewerDepartmentIds. Null clears it. */
+  departmentId: z.string().nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -48,6 +51,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const d = parsed.data;
 
+  if (d.departmentId) {
+    const department = await db.department.findUnique({ where: { id: d.departmentId } });
+    if (!department) return NextResponse.json({ error: "Department not found" }, { status: 404 });
+  }
+
   await db.$transaction(async (tx) => {
     await tx.form.update({
       where: { id },
@@ -56,6 +64,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(d.description !== undefined && { description: d.description || null }),
         ...(d.isActive !== undefined && { isActive: d.isActive }),
         ...(d.lockSlug !== undefined && { lockSlug: d.lockSlug }),
+        ...(d.departmentId !== undefined && { departmentId: d.departmentId }),
       },
     });
     if (d.viewerDepartmentIds !== undefined) {
