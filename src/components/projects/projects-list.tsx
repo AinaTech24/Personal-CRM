@@ -19,6 +19,7 @@ import { facetMatches, type FilterValue } from "@/lib/filter-utils";
 import { IconDots, IconPencil, IconTrash, IconPower } from "@/components/icons";
 import { NewProjectDialog } from "@/components/projects/new-project-dialog";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
+import { GlobalSearchBar } from "@/components/layout/global-search-bar";
 import { useSearch } from "@/components/providers/search-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -351,6 +352,7 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <GlobalSearchBar placeholder="Search projects…" />
           <AnimatePresence initial={false}>
             {selectedIds.size > 0 ? (
               <SelectionBar

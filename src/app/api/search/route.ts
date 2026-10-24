@@ -43,7 +43,9 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
-  if (q.length < 1) return NextResponse.json({ results: [] });
+  // A single character fans this out into 16 parallel `contains` queries for
+  // results too broad to be useful anyway — not worth the round trip.
+  if (q.length < 2) return NextResponse.json({ results: [] });
 
   const admin = isAdmin(user);
   const meetingVisibility = admin
