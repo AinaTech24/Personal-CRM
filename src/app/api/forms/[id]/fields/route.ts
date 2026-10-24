@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageForms } from "@/lib/forms";
-import { FORM_FIELD_TYPES, serializeFieldOptions } from "@/lib/form-fields";
+import { DEFAULT_FIELD_PATTERNS, FORM_FIELD_TYPES, serializeFieldOptions } from "@/lib/form-fields";
 
 const bodySchema = z.object({
   type: z.enum(FORM_FIELD_TYPES),
@@ -38,6 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       helpText: d.helpText || null,
       required: d.required ?? false,
       options: d.options ? serializeFieldOptions(d.options) : null,
+      pattern: DEFAULT_FIELD_PATTERNS[d.type] ?? null,
       order: (last?.order ?? -1) + 1,
     },
   });
