@@ -11,6 +11,7 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { IconBell, IconCheck, IconMail, IconMailCheck, IconTrash } from "@/components/icons";
 import {
   notificationVisual,
@@ -166,9 +167,13 @@ export default function NotificationsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Notifications</h1>
-          <p className="text-sm text-muted-foreground">Everything you&apos;ve been notified about, in one place.</p>
+          <HelpDialog title="Notifications — help">
+            <HelpSection heading="What this page is for">
+              <p>Everything you&apos;ve been notified about, in one place — task/lead assignments, mentions, approvals and more. Click one to jump straight to what it&apos;s about. These are personal to you; nobody else sees your notification list.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={markAllRead} disabled={unreadCount === 0}>
           <IconCheck className="h-4 w-4" />

@@ -12,6 +12,7 @@ import { AttendanceLegend } from "@/components/attendance/legend";
 import { YearHeatmap, type HeatmapRecord } from "@/components/attendance/year-heatmap";
 import { StatusBadge, ApprovalBadge } from "@/components/attendance/status-badge";
 import { formatIstTime, formatDuration, formatFullDate, HALF_DAY_REASON_LABEL } from "@/lib/attendance-ui";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 
 interface MeResponse {
   year: number;
@@ -87,9 +88,16 @@ export default function AttendancePage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">My Attendance</h1>
-          <p className="text-sm text-muted-foreground">Check in and out, and track your attendance over the year.</p>
+          <HelpDialog title="My Attendance — help">
+            <HelpSection heading="What this page is for">
+              <p>Check in when you start work and check out when you finish — you can also log a break (break-in/break-out), which is subtracted from your worked time. A reminder nudges you around lunchtime if you haven&apos;t taken a break yet.</p>
+            </HelpSection>
+            <HelpSection heading="The year heatmap">
+              <p>Every square is a day — its color shows your status that day (present, late, absent, on leave, holiday, weekend). Switch years with the dropdown above.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="w-28">
           <Dropdown value={String(year)} onChange={(v) => setYear(Number(v))} options={YEAR_OPTIONS} />

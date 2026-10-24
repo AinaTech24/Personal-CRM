@@ -23,6 +23,7 @@ import { GlobalSearchBar } from "@/components/layout/global-search-bar";
 import { useSearch } from "@/components/providers/search-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import {
   PROJECT_STATUSES,
   PROJECT_STATUS_VARIANT,
@@ -345,11 +346,22 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Projects</h1>
-          <p className="text-sm text-muted-foreground">
-            {filteredProjects.length} project{filteredProjects.length === 1 ? "" : "s"}
-          </p>
+          <HelpDialog title="Projects — help">
+            <HelpSection heading="What this page is for">
+              <p>Track projects with milestones, tasks, members, time logs and documents, each in its own workspace.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>See and manage every project across every department, and can bulk-reassign a project to a different owner.</p>
+            </HelpSection>
+            <HelpSection heading="Department Admins & Permission Manager grants">
+              <p>A Department Admin sees only what they&apos;re explicitly granted (Permission Manager → Projects) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else">
+              <p>You see projects you created or are a member of, regardless of department.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex items-center gap-2">
           <GlobalSearchBar placeholder="Search projects…" />

@@ -21,6 +21,7 @@ import { HorizontalScrollbar } from "@/components/ui/horizontal-scrollbar";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
 import { IconPlus, IconClock, IconUsers, IconPencil, IconTrash, IconBell } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "list" | "pipeline";
@@ -279,9 +280,22 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Meetings</h1>
-          <p className="text-sm text-muted-foreground">Schedule and track team meetings.</p>
+          <HelpDialog title="Meetings — help">
+            <HelpSection heading="What this page is for">
+              <p>Schedule meetings, invite attendees, and set a reminder — everyone invited gets a notification (and, if they turned it on, a push notification) ahead of time.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>See and manage every meeting across every department.</p>
+            </HelpSection>
+            <HelpSection heading="Department Admins & Permission Manager grants">
+              <p>A Department Admin sees only what they&apos;re explicitly granted (Permission Manager → Meetings) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else">
+              <p>You see meetings you organized or were invited to.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex items-center gap-2">
           {meetings.length > 0 && (

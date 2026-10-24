@@ -18,6 +18,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { IconChevronDown, IconExternalLink, IconEye, IconPencil, IconTrash } from "@/components/icons";
 import { ADMIN_MODULES, moduleByKey, type ModuleColumn, type ModuleConfig } from "@/lib/admin-modules";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { cn } from "@/lib/utils";
 
 type Row = Record<string, unknown> & { id: string };
@@ -421,8 +422,16 @@ export default function ModulesManagementPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
+      <div className="flex items-center gap-1.5">
         <h1 className="text-xl font-semibold">Modules management</h1>
+        <HelpDialog title="Modules management — help">
+          <HelpSection heading="What this page is for">
+            <p>A single raw-data browser across every module&apos;s records — switch between modules with the tabs above to inspect, search, and export what&apos;s stored, without going to each module&apos;s own page.</p>
+          </HelpSection>
+          <HelpSection heading="Who can see this">
+            <p>Admins and Super Admins only.</p>
+          </HelpSection>
+        </HelpDialog>
       </div>
 
       {/* Scrolls on a phone rather than wrapping into a wall of chips. */}
