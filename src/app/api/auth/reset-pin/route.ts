@@ -31,9 +31,16 @@ export async function POST(req: NextRequest) {
   }
   const normalizedMobile = normalizeMobile(mobile);
 
+  // Two independent buckets, not one combined `ip:mobile` key — a combined
+  // key lets an attacker rotate a spoofed/forwarded IP to mint a fresh
+  // budget against the *same* victim mobile number every time, since each
+  // new IP produces a new key. Keying separately means the per-mobile
+  // bucket alone caps attempts against one victim regardless of IP.
   const ip = requestDevice(req).ip ?? "unknown";
-  const { allowed, retryAfterSeconds } = rateLimit(`reset-pin:${ip}:${normalizedMobile}`, LIMIT, WINDOW_MS);
-  if (!allowed) {
+  const ipCheck = rateLimit(`reset-pin:ip:${ip}`, LIMIT, WINDOW_MS);
+  const mobileCheck = rateLimit(`reset-pin:mobile:${normalizedMobile}`, LIMIT, WINDOW_MS);
+  if (!ipCheck.allowed || !mobileCheck.allowed) {
+    const retryAfterSeconds = Math.max(ipCheck.retryAfterSeconds, mobileCheck.retryAfterSeconds);
     return NextResponse.json(
       { error: "Too many attempts. Try again in a few minutes." },
       { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
