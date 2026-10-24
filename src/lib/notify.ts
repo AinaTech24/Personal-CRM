@@ -15,7 +15,8 @@ export type NotificationCategory =
   | "forms"
   | "billing"
   | "passwords"
-  | "birthdays";
+  | "birthdays"
+  | "consulting";
 
 /** Maps every concrete notification `type` to the user-facing category it's toggled under. */
 const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
@@ -48,6 +49,7 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   password_entry_revoked: "passwords",
   birthday_gift_due: "birthdays",
   birthday_today: "birthdays",
+  consulting_update: "consulting",
 };
 
 export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: string; description: string }[] = [
@@ -79,6 +81,11 @@ export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: stri
     description: "When a credential is shared with you, your access to one is revoked, or one you own hasn't been rotated in a while",
   },
   { value: "birthdays", label: "Birthdays", description: "On someone's actual birthday, and when one's coming up with no gift picked yet" },
+  {
+    value: "consulting",
+    label: "Command Centre",
+    description: "MFD consulting work drafted for you — tasks, assessments to review, renewals, overdue actions",
+  },
 ];
 
 /**
