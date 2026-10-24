@@ -9,6 +9,7 @@ import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
 import { IconPencil, IconShare, IconTrash } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
+import { GlobalSearchBar } from "@/components/layout/global-search-bar";
 import { useSearch } from "@/components/providers/search-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import { NewQuotationDialog } from "@/components/billing/new-quotation-dialog";
@@ -190,6 +191,7 @@ export function QuotationsList() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <GlobalSearchBar placeholder="Search quotations…" />
           <AnimatePresence initial={false}>
             {selectedIds.size > 0 ? (
               <SelectionBar
