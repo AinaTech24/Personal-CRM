@@ -67,10 +67,14 @@ function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+export class BillingValidationError extends Error {}
+
 /**
  * Computes per-line totals and document totals.
  * subtotal = Σ(qty · unitPrice); gstAmount = Σ(lineTotal · gstRate%); total = subtotal + gst − discount.
- * Discount is applied to the document total, not per line.
+ * Discount is applied to the document total, not per line — and can never
+ * exceed it; a quotation's total existing to go negative makes no sense
+ * downstream (approval, PDF output, invoices, reporting all assume ≥ 0).
  */
 export function computeTotals(items: LineItemInput[], discount = 0): ComputedTotals {
   const computed = items.map((item) => {
@@ -88,7 +92,11 @@ export function computeTotals(items: LineItemInput[], discount = 0): ComputedTot
 
   const subtotal = round2(computed.reduce((sum, i) => sum + i.lineTotal, 0));
   const gstAmount = round2(computed.reduce((sum, i) => sum + i.lineTotal * (i.gstRate / 100), 0));
-  const total = round2(subtotal + gstAmount - (Number(discount) || 0));
+  const discountValue = Number(discount) || 0;
+  if (discountValue > subtotal + gstAmount) {
+    throw new BillingValidationError("Discount can't exceed the subtotal plus GST");
+  }
+  const total = round2(subtotal + gstAmount - discountValue);
 
   return { items: computed, subtotal, gstAmount, total };
 }

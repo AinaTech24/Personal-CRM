@@ -10,37 +10,25 @@ interface SocketContextValue {
 
 const SocketContext = createContext<SocketContextValue>({ socket: null, connected: false });
 
-export function SocketProvider({
-  userId,
-  departmentId,
-  isAdmin,
-  children,
-}: {
-  userId: string;
-  departmentId?: string | null;
-  isAdmin?: boolean;
-  children: React.ReactNode;
-}) {
+export function SocketProvider({ children }: { children: React.ReactNode }) {
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
+    // The server authenticates the connection itself (via the same session
+    // cookie this request already carries) and joins the user/department/
+    // admin rooms on our behalf — the client no longer tells it who to
+    // treat us as. See server.js.
     const socket = io({ path: "/socket.io" });
     socketRef.current = socket;
 
-    socket.on("connect", () => {
-      setConnected(true);
-      socket.emit("join", `user:${userId}`);
-      if (departmentId) socket.emit("join", `dept:${departmentId}`);
-      if (isAdmin) socket.emit("join", "admins");
-    });
-
+    socket.on("connect", () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
 
     return () => {
       socket.disconnect();
     };
-  }, [userId, departmentId, isAdmin]);
+  }, []);
 
   return (
     <SocketContext.Provider value={{ socket: socketRef.current, connected }}>

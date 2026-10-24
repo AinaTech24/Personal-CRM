@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import net from "node:net";
 import nodemailer from "nodemailer";
 import { db } from "@/lib/db";
+import { decryptSecret } from "@/lib/crypto";
 
 interface ResolvedConfig {
   host: string;
@@ -21,7 +22,7 @@ async function resolveConfig(): Promise<ResolvedConfig | null> {
 
   const host = row?.host || process.env.SMTP_HOST;
   const user = row?.username || process.env.SMTP_USER;
-  const password = row?.password || process.env.SMTP_PASSWORD;
+  const password = (row?.password ? decryptSecret(row.password) : null) || process.env.SMTP_PASSWORD;
   if (!host || !user || !password) return null;
 
   const port = row?.port ?? Number(process.env.SMTP_PORT ?? 587);

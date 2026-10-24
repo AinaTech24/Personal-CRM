@@ -124,13 +124,19 @@ export async function PATCH(req: NextRequest) {
     where: { id: { in: parsed.data.ids } },
     include: { members: { select: { userId: true } } },
   });
+  // Authorization is strictly about the ACTOR's own relationship to each
+  // project — it must never include the target's membership. The target
+  // being a member says nothing about whether the caller may edit the
+  // project; checking it here would let anyone reassign a project they
+  // have no relationship to, as long as they pick an assignee who already
+  // happens to be on it.
   const editable = projects.filter(
     (p) =>
       isAdmin(user) ||
       projectsScope === "all" ||
       (projectsScope !== null && p.departmentId === projectsScope.departmentId) ||
       p.createdById === user.id ||
-      p.members.some((m) => m.userId === target.id || m.userId === user.id)
+      p.members.some((m) => m.userId === user.id)
   );
 
   for (const project of editable) {

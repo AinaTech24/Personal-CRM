@@ -6,6 +6,7 @@ import { isAdmin } from "@/lib/permissions";
 import { isRestrictedFromModule } from "@/lib/social-media";
 import {
   asJson,
+  BillingValidationError,
   billingListWhere,
   canDeleteBillingRecord,
   computeTotals,
@@ -78,7 +79,13 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data;
   const departmentId = isAdmin(user) ? data.departmentId || null : user.departmentId;
-  const totals = computeTotals(data.items, data.discount);
+  let totals;
+  try {
+    totals = computeTotals(data.items, data.discount);
+  } catch (err) {
+    if (err instanceof BillingValidationError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
+  }
 
   // nextQuotationNumber() checks for a collision up front, but two people
   // creating a quotation at the same instant could still both pass that

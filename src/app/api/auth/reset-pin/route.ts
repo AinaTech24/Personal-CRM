@@ -54,11 +54,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid code" }, { status: 401 });
     }
 
+    // Same atomic-claim pattern as /api/auth/verify-code: the WHERE clause
+    // re-checks pinResetCode still equals the exact hash just verified, so
+    // two concurrent requests can't both win — only the first to update
+    // wins, the second's WHERE no longer matches once it's cleared.
     const pinHash = await hashPassword(newPin);
-    await db.user.update({
-      where: { id: user.id },
+    const claimed = await db.user.updateMany({
+      where: { id: user.id, pinResetCode: user.pinResetCode },
       data: { pinHash, pinResetCode: null, pinResetCodeExpiresAt: null },
     });
+    if (claimed.count === 0) {
+      return NextResponse.json({ error: "This code has already been used." }, { status: 409 });
+    }
 
     // Consistent with /api/auth/verify-code: a successful recovery signs the
     // user straight in rather than sending them back to a login screen.

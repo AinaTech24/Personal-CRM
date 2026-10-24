@@ -76,9 +76,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Only a company Admin can change role, department, Department Admin status, or birthday" }, { status: 403 });
   }
 
-  // Only Super Admins may create/modify Super Admin or Admin roles.
-  if (data.role !== undefined && !isSuperAdmin(user) && (data.role === "SUPER_ADMIN" || target.role === "SUPER_ADMIN")) {
-    return NextResponse.json({ error: "Only a Super Admin can change Super Admin roles" }, { status: 403 });
+  // Only Super Admins may create/modify Super Admin or Admin roles — the
+  // condition has to check ADMIN on both sides (not just SUPER_ADMIN), or a
+  // plain Admin could promote a Department User straight to Admin, or
+  // demote/edit an existing Admin, neither of which the comment intends.
+  if (
+    data.role !== undefined &&
+    !isSuperAdmin(user) &&
+    (data.role === "SUPER_ADMIN" || data.role === "ADMIN" || target.role === "SUPER_ADMIN" || target.role === "ADMIN")
+  ) {
+    return NextResponse.json({ error: "Only a Super Admin can change Admin or Super Admin roles" }, { status: 403 });
   }
 
   // Guard against locking yourself out or removing the last Super Admin.
