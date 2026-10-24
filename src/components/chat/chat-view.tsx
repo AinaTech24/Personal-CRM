@@ -38,6 +38,7 @@ import {
 } from "@/components/icons";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { AnimatedEmoji, TextWithAnimatedEmoji, isEmojiOnly, countEmoji } from "@/components/ui/animated-emoji";
 import { NOTO_EMOJI, NOTO_CATEGORIES } from "@/lib/noto-emoji";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -844,7 +845,17 @@ export function ChatView() {
       {/* Conversation list */}
       <div className={cn("flex w-full flex-col border-r border-border sm:w-72 lg:w-80", activeId && "hidden sm:flex")}>
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <h1 className="text-base font-semibold">Messages</h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-base font-semibold">Messages</h1>
+            <HelpDialog title="Messages — help">
+              <HelpSection heading="What this page is for">
+                <p>Direct and group conversations with anyone else at the company — text, file attachments, reactions, replies, and forwarding.</p>
+              </HelpSection>
+              <HelpSection heading="Who can see a conversation">
+                <p>Only its members. There&apos;s no department scoping here — membership is what controls access, same for everyone including Admins.</p>
+              </HelpSection>
+            </HelpDialog>
+          </div>
           <Button type="button" size="sm" onClick={() => setNewOpen(true)}>
             <IconPlus className="h-4 w-4" />
           </Button>

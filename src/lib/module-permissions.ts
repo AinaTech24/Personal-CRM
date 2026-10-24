@@ -60,6 +60,8 @@ export interface ModulePermissionFlags {
   canUpdate: boolean;
   canDelete: boolean;
   blocked: boolean;
+  /** Widens the grant to company-wide (every department) instead of just the grant holder's own — admin-only to set, see UserModulePermission.allDepartments. */
+  allDepartments: boolean;
 }
 
 export const NO_MODULE_ACCESS: ModulePermissionFlags = {
@@ -68,6 +70,7 @@ export const NO_MODULE_ACCESS: ModulePermissionFlags = {
   canUpdate: false,
   canDelete: false,
   blocked: false,
+  allDepartments: false,
 };
 
 export const FULL_MODULE_ACCESS: ModulePermissionFlags = {
@@ -76,6 +79,7 @@ export const FULL_MODULE_ACCESS: ModulePermissionFlags = {
   canUpdate: true,
   canDelete: true,
   blocked: false,
+  allDepartments: false,
 };
 
 export function hasModuleAction(flags: ModulePermissionFlags, action: ModuleAction): boolean {

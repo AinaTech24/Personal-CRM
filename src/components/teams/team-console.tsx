@@ -27,6 +27,7 @@ import { PageLoader } from "@/components/ui/page-loader";
 import { IconPencil, IconTrash, IconCheck, IconX, IconPlus, IconShield, IconSend } from "@/components/icons";
 import { ManagePermissionsDialog } from "@/components/permissions/manage-permissions-dialog";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/attendance/status-badge";
 import { HALF_DAY_REASON_LABEL, STATUS_LABEL } from "@/lib/attendance-ui";
@@ -127,10 +128,21 @@ export function GenericTeamConsole({ teamId }: { teamId: string }) {
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold">{team.name}</h1>
             {team.disabled && <Badge variant="destructive">Disabled</Badge>}
+            <HelpDialog title={`${team.name} — help`}>
+              <HelpSection heading="What this page is for">
+                <p>Manage who&apos;s on this custom team, and see their work and attendance — scoped to this team only, separate from the company-wide pages of the same name.</p>
+              </HelpSection>
+              <HelpSection heading="Admins & Super Admins">
+                <p>Always have full access here, same as a team lead.</p>
+              </HelpSection>
+              <HelpSection heading="Team leads">
+                <p>Add or remove members, grant the Permission Manager&apos;s module access to people on the team, and manage team-wide records.</p>
+              </HelpSection>
+              <HelpSection heading="Everyone else on the team">
+                <p>View-only — you can see the team&apos;s roster, attendance and activity, but can&apos;t manage membership or grants.</p>
+              </HelpSection>
+            </HelpDialog>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Manage who&apos;s on the team, and see their work across the CRM — scoped to this team only.
-          </p>
         </div>
         {tab === "members" && canManage && (
           <div className="flex shrink-0 items-center gap-1.5">
@@ -170,6 +182,7 @@ export function GenericTeamConsole({ teamId }: { teamId: string }) {
           team={team}
           meId={meId}
           canManage={canManage}
+          isAdmin={isAdmin}
           addOpen={addOpen}
           setAddOpen={setAddOpen}
           inviteOpen={inviteOpen}
@@ -195,6 +208,7 @@ function MembersTab({
   team,
   meId,
   canManage,
+  isAdmin,
   addOpen,
   setAddOpen,
   inviteOpen,
@@ -205,6 +219,7 @@ function MembersTab({
   team: TeamDetail;
   meId: string | null;
   canManage: boolean;
+  isAdmin: boolean;
   addOpen: boolean;
   setAddOpen: (v: boolean) => void;
   inviteOpen: boolean;
@@ -458,7 +473,7 @@ function MembersTab({
         </DialogContent>
       </Dialog>
 
-      <ManagePermissionsDialog user={permsUser} onOpenChange={(open) => !open && setPermsUser(null)} />
+      <ManagePermissionsDialog user={permsUser} onOpenChange={(open) => !open && setPermsUser(null)} isAdmin={isAdmin} />
 
       <ConfirmDialog
         open={!!removing}

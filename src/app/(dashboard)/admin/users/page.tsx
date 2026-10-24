@@ -19,6 +19,7 @@ import { Dropdown } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/date-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { IconSend, IconPencil, IconTrash, IconX, IconCheck, IconKey, IconShield, IconDownload } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
@@ -344,9 +345,19 @@ export default function UsersPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Users &amp; Invites</h1>
-          <p className="text-sm text-muted-foreground">Invite-only access, restricted to @ainatech.in addresses.</p>
+          <HelpDialog title="Users & Invites — help">
+            <HelpSection heading="What this page is for">
+              <p>Invite new people (invite-only, restricted to @ainatech.in addresses unless an admin allows a public provider), assign their department and role, and block, edit, or delete an existing account.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>Can invite anyone, change anyone&apos;s role or department, and block/delete any account. Only a Super Admin can create or edit another Admin or Super Admin.</p>
+            </HelpSection>
+            <HelpSection heading="Department Admins">
+              <p>Can invite and edit people within their own department, but not change their role, department, or Department Admin status, and never touch an Admin or Super Admin account.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex items-center gap-1.5">
           <Tooltip label="Export CSV" side="bottom">

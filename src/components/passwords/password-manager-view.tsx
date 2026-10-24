@@ -28,6 +28,7 @@ import {
   IconX,
 } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { cn } from "@/lib/utils";
 
 interface PersonRef {
@@ -219,11 +220,19 @@ export function PasswordManagerView() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Password Manager</h1>
-          <p className="text-sm text-muted-foreground">
-            Shared credentials for your department — share a specific one with anyone else if they need it.
-          </p>
+          <HelpDialog title="Password Manager — help">
+            <HelpSection heading="What this page is for">
+              <p>Store shared credentials (label, link, username, password) and look them up again later. Passwords are encrypted at rest and only ever shown in full when you click the eye icon — every reveal is logged.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>See and manage every entry, in every department, and can move an entry to a different department.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else">
+              <p>You see your own department&apos;s entries, plus any entry someone specifically shared with you. Only an admin, or the entry&apos;s creator, can edit or delete it.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex items-center gap-2">
           {entries && entries.length > 0 && (

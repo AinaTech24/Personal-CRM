@@ -18,7 +18,14 @@ export async function getUserModuleMatrix(userId: string): Promise<Record<Manage
   for (const moduleKey of MANAGED_MODULES) {
     const row = byModule.get(moduleKey);
     matrix[moduleKey] = row
-      ? { canCreate: row.canCreate, canRead: row.canRead, canUpdate: row.canUpdate, canDelete: row.canDelete, blocked: row.blocked }
+      ? {
+          canCreate: row.canCreate,
+          canRead: row.canRead,
+          canUpdate: row.canUpdate,
+          canDelete: row.canDelete,
+          blocked: row.blocked,
+          allDepartments: row.allDepartments,
+        }
       : { ...NO_MODULE_ACCESS };
   }
   return matrix;
@@ -61,18 +68,23 @@ export async function canManageModule(user: PermissionUser, module: ManagedModul
 /**
  * How far a module grant widens this user's record visibility for a
  * list/scope query — the intended hierarchy is company Admin (everything)
- * above a department-scoped grant (everything in their own department)
- * above an ungranted user (their own records only, handled by the caller's
- * existing own-record fallback, not by this function).
+ * above a company-wide grant (everything, same breadth as an Admin, but for
+ * one module only) above a department-scoped grant (everything in their own
+ * department) above an ungranted user (their own records only, handled by
+ * the caller's existing own-record fallback, not by this function).
  *
  * A module grant from the Permission Manager is deliberately NOT a
- * company-wide bypass for anyone but a real company Admin — it's how a
- * department's lead gets full CRUD over their own department's records
- * (Tasks, Leads, Meetings, Projects, Clients, Attendance, Leave), mirroring
- * the Department Admin / Department User hierarchy. A grant holder with no
- * department of their own has nothing to scope to, so this returns null —
- * same as not holding the grant at all; the caller's own-record fallback
- * still applies.
+ * company-wide bypass for anyone but a real company Admin by default — it's
+ * how a department's lead gets full CRUD over their own department's
+ * records (Tasks, Leads, Meetings, Projects, Clients, Attendance, Leave),
+ * mirroring the Department Admin / Department User hierarchy. The grant's
+ * own `allDepartments` flag (admin-only to set — see the Permission
+ * Manager's PUT handler) is the deliberate exception: it lets a company
+ * Admin hand one person admin-level visibility into one specific module
+ * without making them a full Admin. A grant holder with no department of
+ * their own, and no `allDepartments`, has nothing to scope to, so this
+ * returns null — same as not holding the grant at all; the caller's
+ * own-record fallback still applies.
  */
 export async function moduleAccessScope(
   user: PermissionUser,
@@ -80,7 +92,9 @@ export async function moduleAccessScope(
   action: ModuleAction
 ): Promise<"all" | { departmentId: string } | null> {
   if (isAdmin(user)) return "all";
-  if (!(await canManageModule(user, module, action))) return null;
+  const row = await db.userModulePermission.findUnique({ where: { userId_module: { userId: user.id, module } } });
+  if (!row || !hasModuleAction(row, action)) return null;
+  if (row.allDepartments) return "all";
   return user.departmentId ? { departmentId: user.departmentId } : null;
 }
 
@@ -121,7 +135,14 @@ export async function getModuleGrantees(module: ManagedModule): Promise<ModuleGr
   });
   return rows.map((r) => ({
     userId: r.userId,
-    flags: { canCreate: r.canCreate, canRead: r.canRead, canUpdate: r.canUpdate, canDelete: r.canDelete, blocked: r.blocked },
+    flags: {
+      canCreate: r.canCreate,
+      canRead: r.canRead,
+      canUpdate: r.canUpdate,
+      canDelete: r.canDelete,
+      blocked: r.blocked,
+      allDepartments: r.allDepartments,
+    },
   }));
 }
 

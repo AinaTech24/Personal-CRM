@@ -14,6 +14,7 @@ import {
   IconUsers,
 } from "@/components/icons";
 import { useSocket } from "@/components/providers/socket-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { Chart, CHART_TYPES, type Slice } from "@/components/dashboard/charts";
 import { useDashboardActivity } from "@/components/dashboard/dashboard-activity";
 import { useDashboardUserView } from "@/components/dashboard/dashboard-user-view";
@@ -135,7 +136,7 @@ function ChartCard({
   );
 }
 
-export function DashboardStats({ greetingName = "" }: { greetingName?: string }) {
+export function DashboardStats() {
   const router = useRouter();
   const { socket } = useSocket();
   // This component only renders for admins (see the dashboard page's own
@@ -218,11 +219,16 @@ export function DashboardStats({ greetingName = "" }: { greetingName?: string })
   const header = (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">
-            Welcome back{greetingName ? `, ${greetingName}` : ""} — live overview across all modules
-          </p>
+          <HelpDialog title="Dashboard — help">
+            <HelpSection heading="What this page is for">
+              <p>A live, company-wide overview across every module — stats, charts, and recent activity. Filter by department or view it as if you were a specific person, using the controls above.</p>
+            </HelpSection>
+            <HelpSection heading="Who can see this">
+              <p>Admins and Super Admins only — everyone else gets their own personal dashboard instead.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {departmentFilterButton}

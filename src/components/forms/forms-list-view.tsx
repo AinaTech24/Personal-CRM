@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActionsMenu } from "@/components/ui/row-actions";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { copyTextFromAsync } from "@/lib/clipboard";
 import { IconBuilding, IconCode, IconCopy, IconEye, IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
 
@@ -157,9 +158,19 @@ export function FormsListView() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Forms</h1>
-          <p className="text-sm text-muted-foreground">Build public forms and review what people submit.</p>
+          <HelpDialog title="Forms — help">
+            <HelpSection heading="What this page is for">
+              <p>Build a public form with the drag-and-drop builder (text, choice, file-upload fields, validation, conditional &quot;show this field only if…&quot; logic, and multi-step pages), share its link, and review what people submit — including exporting to CSV or converting a submission straight into a Lead.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins and Department/CRM/Social Media leads">
+              <p>Can build, edit, and delete any form, and see every form that exists.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else">
+              <p>Read-only — you see a form&apos;s submissions only if an admin shared that form with your department.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex items-center gap-2">
           {rows && rows.length > 0 && (

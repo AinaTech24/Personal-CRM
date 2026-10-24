@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SkeletonForm } from "@/components/ui/skeleton";
 import { IconInfo } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { TOGGLEABLE_MODULES } from "@/lib/modules";
 import { cn } from "@/lib/utils";
 
@@ -76,11 +77,16 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="flex items-center gap-1.5">
         <h1 className="text-xl font-semibold">Application</h1>
-        <p className="text-sm text-muted-foreground">
-          Server settings you can change here instead of editing files on the server.
-        </p>
+        <HelpDialog title="Application settings — help">
+          <HelpSection heading="What this page is for">
+            <p>Company-wide server settings — like the app&apos;s public URL used in invite links — changeable here instead of editing a file on the server.</p>
+          </HelpSection>
+          <HelpSection heading="Who can see this">
+            <p>Admins and Super Admins only.</p>
+          </HelpSection>
+        </HelpDialog>
       </div>
 
       <Card>

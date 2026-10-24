@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { IconPencil, IconTrash } from "@/components/icons";
 import {
   CATEGORY_OPTIONS,
@@ -172,11 +173,19 @@ export function LeaveAdminView({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Leave Requests</h1>
-          <p className="text-sm text-muted-foreground">
-            Approve or reject your team&apos;s leave. Approved leave is marked on their attendance automatically.
-          </p>
+          <HelpDialog title="Leave Requests — help">
+            <HelpSection heading="What this page is for">
+              <p>Review and decide on leave requests. Approving a request automatically marks that day on the person&apos;s attendance — no separate step needed.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>See and decide on every request across every department.</p>
+            </HelpSection>
+            <HelpSection heading="Department Admins & Permission Manager grants">
+              <p>See and decide on requests only where explicitly granted (Permission Manager → Leave) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <Dropdown
           size="sm"

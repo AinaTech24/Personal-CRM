@@ -19,6 +19,7 @@ import { buildInvoiceHtml } from "@/components/billing/invoice-print";
 import { downloadInvoicePdf } from "@/components/billing/pdf";
 import { shareDocument } from "@/components/billing/share";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { formatMoney, cn } from "@/lib/utils";
 import {
   INVOICE_STATUS_VARIANT,
@@ -185,11 +186,19 @@ export function InvoicesList() {
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Invoices</h1>
-          <p className="text-sm text-muted-foreground">
-            {filtered.length} invoice{filtered.length === 1 ? "" : "s"}
-          </p>
+          <HelpDialog title="Invoices — help">
+            <HelpSection heading="What this page is for">
+              <p>Create and send invoices, record payments against them, and track which are paid, overdue, or still outstanding. An invoice can also be generated directly from an approved quotation.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>See every invoice, company-wide.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else">
+              <p>You see only the invoices you created — sharing a department doesn&apos;t by itself show you a colleague&apos;s invoices.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex items-center gap-2">
           <GlobalSearchBar placeholder="Search invoices…" />

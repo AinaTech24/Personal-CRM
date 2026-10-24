@@ -30,17 +30,52 @@ import { useToast } from "@/components/providers/toast-provider";
 import { copyTextFromAsync } from "@/lib/clipboard";
 import { CONDITION_OPERATORS, FIELD_PAIR_SHORTCUTS, FIELD_PALETTE, FIELD_TYPE_META, parseFieldOptions, type FormFieldType } from "@/lib/form-fields";
 import {
+  IconCalendar,
   IconCheck,
   IconChevronDown,
+  IconChevronSquare,
   IconCopy,
   IconExternalLink,
   IconFile,
+  IconFiles,
   IconGrid,
+  IconHash,
+  IconHeading,
   IconHelpCircle,
+  IconKey,
+  IconLink,
+  IconListView,
+  IconMail,
+  IconPageBreak,
+  IconPhone,
   IconPlus,
+  IconRadioButton,
+  IconSelect,
+  IconTextBox,
   IconTrash,
+  IconUpload,
+  type IconProps,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
+
+/** One distinct glyph per field type, so the palette doesn't repeat the same icon for every item. */
+const FIELD_TYPE_ICON: Record<FormFieldType, (props: IconProps) => React.JSX.Element> = {
+  SHORT_TEXT: IconTextBox,
+  LONG_TEXT: IconListView,
+  EMAIL: IconMail,
+  PHONE: IconPhone,
+  LINK: IconLink,
+  PASSWORD: IconKey,
+  NUMBER: IconHash,
+  DATE: IconCalendar,
+  DROPDOWN: IconChevronSquare,
+  RADIO: IconRadioButton,
+  CHECKBOX: IconSelect,
+  FILE_SINGLE: IconUpload,
+  FILE_MULTI: IconFiles,
+  SECTION_HEADING: IconHeading,
+  PAGE_BREAK: IconPageBreak,
+};
 
 interface FieldRow {
   id: string;
@@ -105,6 +140,7 @@ function EmptyCanvas() {
 
 function PaletteItem({ type, onAdd }: { type: FormFieldType; onAdd: () => void }) {
   const meta = FIELD_TYPE_META[type];
+  const Icon = FIELD_TYPE_ICON[type];
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `palette-${type}`, data: { kind: "palette", type } });
   return (
     <button
@@ -118,7 +154,7 @@ function PaletteItem({ type, onAdd }: { type: FormFieldType; onAdd: () => void }
         isDragging && "opacity-40"
       )}
     >
-      <IconFile className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
       {meta.label}
     </button>
   );
@@ -134,8 +170,12 @@ function FieldSettings({ field, allFields, onChange }: { field: FieldRow; allFie
     onChange({ options: next.join("|") });
   }
 
+  // Everything here is short enough to share a row instead of claiming a
+  // full-width one to itself — a 2-column grid pairs Placeholder with Help
+  // text (or with Preview, for a Link field), and the validation row packs
+  // min/max plus the Required toggle into one line instead of three.
   return (
-    <div className="flex flex-col gap-3 border-t border-border/60 bg-muted/20 px-4 py-3">
+    <div className="grid grid-cols-1 items-start gap-3 border-t border-border/60 bg-muted/20 px-4 py-3 sm:grid-cols-2">
       {!meta.isLayoutOnly && (
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs">Placeholder</Label>
@@ -149,7 +189,7 @@ function FieldSettings({ field, allFields, onChange }: { field: FieldRow; allFie
       {field.type === "LINK" && (
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs">Preview</Label>
-          <div className="flex items-center gap-2 rounded-md border border-dashed border-input px-3 py-2 text-sm text-muted-foreground">
+          <div className="flex h-9 items-center gap-2 rounded-md border border-dashed border-input px-3 text-sm text-muted-foreground">
             <IconExternalLink className="h-4 w-4 shrink-0" />
             <span className="truncate">{field.placeholder?.trim() || "https://..."}</span>
           </div>
@@ -160,7 +200,7 @@ function FieldSettings({ field, allFields, onChange }: { field: FieldRow; allFie
         <Textarea rows={2} value={field.helpText ?? ""} onChange={(e) => onChange({ helpText: e.target.value })} />
       </div>
       {meta.hasOptions && (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
           <Label className="text-xs">Choices</Label>
           <div className="flex flex-col gap-1">
             {options.map((o, i) => (
@@ -209,58 +249,60 @@ function FieldSettings({ field, allFields, onChange }: { field: FieldRow; allFie
           </div>
         </div>
       )}
-      {meta.validation === "length" && (
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Validation</Label>
-          <div className="flex items-center gap-1.5">
-            <Input
-              type="number"
-              min={0}
-              value={field.minLength ?? ""}
-              onChange={(e) => onChange({ minLength: numberOrNull(e.target.value) })}
-              placeholder="Min length"
-              className="h-8"
-            />
-            <Input
-              type="number"
-              min={0}
-              value={field.maxLength ?? ""}
-              onChange={(e) => onChange({ maxLength: numberOrNull(e.target.value) })}
-              placeholder="Max length"
-              className="h-8"
-            />
-          </div>
-          <Input
-            value={field.pattern ?? ""}
-            onChange={(e) => onChange({ pattern: e.target.value || null })}
-            placeholder="Regex pattern (optional)"
-            className="h-8 font-mono"
-          />
-        </div>
-      )}
-      {meta.validation === "range" && (
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Validation</Label>
-          <div className="flex items-center gap-1.5">
-            <Input
-              type="number"
-              value={field.minValue ?? ""}
-              onChange={(e) => onChange({ minValue: numberOrNull(e.target.value) })}
-              placeholder="Min value"
-              className="h-8"
-            />
-            <Input
-              type="number"
-              value={field.maxValue ?? ""}
-              onChange={(e) => onChange({ maxValue: numberOrNull(e.target.value) })}
-              placeholder="Max value"
-              className="h-8"
-            />
-          </div>
+      {(meta.validation !== "none" || !meta.isLayoutOnly) && (
+        <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+          {meta.validation === "length" && (
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Length</Label>
+              <Input
+                type="number"
+                min={0}
+                value={field.minLength ?? ""}
+                onChange={(e) => onChange({ minLength: numberOrNull(e.target.value) })}
+                placeholder="Min"
+                className="h-8 w-20"
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                type="number"
+                min={0}
+                value={field.maxLength ?? ""}
+                onChange={(e) => onChange({ maxLength: numberOrNull(e.target.value) })}
+                placeholder="Max"
+                className="h-8 w-20"
+              />
+            </div>
+          )}
+          {meta.validation === "range" && (
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Value</Label>
+              <Input
+                type="number"
+                value={field.minValue ?? ""}
+                onChange={(e) => onChange({ minValue: numberOrNull(e.target.value) })}
+                placeholder="Min"
+                className="h-8 w-20"
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                type="number"
+                value={field.maxValue ?? ""}
+                onChange={(e) => onChange({ maxValue: numberOrNull(e.target.value) })}
+                placeholder="Max"
+                className="h-8 w-20"
+              />
+            </div>
+          )}
+          {!meta.isLayoutOnly && (
+            <label className="ml-auto flex items-center gap-2 text-xs">
+              Required
+              <ToggleSwitch checked={field.required} onChange={(v) => onChange({ required: v })} />
+            </label>
+          )}
         </div>
       )}
       {!meta.isLayoutOnly && (
-        <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3">
+        <div className="flex flex-col gap-1.5 border-t border-border/60 pt-3 sm:col-span-2">
           <Label className="text-xs">Show this field only if…</Label>
           <Dropdown
             value={field.conditionFieldId ?? ""}
@@ -297,12 +339,6 @@ function FieldSettings({ field, allFields, onChange }: { field: FieldRow; allFie
             </div>
           )}
         </div>
-      )}
-      {!meta.isLayoutOnly && (
-        <label className="flex items-center gap-2 text-xs">
-          <Checkbox checked={field.required} onChange={(v) => onChange({ required: v })} />
-          Required
-        </label>
       )}
     </div>
   );
@@ -620,12 +656,16 @@ export function FormBuilderView({ formId }: { formId: string }) {
         </div>
 
         <DragOverlay>
-          {activeDragType && (
-            <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-card px-3 py-2 text-sm shadow-lg">
-              <IconFile className="h-4 w-4 text-muted-foreground" />
-              {FIELD_TYPE_META[activeDragType].label}
-            </div>
-          )}
+          {activeDragType &&
+            (() => {
+              const DragIcon = FIELD_TYPE_ICON[activeDragType];
+              return (
+                <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-card px-3 py-2 text-sm shadow-lg">
+                  <DragIcon className="h-4 w-4 text-muted-foreground" />
+                  {FIELD_TYPE_META[activeDragType].label}
+                </div>
+              );
+            })()}
         </DragOverlay>
       </DndContext>
 

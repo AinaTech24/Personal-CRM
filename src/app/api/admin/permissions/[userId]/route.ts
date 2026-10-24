@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { canManagePermissionsFor } from "@/lib/permissions";
+import { canManagePermissionsFor, isAdmin } from "@/lib/permissions";
 import { getUserModuleMatrix, setUserModuleMatrix } from "@/lib/module-permissions-store";
-import { MANAGED_MODULES } from "@/lib/module-permissions";
+import { MANAGED_MODULES, type ManagedModule, type ModulePermissionFlags } from "@/lib/module-permissions";
 import { sharesLedTeamWith } from "@/lib/teams";
 
 /**
@@ -38,6 +38,7 @@ const flagsSchema = z.object({
   canUpdate: z.boolean(),
   canDelete: z.boolean(),
   blocked: z.boolean(),
+  allDepartments: z.boolean(),
 });
 
 const bodySchema = z.object({
@@ -59,7 +60,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ user
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
-  await setUserModuleMatrix(userId, parsed.data.matrix);
-  const matrix = await getUserModuleMatrix(userId);
-  return NextResponse.json({ matrix });
+  let matrix = parsed.data.matrix as Record<ManagedModule, ModulePermissionFlags>;
+  if (!isAdmin(actor)) {
+    // Only a company Admin may grant company-wide (all-department) scope —
+    // a Department Admin or team lead could otherwise hand one of their
+    // people more reach than they themselves have. Keep whatever each
+    // module's allDepartments already was; silently ignore anything else a
+    // non-admin actor sent for it.
+    const current = await getUserModuleMatrix(userId);
+    matrix = Object.fromEntries(
+      MANAGED_MODULES.map((m) => [m, { ...matrix[m], allDepartments: current[m].allDepartments }])
+    ) as Record<ManagedModule, ModulePermissionFlags>;
+  }
+
+  await setUserModuleMatrix(userId, matrix);
+  const updated = await getUserModuleMatrix(userId);
+  return NextResponse.json({ matrix: updated });
 }

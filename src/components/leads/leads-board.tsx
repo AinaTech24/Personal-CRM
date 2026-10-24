@@ -26,6 +26,7 @@ import { GlobalSearchBar } from "@/components/layout/global-search-bar";
 import { useSearch } from "@/components/providers/search-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import {
   getLeadStatusOptions,
   MEETING_STATUS_OPTIONS,
@@ -389,11 +390,25 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Leads</h1>
-          <p className="text-sm text-muted-foreground">
-            {filteredLeads.length} lead{filteredLeads.length === 1 ? "" : "s"} in your pipeline
-          </p>
+          <HelpDialog title="Leads — help">
+            <HelpSection heading="What this page is for">
+              <p>Track prospective clients from first contact through to a won or lost deal, in a Kanban board you can drag between stages.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>See and manage every lead across every department, and can bulk reassign, export, or delete leads.</p>
+            </HelpSection>
+            <HelpSection heading="Department Admins & Permission Manager grants">
+              <p>A Department Admin sees only what they&apos;re explicitly granted (Permission Manager → Leads). A grant without &quot;All departments&quot; turned on covers that person&apos;s own department; with it on, it covers every department, same as an Admin.</p>
+            </HelpSection>
+            <HelpSection heading="CRM Team leads">
+              <p>A CRM Team lead additionally sees every lead created by or assigned to anyone on their team, regardless of department.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else">
+              <p>You see leads you created or are assigned to, plus any lead that isn&apos;t tied to a specific department.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex items-center gap-2">
           <GlobalSearchBar placeholder="Search leads…" />

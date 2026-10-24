@@ -24,6 +24,7 @@ import { SkeletonForm } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { IconPencil, IconTrash, IconSend, IconCheck, IconX, IconPlus } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { cn } from "@/lib/utils";
 import { ClientPipeline } from "@/components/social-media/client-pipeline";
 import { StatusBadge } from "@/components/attendance/status-badge";
@@ -84,12 +85,22 @@ export function SocialMediaTeamConsole() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Social Media Team</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage who&apos;s on the team, and see their attendance and activity across the whole CRM — scoped to
-            this team only.
-          </p>
+          <HelpDialog title="Social Media Team — help">
+            <HelpSection heading="What this page is for">
+              <p>Manage who&apos;s on the Social Media team, and see their attendance and activity — the Clients/Content/Ads/Leads tabs here are scoped to this team only, separate from the company-wide pages of the same name.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>Always have full access here, same as a team lead.</p>
+            </HelpSection>
+            <HelpSection heading="Social Media Team leads">
+              <p>Add or remove members, grant the Permission Manager&apos;s module access to people on the team, and manage team-wide records.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else on the team">
+              <p>View-only — you can see the team&apos;s roster, attendance and activity, but can&apos;t manage membership or grants.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         {tab === "members" && (
           <div className="flex shrink-0 items-center gap-1.5">

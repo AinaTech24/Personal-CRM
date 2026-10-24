@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { RowActionsMenu } from "@/components/ui/row-actions";
 import { useToast } from "@/components/providers/toast-provider";
 import { IconPencil, IconTrash, IconPlus, IconPower } from "@/components/icons";
@@ -140,9 +141,19 @@ export default function TeamsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Teams</h1>
-          <p className="text-sm text-muted-foreground">Social Media, CRM, and any other team of your own.</p>
+          <HelpDialog title="Teams — help">
+            <HelpSection heading="What this page is for">
+              <p>Every team you&apos;re part of or lead: the built-in Social Media and CRM teams, plus any custom team an Admin creates. Open one to manage its members and see its own Tasks/Leads/attendance/activity.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>Can create a new team and see every team that exists.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else">
+              <p>You see only the teams you&apos;re a member of.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         {isAdmin && (
           <Tooltip label="New team" side="bottom">

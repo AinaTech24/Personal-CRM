@@ -7,6 +7,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Input } from "@/components/ui/input";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useToast } from "@/components/providers/toast-provider";
 import { GiftHistory } from "@/components/birthdays/gift-history";
@@ -131,14 +132,23 @@ export default function AdminBirthdaysPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="flex items-center gap-1.5">
         <h1 className="text-xl font-semibold">Birthdays</h1>
-        <p className="text-sm text-muted-foreground">
-          Set each person&apos;s date of birth and choose a gift for their next birthday: pick Hamper, Cake or Plant, or
-          choose Other and type anything you like. On the day, everyone sees a birthday wish from the Aina Family,
-          including the gift, on their dashboard and the Birthdays page. Colleagues see only the day and month, never
-          the year, and the gift stays a surprise until the day.
-        </p>
+        <HelpDialog title="Birthdays — help">
+          <HelpSection heading="What this page is for">
+            <p>
+              Set each person&apos;s date of birth and choose a gift for their next birthday: pick Hamper, Cake or
+              Plant, or choose Other and type anything you like. On the day, everyone sees a birthday wish from the
+              Aina Family, including the gift, on their dashboard and the Birthdays page.
+            </p>
+          </HelpSection>
+          <HelpSection heading="Privacy">
+            <p>Colleagues see only the day and month, never the year, and the gift stays a surprise until the day.</p>
+          </HelpSection>
+          <HelpSection heading="Who can see this">
+            <p>Admins and Super Admins only.</p>
+          </HelpSection>
+        </HelpDialog>
       </div>
 
       {!rows ? (

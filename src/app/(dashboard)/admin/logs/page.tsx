@@ -10,6 +10,7 @@ import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import * as Popover from "@radix-ui/react-popover";
 import { IconCopy, IconEye, IconFilter } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -208,6 +209,14 @@ export default function AuditLogsPage() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold">View logs</h1>
+          <HelpDialog title="View logs — help">
+            <HelpSection heading="What this page is for">
+              <p>Every create/update/delete across the whole app, who did it and when — an audit trail, not an activity feed for you personally (see My Activity for that).</p>
+            </HelpSection>
+            <HelpSection heading="Who can see this">
+              <p>Admins and Super Admins only.</p>
+            </HelpSection>
+          </HelpDialog>
           {newCount > 0 && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />

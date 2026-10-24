@@ -19,6 +19,7 @@ import { buildQuotationHtml } from "@/components/billing/quotation-print";
 import { downloadQuotationPdf } from "@/components/billing/pdf";
 import { shareDocument } from "@/components/billing/share";
 import { useToast } from "@/components/providers/toast-provider";
+import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { formatMoney, cn } from "@/lib/utils";
 import {
   QUOTATION_STATUS_VARIANT,
@@ -184,11 +185,19 @@ export function QuotationsList() {
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Quotations</h1>
-          <p className="text-sm text-muted-foreground">
-            {filtered.length} quotation{filtered.length === 1 ? "" : "s"}
-          </p>
+          <HelpDialog title="Quotations — help">
+            <HelpSection heading="What this page is for">
+              <p>Draft a quotation with line items, GST and a discount, send it for approval, and convert an approved one straight into an invoice.</p>
+            </HelpSection>
+            <HelpSection heading="Admins & Super Admins">
+              <p>See every quotation, company-wide, and are the only ones who can approve or reject a sent quotation.</p>
+            </HelpSection>
+            <HelpSection heading="Everyone else">
+              <p>You see only the quotations you created — sharing a department doesn&apos;t by itself show you a colleague&apos;s quotations.</p>
+            </HelpSection>
+          </HelpDialog>
         </div>
         <div className="flex items-center gap-2">
           <GlobalSearchBar placeholder="Search quotations…" />
