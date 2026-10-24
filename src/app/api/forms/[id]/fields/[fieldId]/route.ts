@@ -11,6 +11,25 @@ const patchSchema = z.object({
   helpText: z.string().trim().max(1000).nullable().optional(),
   required: z.boolean().optional(),
   options: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
+  minLength: z.number().int().min(0).max(5000).nullable().optional(),
+  maxLength: z.number().int().min(0).max(5000).nullable().optional(),
+  minValue: z.number().int().nullable().optional(),
+  maxValue: z.number().int().nullable().optional(),
+  pattern: z
+    .string()
+    .trim()
+    .max(500)
+    .nullable()
+    .optional()
+    .refine((p) => {
+      if (!p) return true;
+      try {
+        new RegExp(p);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Invalid pattern"),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string; fieldId: string }> }) {
@@ -33,6 +52,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(d.helpText !== undefined && { helpText: d.helpText || null }),
       ...(d.required !== undefined && { required: d.required }),
       ...(d.options !== undefined && { options: serializeFieldOptions(d.options) || null }),
+      ...(d.minLength !== undefined && { minLength: d.minLength }),
+      ...(d.maxLength !== undefined && { maxLength: d.maxLength }),
+      ...(d.minValue !== undefined && { minValue: d.minValue }),
+      ...(d.maxValue !== undefined && { maxValue: d.maxValue }),
+      ...(d.pattern !== undefined && { pattern: d.pattern || null }),
     },
   });
 

@@ -50,6 +50,11 @@ interface FieldRow {
   required: boolean;
   order: number;
   options: string | null;
+  minLength: number | null;
+  maxLength: number | null;
+  minValue: number | null;
+  maxValue: number | null;
+  pattern: string | null;
 }
 
 interface Department {
@@ -70,6 +75,13 @@ interface FormDetail {
 }
 
 const DROP_ZONE_ID = "form-canvas";
+
+/** An empty validation-bound input clears the rule rather than saving it as 0. */
+function numberOrNull(raw: string): number | null {
+  if (raw.trim() === "") return null;
+  const n = Number(raw);
+  return Number.isNaN(n) ? null : Math.trunc(n);
+}
 
 /**
  * The canvas's own droppable zone, mounted only while it has no fields yet.
@@ -190,6 +202,56 @@ function FieldSettings({ field, onChange }: { field: FieldRow; onChange: (patch:
                 <IconPlus className="h-3.5 w-3.5" />
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+      {meta.validation === "length" && (
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Validation</Label>
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="number"
+              min={0}
+              value={field.minLength ?? ""}
+              onChange={(e) => onChange({ minLength: numberOrNull(e.target.value) })}
+              placeholder="Min length"
+              className="h-8"
+            />
+            <Input
+              type="number"
+              min={0}
+              value={field.maxLength ?? ""}
+              onChange={(e) => onChange({ maxLength: numberOrNull(e.target.value) })}
+              placeholder="Max length"
+              className="h-8"
+            />
+          </div>
+          <Input
+            value={field.pattern ?? ""}
+            onChange={(e) => onChange({ pattern: e.target.value || null })}
+            placeholder="Regex pattern (optional)"
+            className="h-8 font-mono"
+          />
+        </div>
+      )}
+      {meta.validation === "range" && (
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Validation</Label>
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="number"
+              value={field.minValue ?? ""}
+              onChange={(e) => onChange({ minValue: numberOrNull(e.target.value) })}
+              placeholder="Min value"
+              className="h-8"
+            />
+            <Input
+              type="number"
+              value={field.maxValue ?? ""}
+              onChange={(e) => onChange({ maxValue: numberOrNull(e.target.value) })}
+              placeholder="Max value"
+              className="h-8"
+            />
           </div>
         </div>
       )}

@@ -12,7 +12,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActionsMenu } from "@/components/ui/row-actions";
 import { useToast } from "@/components/providers/toast-provider";
 import { copyTextFromAsync } from "@/lib/clipboard";
-import { IconCopy, IconEye, IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
+import { IconCode, IconCopy, IconEye, IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
 
 interface FormRow {
   id: string;
@@ -82,6 +82,20 @@ export function FormsListView() {
       setRows((prev) => (prev ? prev.map((r) => (r.id === row.id ? { ...r, slug } : r)) : prev));
     } catch (err) {
       toast.error("Couldn't copy the link", err instanceof Error ? err.message : undefined);
+    }
+  }
+
+  // Uses the form's current slug as-is — unlike copyLink, this never rotates
+  // it. An embed is pasted once into someone else's site and left there;
+  // rotating the slug on every copy would break every page it's already on.
+  async function copyEmbedCode(row: FormRow) {
+    const src = `${window.location.origin}/f/${row.slug}?embedded=true`;
+    const snippet = `<iframe src="${src}" style="width:100%;max-width:640px;height:800px;border:0" title="${row.title.replace(/"/g, "&quot;")}"></iframe>`;
+    try {
+      await navigator.clipboard.writeText(snippet);
+      toast.success("Embed code copied", "Paste it into any page's HTML.");
+    } catch {
+      toast.error("Couldn't copy the embed code");
     }
   }
 
@@ -183,6 +197,12 @@ export function FormsListView() {
                                   label: "Copy link",
                                   icon: <IconCopy className="h-4 w-4" />,
                                   onSelect: () => copyLink(r),
+                                },
+                                {
+                                  key: "copy-embed",
+                                  label: "Copy embed code",
+                                  icon: <IconCode className="h-4 w-4" />,
+                                  onSelect: () => copyEmbedCode(r),
                                 },
                                 {
                                   key: "duplicate",

@@ -13,7 +13,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       isActive: true,
       fields: {
         orderBy: { order: "asc" },
-        select: { id: true, type: true, label: true, placeholder: true, helpText: true, required: true, options: true },
+        select: {
+          id: true,
+          type: true,
+          label: true,
+          placeholder: true,
+          helpText: true,
+          required: true,
+          options: true,
+          minLength: true,
+          maxLength: true,
+          minValue: true,
+          maxValue: true,
+          pattern: true,
+        },
       },
     },
   });
