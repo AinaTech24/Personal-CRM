@@ -16,6 +16,7 @@ export async function GET() {
   const forms = await db.form.findMany({
     include: {
       viewerDepartments: { select: { departmentId: true } },
+      department: { select: { id: true, name: true } },
       _count: { select: { fields: true, submissions: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -40,6 +41,7 @@ export async function GET() {
       fieldCount: f._count.fields,
       submissionCount: f._count.submissions,
       canEdit: canManage,
+      department: f.department,
     })),
   });
 }

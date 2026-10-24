@@ -29,6 +29,7 @@ model Department {
   invites         Invite[]
   passwordEntries PasswordEntry[]
   formViewers     FormViewerDepartment[]
+  forms           Form[]                 @relation("FormDepartment")
 }
 
 /// A module an admin can individually grant a user full ("admin-equivalent")
@@ -2105,6 +2106,11 @@ model Form {
   lockSlug    Boolean  @default(false)
   createdById String
   createdBy   User     @relation("FormCreatedBy", fields: [createdById], references: [id])
+  /// Which department this form was built for — distinct from
+  /// viewerDepartments (who may see submissions). Nullable: forms created
+  /// before this field existed have none until an admin sets one.
+  departmentId String?
+  department   Department? @relation("FormDepartment", fields: [departmentId], references: [id])
 
   fields          FormField[]
   submissions     FormSubmission[]
