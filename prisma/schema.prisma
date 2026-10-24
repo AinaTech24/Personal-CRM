@@ -49,17 +49,6 @@ enum ManagedModule {
   EXPENSES
 }
 
-enum NoteColor {
-  WHITE
-  PINK
-  BLUE
-  GREEN
-  YELLOW
-  LAVENDER
-  PEACH
-  GRAY
-}
-
 /// A personal note. Visibility is its own fixed 3-tier model (Admin/Super
 /// Admin → everyone; a Department Admin → their own department; everyone
 /// else → only their own notes) — deliberately NOT routed through the
@@ -68,17 +57,19 @@ enum NoteColor {
 /// as Lead/Task/etc., so department-scoped visibility survives the author
 /// later moving departments or being deactivated.
 model Note {
-  id           String    @id @default(cuid())
+  id           String      @id @default(cuid())
   title        String
-  content      String    @db.Text
-  color        NoteColor @default(WHITE)
-  isPinned     Boolean   @default(false)
+  content      String      @db.Text
+  /// A hex color ("#fecdd3") picked freely in the UI, or null to use the
+  /// normal theme card background — not a fixed named palette.
+  color        String?     @db.VarChar(7)
+  isPinned     Boolean     @default(false)
   authorId     String
-  author       User      @relation("NoteAuthor", fields: [authorId], references: [id])
+  author       User        @relation("NoteAuthor", fields: [authorId], references: [id])
   departmentId String?
   department   Department? @relation(fields: [departmentId], references: [id])
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
   @@index([authorId])
   @@index([departmentId])

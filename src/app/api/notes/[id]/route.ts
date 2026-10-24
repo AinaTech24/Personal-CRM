@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageNote, broadcastNoteChange, isRecordNotFoundError } from "@/lib/notes";
+import { isValidHexColor } from "@/lib/note-colors";
 
 const noteInclude = {
   author: { select: { id: true, name: true, surname: true, avatarDataUrl: true } },
@@ -12,7 +13,13 @@ const noteInclude = {
 const patchSchema = z.object({
   title: z.string().trim().max(200).optional(),
   content: z.string().trim().max(20000).optional(),
-  color: z.enum(["WHITE", "PINK", "BLUE", "GREEN", "YELLOW", "LAVENDER", "PEACH", "GRAY"]).optional(),
+  // A hex string ("#fecdd3"), or null to clear back to the default theme card background.
+  color: z
+    .string()
+    .trim()
+    .refine(isValidHexColor, "Must be a #rrggbb color")
+    .nullable()
+    .optional(),
   isPinned: z.boolean().optional(),
 });
 

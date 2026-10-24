@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { IconChevronDown, IconChevronUp, IconPencil, IconX } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
-import { noteColorMeta } from "@/lib/note-colors";
+import { contrastTextColor } from "@/lib/note-colors";
 import { cn } from "@/lib/utils";
 import type { NoteRow } from "@/components/notes/note-card";
 
@@ -18,17 +19,20 @@ export interface FloatingState {
 }
 
 /**
- * A pinned note, shown as a draggable panel within the Notes page's own
- * bounds (the container this is rendered into is `position: relative` and
- * exactly the page's content area — not the viewport — so a floating note
- * can never cover the sidebar/topbar or survive onto another tab). Dragging
- * is pointer-event based (no extra dependency): pointerdown on the title
- * bar starts it, pointermove on the window tracks it, pointerup ends it.
+ * A pinned note, shown as a small draggable panel — portaled to
+ * `document.body` and positioned with `position: fixed` in viewport
+ * coordinates, so it can be dragged anywhere on screen rather than being
+ * boxed into the Notes page's own content area. It still only exists while
+ * NotesView is mounted (it's plain React state, not a global store), so
+ * navigating away from Notes closes every floating panel — it just isn't
+ * visually clipped to a small container while the page is open. Dragging is
+ * pointer-event based (no extra dependency): pointerdown on the title bar
+ * starts it, pointer capture keeps tracking it even once the cursor leaves
+ * the panel, pointerup ends it.
  */
 export function FloatingNote({
   note,
   state,
-  bounds,
   onMove,
   onToggleMinimize,
   onClose,
@@ -36,8 +40,6 @@ export function FloatingNote({
 }: {
   note: NoteRow;
   state: FloatingState;
-  /** The workspace container's current size, so dragging/clamping stays correct across resizes. */
-  bounds: { width: number; height: number };
   onMove: (x: number, y: number) => void;
   onToggleMinimize: () => void;
   onClose: () => void;
@@ -45,12 +47,12 @@ export function FloatingNote({
 }) {
   const [dragging, setDragging] = useState(false);
   const dragOffset = useRef({ dx: 0, dy: 0 });
-  const meta = noteColorMeta(note.color);
   const width = state.minimized ? MINIMIZED_WIDTH : PANEL_WIDTH;
+  const textColor = note.color ? contrastTextColor(note.color) : undefined;
 
   function clamp(x: number, y: number) {
-    const maxX = Math.max(0, bounds.width - width);
-    const maxY = Math.max(0, bounds.height - 40);
+    const maxX = Math.max(0, window.innerWidth - width);
+    const maxY = Math.max(0, window.innerHeight - 40);
     return { x: Math.min(Math.max(0, x), maxX), y: Math.min(Math.max(0, y), maxY) };
   }
 
@@ -79,10 +81,20 @@ export function FloatingNote({
     onMove(next.x, next.y);
   }
 
-  return (
+  const panel = (
     <div
-      className={cn("absolute z-30 flex flex-col overflow-hidden rounded-lg border shadow-lg", meta.card)}
-      style={{ left: state.x, top: state.y, width, height: state.minimized ? "auto" : PANEL_HEIGHT }}
+      style={{
+        left: state.x,
+        top: state.y,
+        width,
+        height: state.minimized ? "auto" : PANEL_HEIGHT,
+        backgroundColor: note.color ?? undefined,
+        color: textColor,
+      }}
+      className={cn(
+        "fixed z-40 flex flex-col overflow-hidden rounded-lg border shadow-xl",
+        note.color ? "border-black/10" : "border-border bg-card"
+      )}
     >
       <div
         onPointerDown={onPointerDown}
@@ -133,10 +145,12 @@ export function FloatingNote({
         </div>
       </div>
       {!state.minimized && (
-        <div className="flex-1 overflow-y-auto p-2.5 text-xs">
-          <p className="whitespace-pre-line text-muted-foreground">{note.content || <span className="italic">No content</span>}</p>
+        <div className="flex-1 overflow-y-auto p-2.5 text-xs" style={textColor ? { opacity: 0.9 } : undefined}>
+          <p className="whitespace-pre-line">{note.content || <span className="italic opacity-70">No content</span>}</p>
         </div>
       )}
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(panel, document.body) : null;
 }
