@@ -14,7 +14,8 @@ import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { HorizontalScrollbar } from "@/components/ui/horizontal-scrollbar";
-import { IconPencil, IconTrash, IconBell } from "@/components/icons";
+import { RecencyBadge } from "@/components/ui/recency-badge";
+import { IconPencil, IconTrash, IconBell, IconCopy } from "@/components/icons";
 import { NewTaskDialog } from "@/components/tasks/new-task-dialog";
 import { TaskDetailDialog } from "@/components/tasks/task-detail-dialog";
 import { TasksListView } from "@/components/tasks/tasks-list-view";
@@ -285,10 +286,19 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
     toast.success("Reminder sent", taskAssignees(task).map((a) => a.name).join(", "));
   }
 
+  async function duplicateTask(task: TaskSummary) {
+    const res = await fetch(`/api/tasks/${task.id}/duplicate`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error("Couldn't duplicate the task", data.error);
+    toast.success("Task duplicated");
+    await loadTasks();
+  }
+
   function taskActions(task: TaskSummary): RowAction[] {
     const actions: RowAction[] = [];
     if (canManage(task)) {
       actions.push({ key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => setSelectedTask(task) });
+      actions.push({ key: "duplicate", label: "Duplicate", icon: <IconCopy className="h-3.5 w-3.5" />, onSelect: () => duplicateTask(task) });
     }
     if (fullAccess && taskAssignees(task).some((a) => a.id !== currentUserId)) {
       actions.push({ key: "remind", label: "Send reminder", icon: <IconBell className="h-3.5 w-3.5" />, onSelect: () => remindTask(task) });
@@ -496,6 +506,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
                             <p className="line-clamp-2 text-sm font-medium">{task.title}</p>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
+                            <RecencyBadge createdAt={task.createdAt} />
                             <Badge variant={PRIORITY_VARIANT[task.priority]}>{task.priority}</Badge>
                             {selectedIds.size === 0 && (
                               <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">

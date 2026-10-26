@@ -18,8 +18,9 @@ import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { HorizontalScrollbar } from "@/components/ui/horizontal-scrollbar";
+import { RecencyBadge } from "@/components/ui/recency-badge";
 import { useDragAutoScroll } from "@/hooks/use-drag-auto-scroll";
-import { IconPlus, IconClock, IconUsers, IconPencil, IconTrash, IconBell } from "@/components/icons";
+import { IconPlus, IconClock, IconUsers, IconPencil, IconTrash, IconBell, IconCopy } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,7 @@ interface Meeting {
   organizer: MeetingUser;
   attendees: MeetingUser[];
   remindAt: string | null;
+  createdAt: string;
 }
 
 const STATUS_OPTIONS = [
@@ -223,10 +225,19 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
     toast.success("Reminder sent", `${m.title}`);
   }
 
+  async function duplicateMeeting(m: Meeting) {
+    const res = await fetch(`/api/meetings/${m.id}/duplicate`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error("Couldn't duplicate the meeting", data.error);
+    toast.success("Meeting duplicated");
+    await load();
+  }
+
   function meetingActions(m: Meeting): RowAction[] {
     const actions: RowAction[] = [];
     if (canManageMeeting(m)) {
       actions.push({ key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => openMeeting(m) });
+      actions.push({ key: "duplicate", label: "Duplicate", icon: <IconCopy className="h-3.5 w-3.5" />, onSelect: () => duplicateMeeting(m) });
     }
     if (fullAccess) {
       actions.push({ key: "remind", label: "Send reminder", icon: <IconBell className="h-3.5 w-3.5" />, onSelect: () => remindMeeting(m) });
@@ -498,6 +509,7 @@ function MeetingCard({
       <div className="flex items-start justify-between gap-2">
         <p className="font-medium">{m.title}</p>
         <div className="flex shrink-0 items-center gap-1.5">
+          <RecencyBadge createdAt={m.createdAt} />
           <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", STATUS_STYLE[m.status])}>
             {m.status.charAt(0) + m.status.slice(1).toLowerCase()}
           </span>

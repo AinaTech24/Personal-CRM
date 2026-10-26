@@ -2,8 +2,9 @@
 
 import { useId } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { IconDots, IconPalette, IconPencil, IconPin, IconTrash } from "@/components/icons";
+import { IconCopy, IconDots, IconPalette, IconPencil, IconPin, IconTrash } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
+import { RecencyBadge } from "@/components/ui/recency-badge";
 import { NOTE_COLOR_PRESETS, contrastTextColor, rotationFor, shade, tapeColorFor } from "@/lib/note-colors";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +105,7 @@ export function NoteCard({
   onSetColor,
   onDelete,
   onToggleFloat,
+  onDuplicate,
   floating,
 }: {
   note: NoteRow;
@@ -116,6 +118,7 @@ export function NoteCard({
   onSetColor: (color: string | null) => void;
   onDelete: () => void;
   onToggleFloat: () => void;
+  onDuplicate: () => void;
   floating: boolean;
 }) {
   const base = note.color ?? "#f4f4f5";
@@ -195,6 +198,13 @@ export function NoteCard({
                       <IconPin className="h-4 w-4" />
                       {note.isPinned ? "Unpin" : "Pin"}
                     </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      onSelect={onDuplicate}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-primary/5"
+                    >
+                      <IconCopy className="h-4 w-4" />
+                      Duplicate
+                    </DropdownMenu.Item>
                     <div className="px-2 py-1.5">
                       <p className="mb-1.5 text-xs text-muted-foreground">Color</p>
                       <ColorPickerRow value={note.color} onChange={onSetColor} />
@@ -214,7 +224,10 @@ export function NoteCard({
           </div>
         </div>
 
-        <h3 className="-mt-1 font-semibold leading-snug">{note.title}</h3>
+        <div className="-mt-1 flex items-start gap-1.5">
+          <h3 className="min-w-0 flex-1 font-semibold leading-snug">{note.title}</h3>
+          <RecencyBadge createdAt={note.createdAt} />
+        </div>
 
         <div className="rounded-lg p-3 text-sm" style={{ backgroundColor: contentBg }}>
           <p className="whitespace-pre-line line-clamp-6">{note.content || <span className="italic opacity-70">No content</span>}</p>

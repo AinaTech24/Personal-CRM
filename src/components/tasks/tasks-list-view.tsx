@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { RecencyBadge } from "@/components/ui/recency-badge";
 import { HoverCheckbox } from "@/components/ui/checkbox";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { TASK_STATUSES, taskAssignees, type TaskSummary } from "@/components/tasks/types";
@@ -65,7 +66,12 @@ export function TasksListView({
                     aria-label={`Select ${task.title}`}
                   />
                 </td>
-                <td className="px-4 py-2.5 font-medium">{task.title}</td>
+                <td className="px-4 py-2.5 font-medium">
+                  <span className="flex items-center gap-1.5">
+                    {task.title}
+                    <RecencyBadge createdAt={task.createdAt} />
+                  </span>
+                </td>
                 <td className="px-4 py-2.5 text-muted-foreground">{statusLabel(task.status)}</td>
                 <td className="px-4 py-2.5">
                   <Badge variant={PRIORITY_VARIANT[task.priority]}>{task.priority}</Badge>

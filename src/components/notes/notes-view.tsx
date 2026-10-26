@@ -213,6 +213,17 @@ export function NotesView() {
     await updateNote(note.id, { color: nextColor }).catch(() => {});
   }
 
+  async function duplicateNote(note: NoteRow) {
+    const res = await fetch(`/api/notes/${note.id}/duplicate`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error("Couldn't duplicate the note", body.error);
+      return;
+    }
+    toast.success("Note duplicated");
+    load();
+  }
+
   function toggleFloat(note: NoteRow) {
     setFloating((prev) => {
       if (note.id in prev) {
@@ -315,6 +326,7 @@ export function NotesView() {
               onSetColor={(c) => recolor(note, c)}
               onDelete={() => setDeleting(note)}
               onToggleFloat={() => toggleFloat(note)}
+              onDuplicate={() => duplicateNote(note)}
               floating={note.id in floating}
             />
           ))}
