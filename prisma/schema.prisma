@@ -66,6 +66,11 @@ model Note {
   /// normal theme card background — not a fixed named palette.
   color        String?     @db.VarChar(7)
   isPinned     Boolean     @default(false)
+  /// Pipe-delimited with a leading and trailing pipe ("|work|urgent|"), never
+  /// null unless there are no tags — the delimiters let a `contains` query
+  /// match one whole tag without accidentally matching inside a longer one
+  /// (e.g. "work" inside "homework"). See src/lib/note-tags.ts.
+  tags         String?     @db.VarChar(500)
   authorId     String
   author       User        @relation("NoteAuthor", fields: [authorId], references: [id])
   departmentId String?

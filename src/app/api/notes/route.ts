@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { noteListWhere, canManageNote, broadcastNoteChange } from "@/lib/notes";
 import { isValidHexColor } from "@/lib/note-colors";
+import { MAX_TAGS, MAX_TAG_LENGTH, parseTags, serializeTags, tagContainsFragment } from "@/lib/note-tags";
 import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-store";
 
 const noteInclude = {
@@ -31,6 +32,7 @@ export async function GET(req: NextRequest) {
   const q = params.get("q")?.trim();
   const filter = params.get("filter"); // "pinned" | "mine" | null
   const color = params.get("color");
+  const tag = params.get("tag")?.trim();
   const departmentIdParam = params.get("departmentId");
   const authorIdParam = params.get("authorId");
 
@@ -40,6 +42,7 @@ export async function GET(req: NextRequest) {
   if (filter === "pinned") and.push({ isPinned: true });
   if (filter === "mine") and.push({ authorId: user.id });
   if (color && isValidHexColor(color)) and.push({ color });
+  if (tag) and.push({ tags: { contains: tagContainsFragment(tag) } });
 
   if (departmentIdParam && (isAdmin(user) || (isDepartmentAdmin(user) && user.departmentId === departmentIdParam))) {
     and.push({ departmentId: departmentIdParam });
@@ -67,9 +70,11 @@ export async function GET(req: NextRequest) {
     orderBy,
   });
 
-  const withPermissions = notes.map((n) => ({ ...n, canManage: canManageNote(user, n, scope) }));
+  const withPermissions = notes.map((n) => ({ ...n, tags: parseTags(n.tags), canManage: canManageNote(user, n, scope) }));
   return NextResponse.json({ notes: withPermissions });
 }
+
+const tagsSchema = z.array(z.string().trim().min(1).max(MAX_TAG_LENGTH)).max(MAX_TAGS);
 
 const bodySchema = z.object({
   title: z.string().trim().max(200).default(""),
@@ -82,6 +87,7 @@ const bodySchema = z.object({
     .nullable()
     .optional(),
   isPinned: z.boolean().default(false),
+  tags: tagsSchema.default([]),
 });
 
 /** Creates a note for the authenticated user. Author and department are always taken from the session — never from the request body. */
@@ -103,6 +109,7 @@ export async function POST(req: NextRequest) {
       content: d.content,
       color: d.color ?? null,
       isPinned: d.isPinned,
+      tags: serializeTags(d.tags),
       authorId: user.id,
       departmentId: user.departmentId,
     },
@@ -110,5 +117,29 @@ export async function POST(req: NextRequest) {
   });
 
   broadcastNoteChange("note_created", note);
-  return NextResponse.json({ note: { ...note, canManage: true } }, { status: 201 });
+  return NextResponse.json({ note: { ...note, tags: parseTags(note.tags), canManage: true } }, { status: 201 });
+}
+
+const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });
+
+/** Deletes every note in `ids` the caller is actually allowed to delete, silently skipping the rest rather than failing the whole batch. */
+export async function DELETE(req: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "NOTES")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const parsed = bulkDeleteSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+
+  const scope = await moduleAccessScope(user, "NOTES", "DELETE");
+  const notes = await db.note.findMany({ where: { id: { in: parsed.data.ids } } });
+  const deletable = notes.filter((n) => canManageNote(user, n, scope));
+
+  if (deletable.length > 0) {
+    await db.note.deleteMany({ where: { id: { in: deletable.map((n) => n.id) } } });
+    for (const note of deletable) broadcastNoteChange("note_deleted", note);
+  }
+
+  const skipped = parsed.data.ids.length - deletable.length;
+  return NextResponse.json({ deleted: deletable.length, skipped });
 }
