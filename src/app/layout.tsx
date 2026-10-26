@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ToastProvider } from "@/components/providers/toast-provider";
 import { DensityInit } from "@/components/providers/density-init";
 import { PwaRegister } from "@/components/providers/pwa-register";
+import { StaleBundleRecovery } from "@/components/providers/stale-bundle-recovery";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -57,6 +58,7 @@ export default function RootLayout({
           <ToastProvider>
             <DensityInit />
             <PwaRegister />
+            <StaleBundleRecovery />
             {children}
           </ToastProvider>
         </ThemeProvider>
