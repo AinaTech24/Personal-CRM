@@ -23,6 +23,7 @@ export function DashboardShell({
   hasCrmAccess,
   isCrmLead,
   canViewForms,
+  hasCommandCentre,
   managedModules,
   userId,
   name,
@@ -36,6 +37,7 @@ export function DashboardShell({
   hasCrmAccess: boolean;
   isCrmLead: boolean;
   canViewForms: boolean;
+  hasCommandCentre: boolean;
   managedModules: ManagedModule[];
   userId: string;
   name: string;
@@ -93,6 +95,7 @@ export function DashboardShell({
         hasCrmAccess={hasCrmAccess}
         isCrmLead={isCrmLead}
         canViewForms={canViewForms}
+        hasCommandCentre={hasCommandCentre}
         managedModules={managedModules}
         collapsed={collapsed}
         onToggle={toggle}
@@ -124,6 +127,7 @@ export function DashboardShell({
           hasCrmAccess={hasCrmAccess}
           isCrmLead={isCrmLead}
           canViewForms={canViewForms}
+          hasCommandCentre={hasCommandCentre}
           managedModules={managedModules}
           collapsed={false}
           onToggle={() => setMobileOpen(false)}

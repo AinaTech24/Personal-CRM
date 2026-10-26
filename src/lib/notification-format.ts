@@ -13,6 +13,7 @@ import {
   IconKey,
   IconCake,
   IconCoffee,
+  IconBuildingCog,
 } from "@/components/icons";
 
 export interface NotificationLike {
@@ -56,6 +57,7 @@ export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?:
   password_entry_revoked: IconKey,
   birthday_gift_due: IconCake,
   birthday_today: IconCake,
+  consulting_update: IconBuildingCog,
 };
 
 /** The Settings > Notifications category each type is toggled under — mirrors src/lib/notify.ts's TYPE_TO_CATEGORY, duplicated here because that file imports db.ts and can't be used client-side. Used for the full notifications page's category filter. */
@@ -89,6 +91,7 @@ export const NOTIFICATION_CATEGORY: Record<string, string> = {
   password_entry_revoked: "passwords",
   birthday_gift_due: "birthdays",
   birthday_today: "birthdays",
+  consulting_update: "consulting",
 };
 
 /** Mirrors notify.ts's NOTIFICATION_CATEGORIES labels — duplicated for the same client-safety reason as NOTIFICATION_CATEGORY above. */
@@ -105,6 +108,7 @@ export const NOTIFICATION_CATEGORY_LABEL: Record<string, string> = {
   billing: "Billing",
   passwords: "Passwords",
   birthdays: "Birthdays",
+  consulting: "Command Centre",
 };
 
 export function notificationMessage(n: NotificationLike): string {
@@ -222,6 +226,8 @@ export function notificationMessage(n: NotificationLike): string {
       const name = typeof n.payload.name === "string" ? n.payload.name : "Someone";
       return `🎂 It's ${name}'s birthday today!`;
     }
+    case "consulting_update":
+      return typeof n.payload.message === "string" ? n.payload.message : "Command Centre update";
     default:
       return "You have a new update";
   }
@@ -296,5 +302,8 @@ export function notificationHref(n: NotificationLike): string | null {
     return "/passwords";
   }
   if (n.type === "birthday_gift_due" || n.type === "birthday_today") return "/birthdays";
+  if (n.type === "consulting_update") {
+    return typeof n.payload.href === "string" && n.payload.href.startsWith("/consulting") ? n.payload.href : "/consulting";
+  }
   return null;
 }
