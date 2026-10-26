@@ -346,8 +346,8 @@ export default function UsersPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-1.5">
-          <h1 className="text-xl font-semibold">Users &amp; Invites</h1>
-          <HelpDialog title="Users & Invites — help">
+          <h1 className="text-xl font-semibold">Users</h1>
+          <HelpDialog title="Users — help">
             <HelpSection heading="What this page is for">
               <p>Invite new people (invite-only, restricted to @ainatech.in addresses unless an admin allows a public provider), assign their department and role, and block, edit, or delete an existing account.</p>
             </HelpSection>
@@ -565,7 +565,7 @@ export default function UsersPage() {
                   <span className="text-sm font-medium">Make Department Admin</span>
                   <span className="text-xs text-muted-foreground">
                     {departmentId
-                      ? `Can open the Permission Manager for anyone else in ${departments.find((d) => d.id === departmentId)?.name ?? "this department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.`
+                      ? `Can open Permissions for anyone else in ${departments.find((d) => d.id === departmentId)?.name ?? "this department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.`
                       : "Pick a department above first — this has nothing to administer without one."}
                   </span>
                 </span>
@@ -661,7 +661,7 @@ export default function UsersPage() {
                     {!viewerIsAdmin
                       ? "Only a company Admin can change this."
                       : editDept
-                        ? `Can open the Permission Manager for anyone else in ${departments.find((d) => d.id === editDept)?.name ?? "this department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.`
+                        ? `Can open Permissions for anyone else in ${departments.find((d) => d.id === editDept)?.name ?? "this department"} and grant them module access — not for Role, Department, or making someone else a Department Admin.`
                         : "Pick a department above first — this has nothing to administer without one."}
                   </span>
                 </span>

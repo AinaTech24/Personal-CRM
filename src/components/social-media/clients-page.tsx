@@ -426,8 +426,8 @@ export function ClientsPageClient() {
             <HelpSection heading="Admins & Super Admins and Social Media Team leads">
               <p>See and manage every client.</p>
             </HelpSection>
-            <HelpSection heading="Department Admins & Permission Manager grants">
-              <p>See and manage clients only where explicitly granted (Permission Manager → Clients) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
+            <HelpSection heading="Department Admins & Permission grants">
+              <p>See and manage clients only where explicitly granted (Permissions → Clients) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
             </HelpSection>
             <HelpSection heading="Everyone else on the Social Media team">
               <p>You see clients you&apos;re assigned to.</p>

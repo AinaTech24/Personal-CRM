@@ -154,12 +154,12 @@ export default function AdminSettingsPage() {
               Hiding Leads, Tasks, Projects, Meetings, or My Attendance here only changes the default — anyone
               individually granted that module in{" "}
               <Link href="/admin/permissions" className="text-primary hover:underline">
-                Permission Manager
+                Permissions
               </Link>{" "}
               still sees it regardless of this toggle, so it doesn&apos;t silently undo a grant someone was
               given on purpose. Clients works the other way round: hiding it here blocks an individual grant
               or CRM Team access from showing it, but a Social Media Team member still keeps their own
-              Clients link either way — same as Quotations staying hidden from them, and Calls staying shown
+              Clients link either way — same as Quotes staying hidden from them, and Calls staying shown
               to CRM, regardless of this list.
             </p>
           </div>

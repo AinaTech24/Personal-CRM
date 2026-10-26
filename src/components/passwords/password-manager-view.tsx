@@ -221,8 +221,8 @@ export function PasswordManagerView() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <h1 className="text-xl font-semibold">Password Manager</h1>
-          <HelpDialog title="Password Manager — help">
+          <h1 className="text-xl font-semibold">Passwords</h1>
+          <HelpDialog title="Passwords — help">
             <HelpSection heading="What this page is for">
               <p>Store shared credentials (label, link, username, password) and look them up again later. Passwords are encrypted at rest and only ever shown in full when you click the eye icon — every reveal is logged.</p>
             </HelpSection>

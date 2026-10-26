@@ -123,7 +123,7 @@ export default function EmailSettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold">Email (SMTP)</h1>
+        <h1 className="text-xl font-semibold">Email Settings</h1>
       </div>
 
       <Card className="w-full">

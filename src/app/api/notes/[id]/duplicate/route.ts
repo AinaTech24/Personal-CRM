@@ -5,7 +5,7 @@ import { canManageNote, broadcastNoteChange } from "@/lib/notes";
 import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-store";
 
 const noteInclude = {
-  author: { select: { id: true, name: true, surname: true, avatarDataUrl: true } },
+  author: { select: { id: true, name: true, surname: true } },
   department: { select: { id: true, name: true } },
 };
 

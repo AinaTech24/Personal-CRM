@@ -409,8 +409,8 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
             <HelpSection heading="Admins & Super Admins">
               <p>See and manage every lead across every department, and can bulk reassign, export, or delete leads.</p>
             </HelpSection>
-            <HelpSection heading="Department Admins & Permission Manager grants">
-              <p>A Department Admin sees only what they&apos;re explicitly granted (Permission Manager → Leads). A grant without &quot;All departments&quot; turned on covers that person&apos;s own department; with it on, it covers every department, same as an Admin.</p>
+            <HelpSection heading="Department Admins & Permission grants">
+              <p>A Department Admin sees only what they&apos;re explicitly granted (Permissions → Leads). A grant without &quot;All departments&quot; turned on covers that person&apos;s own department; with it on, it covers every department, same as an Admin.</p>
             </HelpSection>
             <HelpSection heading="CRM Team leads">
               <p>A CRM Team lead additionally sees every lead created by or assigned to anyone on their team, regardless of department.</p>

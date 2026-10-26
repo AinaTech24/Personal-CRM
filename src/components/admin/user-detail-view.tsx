@@ -94,7 +94,7 @@ export function UserDetailView({ userId }: { userId: string }) {
     { key: "tasks", label: "Tasks", count: data.tasks.length },
     { key: "projects", label: "Projects", count: data.projects.length },
     { key: "meetings", label: "Meetings", count: data.meetings.length },
-    { key: "quotations", label: "Quotations", count: data.quotations.length },
+    { key: "quotations", label: "Quotes", count: data.quotations.length },
     { key: "invoices", label: "Invoices", count: data.invoices.length },
     { key: "attendance", label: "Attendance", count: data.attendance.records.length },
   ];

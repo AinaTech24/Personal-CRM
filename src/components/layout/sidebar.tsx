@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   DndContext,
   PointerSensor,
@@ -26,6 +27,7 @@ import {
   IconMail,
   IconClock,
   IconChevronLeft,
+  IconChevronDown,
   IconGrid,
   IconHistory,
   IconUsers,
@@ -49,44 +51,64 @@ import { useSocket } from "@/components/providers/socket-provider";
 import type { ManagedModule } from "@/lib/module-permissions";
 import { cn } from "@/lib/utils";
 
+/** One shared easing for every sidebar motion — collapse/expand sections, chevrons — so they read as one system. */
+const EASE = [0.16, 1, 0.3, 1] as const;
+
+/**
+ * The four fixed groups the sidebar organizes every nav item into, in this
+ * display order. "group" lives on the NavItem itself (set at definition time
+ * below) rather than being inferred from href, so where an ad-hoc/conditional
+ * item (Clients, Calls, the MFD Command Centre, …) lands is an explicit,
+ * one-place decision.
+ */
+type SidebarGroupKey = "workspace" | "finance" | "mywork" | "admin";
+const SIDEBAR_GROUPS: { key: SidebarGroupKey; title: string }[] = [
+  { key: "workspace", title: "Workspace" },
+  { key: "finance", title: "Finance" },
+  { key: "mywork", title: "My Work" },
+  { key: "admin", title: "Administration" },
+];
+const SIDEBAR_GROUP_KEYS = SIDEBAR_GROUPS.map((g) => g.key);
+
 interface NavItem {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  group: SidebarGroupKey;
 }
 
 const mainNav: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: IconDashboard },
-  { href: "/leads", label: "Leads", icon: IconLeads },
-  { href: "/tasks", label: "Tasks", icon: IconTasks },
-  { href: "/projects", label: "Projects", icon: IconProjects },
-  { href: "/meetings", label: "Meetings", icon: IconCalendar },
-  { href: "/messages", label: "Chat", icon: IconMessage },
-  { href: "/notes", label: "Notes", icon: IconNotes },
-  { href: "/quotations", label: "Quotations", icon: IconQuotations },
-  { href: "/invoices", label: "Invoices", icon: IconInvoices },
-  { href: "/passwords", label: "Password Manager", icon: IconKey },
-  { href: "/birthdays", label: "Birthdays", icon: IconCake },
-  { href: "/attendance", label: "My Attendance", icon: IconClock },
-  { href: "/leave", label: "My Leave", icon: IconCalendar },
-  { href: "/expenses", label: "My Expenses", icon: IconWallet },
-  { href: "/activity", label: "My Activity", icon: IconHistory },
+  { href: "/", label: "Dashboard", icon: IconDashboard, group: "workspace" },
+  { href: "/leads", label: "Leads", icon: IconLeads, group: "workspace" },
+  { href: "/tasks", label: "Tasks", icon: IconTasks, group: "workspace" },
+  { href: "/projects", label: "Projects", icon: IconProjects, group: "workspace" },
+  { href: "/meetings", label: "Meetings", icon: IconCalendar, group: "workspace" },
+  { href: "/messages", label: "Messages", icon: IconMessage, group: "workspace" },
+  { href: "/notes", label: "Notes", icon: IconNotes, group: "workspace" },
+  { href: "/quotations", label: "Quotes", icon: IconQuotations, group: "finance" },
+  { href: "/invoices", label: "Invoices", icon: IconInvoices, group: "finance" },
+  { href: "/passwords", label: "Passwords", icon: IconKey, group: "mywork" },
+  { href: "/birthdays", label: "Birthdays", icon: IconCake, group: "mywork" },
+  { href: "/attendance", label: "My Attendance", icon: IconClock, group: "mywork" },
+  { href: "/leave", label: "My Leave", icon: IconCalendar, group: "mywork" },
+  { href: "/expenses", label: "My Expenses", icon: IconWallet, group: "finance" },
+  { href: "/activity", label: "Activity Log", icon: IconHistory, group: "mywork" },
 ];
 
 const adminNav: NavItem[] = [
-  { href: "/admin/modules", label: "Modules", icon: IconGrid },
-  { href: "/admin/logs", label: "View logs", icon: IconHistory },
-  { href: "/admin/departments", label: "Departments", icon: IconBuilding },
-  { href: "/admin/users", label: "Users & Invites", icon: IconUsers },
-  { href: "/admin/permissions", label: "Permission Manager", icon: IconShield },
-  { href: "/admin/birthdays", label: "Birthday Settings", icon: IconCake },
-  { href: "/teams", label: "Teams", icon: IconUsers },
-  { href: "/admin/attendance", label: "Attendance", icon: IconClock },
-  { href: "/admin/leave", label: "Leave Requests", icon: IconCalendar },
-  { href: "/admin/expenses", label: "Expense Requests", icon: IconWallet },
-  { href: "/admin/clients", label: "Client Accounts", icon: IconBuilding },
-  { href: "/forms", label: "Forms", icon: IconLayoutGrid },
-  { href: "/admin/email", label: "Email (SMTP)", icon: IconMail },
+  { href: "/admin/modules", label: "Modules", icon: IconGrid, group: "admin" },
+  { href: "/admin/logs", label: "System Logs", icon: IconHistory, group: "admin" },
+  { href: "/admin/departments", label: "Departments", icon: IconBuilding, group: "admin" },
+  { href: "/admin/users", label: "Users", icon: IconUsers, group: "admin" },
+  { href: "/admin/permissions", label: "Permissions", icon: IconShield, group: "admin" },
+  { href: "/admin/birthdays", label: "Birthday Settings", icon: IconCake, group: "admin" },
+  { href: "/teams", label: "Teams", icon: IconUsers, group: "admin" },
+  { href: "/admin/attendance", label: "Attendance", icon: IconClock, group: "admin" },
+  { href: "/admin/leave", label: "Leave Requests", icon: IconCalendar, group: "admin" },
+  { href: "/admin/expenses", label: "Expenses", icon: IconWallet, group: "admin" },
+  { href: "/admin/clients", label: "Clients", icon: IconBuilding, group: "admin" },
+  { href: "/forms", label: "Forms", icon: IconLayoutGrid, group: "admin" },
+  { href: "/admin/email", label: "Email Settings", icon: IconMail, group: "admin" },
 ];
 
 /**
@@ -95,14 +117,14 @@ const adminNav: NavItem[] = [
  * "Social Media Team" link above, so this one link survives for them
  * specifically.
  */
-const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: IconBuilding };
+const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: IconBuilding, group: "workspace" };
 
 /**
  * A non-admin lead's own way into the same Team console an Admin/Super Admin
  * reaches via adminNav's "Social Media Team" entry above — a regular
  * (non-lead) team member doesn't manage the team, so they don't get this.
  */
-const teamNavItem: NavItem = { href: "/social-media/team", label: "Social Media Team", icon: IconUsers };
+const teamNavItem: NavItem = { href: "/social-media/team", label: "Social Media Team", icon: IconUsers, group: "admin" };
 
 /** Modules a Social Media team member (regular or lead) never sees, even if an admin hasn't globally hidden them. */
 const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
@@ -112,16 +134,16 @@ const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
  * a separate curated line of business (they still need Quotations, Invoices,
  * etc.), so this is purely additive rather than replacing anything.
  */
-const callsNavItem: NavItem = { href: "/calls", label: "Calls", icon: IconPhone };
+const callsNavItem: NavItem = { href: "/calls", label: "Calls", icon: IconPhone, group: "workspace" };
 
 /** A non-admin CRM lead's own way into the CRM Team console — mirrors teamNavItem above. */
-const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: IconUsers };
+const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: IconUsers, group: "admin" };
 
 /** The MFD Command Centre — company admins, plus anyone holding a Command Centre role assignment. */
-const commandCentreNavItem: NavItem = { href: "/consulting", label: "MFD Command Centre", icon: IconBuildingCog };
+const commandCentreNavItem: NavItem = { href: "/consulting", label: "MFD Command Centre", icon: IconBuildingCog, group: "workspace" };
 
 /** A non-admin user whose department was shared on at least one form — mirrors adminNav's own entry at the same href. */
-const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: IconLayoutGrid };
+const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: IconLayoutGrid, group: "admin" };
 
 /**
  * Which adminNav entries an individually-granted module permission (not
@@ -252,6 +274,7 @@ function NavLinkItem({
 }
 
 const NAV_ORDER_KEY = "aina-sidebar-nav-order";
+const COLLAPSED_SECTIONS_KEY = "aina-sidebar-collapsed-sections";
 
 /** A per-browser layout preference, same storage mechanism as the collapsed state right below — not synced across devices, nothing to lose by keeping it purely local. */
 function loadNavOrder(): string[] | null {
@@ -270,6 +293,25 @@ function saveNavOrder(order: string[]) {
   } catch {
     // Private browsing / storage blocked — the reorder still works for this
     // session, it just won't be remembered next time.
+  }
+}
+
+/** Which of the four sidebar sections this browser has collapsed — same storage mechanism, same "best effort" treatment as the nav order above. */
+function loadCollapsedSections(): SidebarGroupKey[] {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_SECTIONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? parsed.filter((v): v is SidebarGroupKey => SIDEBAR_GROUP_KEYS.includes(v)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCollapsedSections(keys: SidebarGroupKey[]) {
+  try {
+    localStorage.setItem(COLLAPSED_SECTIONS_KEY, JSON.stringify(keys));
+  } catch {
+    // Same best-effort as saveNavOrder.
   }
 }
 
@@ -340,6 +382,103 @@ function SortableNavItem({
 }
 
 /**
+ * One of the four fixed sidebar sections (Workspace/Finance/My Work/
+ * Administration) — a collapsible heading over its own SortableContext, so a
+ * drag never crosses between sections. Renders nothing if this user has no
+ * items in the section at all (a non-admin with zero Administration items,
+ * say), rather than an empty collapsible heading.
+ *
+ * `open` always wins over the user's own collapse preference while the rail
+ * itself is collapsed to icons (there's no room for a heading to collapse
+ * against), while actively rearranging (a collapsed section would hide valid
+ * drop targets), or while a sidebar search is filtering the list (the point
+ * of searching is to surface a match immediately, not to hide it behind a
+ * heading the user collapsed earlier).
+ */
+function SidebarSection({
+  title,
+  items,
+  userCollapsed,
+  forceOpen,
+  onToggle,
+  collapsed,
+  labelClass,
+  rearranging,
+  isActive,
+  badgeCountFor,
+  toneFor,
+  onNavigate,
+}: {
+  title: string;
+  items: NavItem[];
+  userCollapsed: boolean;
+  forceOpen: boolean;
+  onToggle: () => void;
+  collapsed: boolean;
+  labelClass: string;
+  rearranging: boolean;
+  isActive: (href: string) => boolean;
+  badgeCountFor: (href: string) => number;
+  toneFor: (href: string) => "attention" | "count";
+  onNavigate?: () => void;
+}) {
+  if (items.length === 0) return null;
+  const open = collapsed || forceOpen || !userCollapsed;
+
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={collapsed}
+        aria-expanded={open}
+        className={cn(
+          "mt-4 mb-1 flex h-4 shrink-0 items-center justify-between gap-1 rounded px-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70 transition-colors",
+          !collapsed && "hover:text-foreground"
+        )}
+      >
+        <span className={cn("truncate", labelClass)}>{title}</span>
+        {!collapsed && (
+          <IconChevronDown
+            className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", labelClass, open && "rotate-180")}
+          />
+        )}
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: EASE }}
+            className="overflow-hidden"
+          >
+            <SortableContext items={items.map((i) => i.href)} strategy={verticalListSortingStrategy}>
+              <div className="flex flex-col gap-0.5 pb-0.5">
+                {items.map((item) => (
+                  <SortableNavItem
+                    key={item.href}
+                    item={item}
+                    rearranging={rearranging}
+                    active={isActive(item.href)}
+                    badgeCount={badgeCountFor(item.href)}
+                    tone={toneFor(item.href)}
+                    collapsed={collapsed}
+                    labelClass={labelClass}
+                    onNavigate={onNavigate}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
  * Presentational sidebar rail. Its width is driven by the parent grid column
  * (animated via grid-template-columns), so this only fills and clips its column.
  */
@@ -387,12 +526,14 @@ export function Sidebar({
   const [navReady, setNavReady] = useState(isAdmin);
   const [rearranging, setRearranging] = useState(false);
   const [navOrder, setNavOrder] = useState<string[] | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<SidebarGroupKey[]>([]);
   const [navSearch, setNavSearch] = useState("");
   const { socket } = useSocket();
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   useEffect(() => {
     setNavOrder(loadNavOrder());
+    setCollapsedSections(loadCollapsedSections());
   }, []);
 
   // Collapsing mid-rearrange would hide the toggle that turns it back off,
@@ -405,6 +546,14 @@ export function Sidebar({
       setNavSearch("");
     }
   }, [collapsed]);
+
+  function toggleSection(key: SidebarGroupKey) {
+    setCollapsedSections((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      saveCollapsedSections(next);
+      return next;
+    });
+  }
 
   // Which modules an admin has hidden from regular users. Admins see everything.
   useEffect(() => {
@@ -519,18 +668,13 @@ export function Sidebar({
     });
   }
 
-  // The user's own drag-to-reorder preference, applied last so it works on
-  // whatever ended up actually visible for them — never hides or adds
-  // anything, purely repositions.
-  visibleMainNav = applyNavOrder(visibleMainNav, navOrder);
-
   // Leave/Attendance/Birthdays each have an /admin page a module grant can
   // unlock without making the holder a full Admin — everything else granted
   // (Tasks, Meetings, Leads, Projects, Messages) already has its own
   // always-visible top-level nav entry above. A Department Admin additionally
   // gets the Permission Manager link, the one /admin page their own flag
   // (not a module grant) unlocks.
-  let grantedAdminNav = isAdmin
+  const grantedAdminNav = isAdmin
     ? adminNav
     : adminNav.filter((item) => {
         if (item.href === "/admin/permissions") return isDepartmentAdmin;
@@ -538,21 +682,47 @@ export function Sidebar({
         return !!grantedModule && managedModuleSet.has(grantedModule) && !blockedModules.includes(grantedModule);
       });
 
-  // Same drag-to-reorder preference as Main — applied last so it works on
-  // whatever ended up actually visible for them.
-  grantedAdminNav = applyNavOrder(grantedAdminNav, navOrder);
-
   // The sidebar's own search capsule filters the modules already visible to
   // this user — it's a local nav filter, not the global Ctrl+K search, so it
   // never has to hit the network or show results outside the sidebar.
   const navSearchQuery = navSearch.trim().toLowerCase();
-  const searchedMainNav = navSearchQuery
-    ? visibleMainNav.filter((item) => item.label.toLowerCase().includes(navSearchQuery))
-    : visibleMainNav;
-  const searchedAdminNav = navSearchQuery
-    ? grantedAdminNav.filter((item) => item.label.toLowerCase().includes(navSearchQuery))
-    : grantedAdminNav;
-  const navSearchHasResults = searchedMainNav.length > 0 || searchedAdminNav.length > 0;
+  const combinedVisible = [...visibleMainNav, ...grantedAdminNav];
+  const combinedSearched = navSearchQuery
+    ? combinedVisible.filter((item) => item.label.toLowerCase().includes(navSearchQuery))
+    : combinedVisible;
+
+  // Every visible (optionally search-filtered) item, bucketed into its fixed
+  // section and then reordered by the user's own per-section drag
+  // preference — both steps preserve whatever relative order the
+  // permission/splicing logic above already established.
+  const groupedNav: Record<SidebarGroupKey, NavItem[]> = { workspace: [], finance: [], mywork: [], admin: [] };
+  for (const item of combinedSearched) groupedNav[item.group].push(item);
+  for (const key of SIDEBAR_GROUP_KEYS) groupedNav[key] = applyNavOrder(groupedNav[key], navOrder);
+
+  const navSearchHasResults = SIDEBAR_GROUP_KEYS.some((key) => groupedNav[key].length > 0);
+  // A query can't be dragged against meaningfully (the filtered view isn't
+  // the full list the saved order is relative to), so it quietly suspends
+  // rearranging rather than requiring the user to notice and turn it off.
+  const effectiveRearranging = rearranging && !navSearchQuery;
+  // Sections stay open — regardless of the user's own collapse preference —
+  // while there's something to find or reorder.
+  const sectionsForceOpen = effectiveRearranging || !!navSearchQuery;
+
+  function isActiveHref(href: string) {
+    return pathname === href || (href !== "/" && pathname.startsWith(href));
+  }
+
+  function badgeCountFor(href: string) {
+    if (href === "/messages") return unreadMessages;
+    if (href === "/admin/attendance") return pendingCount;
+    if (href === "/admin/leave") return pendingLeave;
+    if (href === "/admin/expenses") return pendingExpenses;
+    return 0;
+  }
+
+  function toneFor(href: string): "attention" | "count" {
+    return href === "/messages" ? "count" : "attention";
+  }
 
   // Unread chat messages, for the badge on Messages. Driven by the socket so it
   // reacts the moment something arrives; the poll is a backstop for a dropped
@@ -677,22 +847,22 @@ export function Sidebar({
     collapsed ? "opacity-0" : "opacity-100"
   );
 
-  // Main nav and Admin nav are reordered independently — they're separate
-  // permission-gated groups with their own heading, so a drag only ever
-  // moves an item within the group it started in. Both groups' positions
-  // live in the same saved order list; applyNavOrder() already filters that
-  // list down to whichever items are actually in play for a given group.
+  // Every section drags within itself only — a drag never crosses the
+  // boundary between Workspace/Finance/My Work/Administration. All four
+  // sections' positions live in the same saved order list; applyNavOrder()
+  // already filters that list down to whichever items are actually in play
+  // for a given section.
   function handleNavDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const inMain = visibleMainNav.some((i) => i.href === active.id);
-    const list = inMain ? visibleMainNav : grantedAdminNav;
+    const groupKey = SIDEBAR_GROUP_KEYS.find((key) => groupedNav[key].some((i) => i.href === active.id));
+    if (!groupKey) return;
+    const list = groupedNav[groupKey];
     const oldIndex = list.findIndex((i) => i.href === active.id);
     const newIndex = list.findIndex((i) => i.href === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-    const reorderedHrefs = arrayMove(list, oldIndex, newIndex).map((i) => i.href);
-    const otherHrefs = (inMain ? grantedAdminNav : visibleMainNav).map((i) => i.href);
-    const combined = inMain ? [...reorderedHrefs, ...otherHrefs] : [...otherHrefs, ...reorderedHrefs];
+    const reordered = arrayMove(list, oldIndex, newIndex);
+    const combined = SIDEBAR_GROUP_KEYS.flatMap((key) => (key === groupKey ? reordered : groupedNav[key]).map((i) => i.href));
     setNavOrder(combined);
     saveNavOrder(combined);
   }
@@ -827,100 +997,25 @@ export function Sidebar({
               {!collapsed && <Skeleton className="h-3.5 flex-1" />}
             </div>
           ))
-        ) : navSearchQuery ? (
-          // While searching, the list is just a filtered, non-draggable rundown —
-          // reordering a partial view would scramble the saved order underneath it.
-          <>
-            {searchedMainNav.map((item) => {
-              const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
-              return (
-                <NavLinkItem
-                  key={item.href}
-                  item={item}
-                  active={active}
-                  badgeCount={item.href === "/messages" ? unreadMessages : 0}
-                  tone={item.href === "/messages" ? "count" : "attention"}
-                  collapsed={collapsed}
-                  labelClass={labelClass}
-                  onNavigate={onNavigate}
-                />
-              );
-            })}
-            {searchedAdminNav.length > 0 && (
-              <>
-                <div
-                  className={cn(
-                    "mt-4 mb-1 h-4 px-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70",
-                    labelClass
-                  )}
-                >
-                  Admin
-                </div>
-                {searchedAdminNav.map((item) => (
-                  <NavLinkItem
-                    key={item.href}
-                    item={item}
-                    active={pathname.startsWith(item.href)}
-                    badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : item.href === "/admin/expenses" ? pendingExpenses : 0}
-                    collapsed={collapsed}
-                    labelClass={labelClass}
-                    onNavigate={onNavigate}
-                  />
-                ))}
-              </>
-            )}
-          </>
         ) : (
-          // Main nav and Admin nav drag within their own SortableContext (so a
-          // drag never jumps an item across the permission boundary between
-          // them), but share one DndContext — every module in the sidebar,
-          // Admin section included, is reorderable the same way.
           <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleNavDragEnd}>
-            <SortableContext items={visibleMainNav.map((i) => i.href)} strategy={verticalListSortingStrategy}>
-              {visibleMainNav.map((item) => {
-                const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
-                return (
-                  <SortableNavItem
-                    key={item.href}
-                    item={item}
-                    rearranging={rearranging && !collapsed}
-                    active={active}
-                    badgeCount={item.href === "/messages" ? unreadMessages : 0}
-                    tone={item.href === "/messages" ? "count" : "attention"}
-                    collapsed={collapsed}
-                    labelClass={labelClass}
-                    onNavigate={onNavigate}
-                  />
-                );
-              })}
-            </SortableContext>
-
-            {(isAdmin || grantedAdminNav.length > 0) && (
-              <>
-                <div
-                  className={cn(
-                    "mt-4 mb-1 h-4 px-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70",
-                    labelClass
-                  )}
-                >
-                  Admin
-                </div>
-                <SortableContext items={grantedAdminNav.map((i) => i.href)} strategy={verticalListSortingStrategy}>
-                  {grantedAdminNav.map((item) => (
-                    <SortableNavItem
-                      key={item.href}
-                      item={item}
-                      rearranging={rearranging && !collapsed}
-                      active={pathname.startsWith(item.href)}
-                      badgeCount={item.href === "/admin/attendance" ? pendingCount : item.href === "/admin/leave" ? pendingLeave : item.href === "/admin/expenses" ? pendingExpenses : 0}
-                      collapsed={collapsed}
-                      labelClass={labelClass}
-                      onNavigate={onNavigate}
-                    />
-                  ))}
-                </SortableContext>
-              </>
-            )}
+            {SIDEBAR_GROUPS.map((group) => (
+              <SidebarSection
+                key={group.key}
+                title={group.title}
+                items={groupedNav[group.key]}
+                userCollapsed={collapsedSections.includes(group.key)}
+                forceOpen={sectionsForceOpen}
+                onToggle={() => toggleSection(group.key)}
+                collapsed={collapsed}
+                labelClass={labelClass}
+                rearranging={effectiveRearranging && !collapsed}
+                isActive={isActiveHref}
+                badgeCountFor={badgeCountFor}
+                toneFor={toneFor}
+                onNavigate={onNavigate}
+              />
+            ))}
           </DndContext>
         )}
 

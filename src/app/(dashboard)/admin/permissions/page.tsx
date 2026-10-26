@@ -219,8 +219,8 @@ function PermissionManager() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <h1 className="text-xl font-semibold">Permission Manager</h1>
-          <HelpDialog title="Permission Manager — help">
+          <h1 className="text-xl font-semibold">Permissions</h1>
+          <HelpDialog title="Permissions — help">
             <HelpSection heading="What this page is for">
               <p>Grant someone full create/read/update/delete access to specific modules within their own department, on top of whatever their role already allows. A company Admin already has every module, company-wide.</p>
             </HelpSection>
@@ -232,7 +232,7 @@ function PermissionManager() {
                 <p>Widens a grant from just the person&apos;s own department to everything, company-wide — for a Department Admin who should see what an Admin sees in one specific module, without making them a full Admin. Only a company Admin can turn this on; a Department Admin or team lead editing their own people&apos;s grants never sees this column.</p>
               </HelpSection>
             )}
-            <HelpSection heading="Chat">
+            <HelpSection heading="Messages">
               <p>Nav/page-only, since conversations work by membership rather than ownership — there&apos;s no department-scoped visibility to grant here.</p>
             </HelpSection>
             <HelpSection heading="Who can use this page">
