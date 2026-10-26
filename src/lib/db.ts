@@ -51,7 +51,10 @@ function createClient() {
           const result = await query(args);
 
           const action = LOGGED_ACTIONS[operation];
-          if (!action || !model || AUDIT_IGNORED_MODELS.has(model)) return result;
+          // The MFD Command Centre (Cc* models) keeps its own spec-mandated audit
+          // trail (cc_audit_events, see src/lib/mfd/engine.ts) with field
+          // classification applied, so its writes stay out of this one.
+          if (!action || !model || AUDIT_IGNORED_MODELS.has(model) || model.startsWith("Cc")) return result;
 
           const actorId = await currentActorId();
 

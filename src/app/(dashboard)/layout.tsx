@@ -5,6 +5,7 @@ import { getSocialMembership, isSocialMediaLead, isSocialMediaOnlyUser } from "@
 import { getCrmMembership, hasCrmAccess, isCrmLead } from "@/lib/crm-team";
 import { hasAnyFormAccess } from "@/lib/forms";
 import { getUserModulePermissions } from "@/lib/module-permissions-store";
+import { hasCommandCentreAccess } from "@/lib/mfd/actor";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { SocketProvider } from "@/components/providers/socket-provider";
 import { SearchProvider } from "@/components/providers/search-provider";
@@ -39,6 +40,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // every module, so this only ever drives a non-admin's extra nav entries.
   const managedModules = isAdmin(user) ? [] : await getUserModulePermissions(user.id);
 
+  // The MFD Command Centre: company admins, or anyone with a Command Centre role.
+  const hasCommandCentre = await hasCommandCentreAccess(user.id, user.role).catch(() => false);
+
   return (
     <SocketProvider>
       <SearchProvider>
@@ -50,6 +54,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           hasCrmAccess={crmAccess}
           isCrmLead={crmTeamLead}
           canViewForms={canViewForms}
+          hasCommandCentre={hasCommandCentre}
           managedModules={managedModules}
           userId={user.id}
           name={user.name}
