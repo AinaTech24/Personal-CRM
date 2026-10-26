@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { AnimatePresence, motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -31,11 +32,17 @@ import {
   type QuotationSummary,
 } from "@/components/billing/types";
 
+/** How many quotations a single fetch loads — both the initial page and each "Load more". */
+const PAGE_SIZE = 50;
+
 export function QuotationsList() {
   const toast = useToast();
   const { query } = useSearch();
   const { socket } = useSocket();
   const [quotations, setQuotations] = useState<QuotationSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
@@ -51,38 +58,84 @@ export function QuotationsList() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  async function loadQuotations() {
-    const res = await fetch("/api/quotations");
-    const data = await res.json();
-    if (res.ok) setQuotations(data.quotations);
-  }
+  // Debounced so free-text search (typed into the shared header search bar)
+  // doesn't fire a request per keystroke.
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQ(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  async function loadAll() {
-    setLoading(true);
-    try {
-      const [qRes, meRes, cpRes] = await Promise.all([
-        fetch("/api/quotations"),
-        fetch("/api/auth/me"),
-        fetch("/api/company-profile"),
-      ]);
-      const [qData, meData, cpData] = await Promise.all([qRes.json(), meRes.json(), cpRes.json()]);
-      if (qRes.ok) setQuotations(qData.quotations);
-      if (meRes.ok) setCurrentUser(meData.user);
-      if (cpRes.ok) setCompanyProfile(cpData.profile);
-
-      const isAdmin = meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN";
-      if (isAdmin) {
-        const deptRes = await fetch("/api/departments");
-        const deptData = await deptRes.json();
-        if (deptRes.ok) setDepartments(deptData.departments);
+  // The one reactive fetch: re-runs (resetting to the first page) whenever
+  // the search query changes — search now happens server-side, so this is
+  // also what makes "Load more" safe. `take` lets a live-update refresh ask
+  // for as many as were already loaded, instead of collapsing back to page one.
+  const loadQuotations = useCallback(
+    async (take: number = PAGE_SIZE) => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (q) params.set("q", q);
+        params.set("take", String(Math.max(take, PAGE_SIZE)));
+        const res = await fetch(`/api/quotations?${params.toString()}`);
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setQuotations(data.quotations ?? []);
+          setTotal(data.total ?? 0);
+          setHasMore(!!data.hasMore);
+        }
+      } finally {
+        setLoading(false);
       }
+    },
+    [q]
+  );
+
+  async function loadMoreQuotations() {
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams();
+      if (q) params.set("q", q);
+      params.set("take", String(PAGE_SIZE));
+      params.set("skip", String(quotations.length));
+      const res = await fetch(`/api/quotations?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't load more quotations", data.error);
+      setQuotations((prev) => [...prev, ...(data.quotations ?? [])]);
+      setTotal(data.total ?? 0);
+      setHasMore(!!data.hasMore);
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
   }
 
+  // A live update or a mutation (delete, an edit) re-fetches in place,
+  // preserving however many quotations were already loaded (via "Load
+  // more"), rather than collapsing the list back to page one.
+  function refreshQuotations() {
+    return loadQuotations(quotations.length);
+  }
+
   useEffect(() => {
-    loadAll();
+    loadQuotations();
+  }, [loadQuotations]);
+
+  // User, company profile, and (for an admin) departments don't depend on
+  // any filter — loaded once, not re-fetched every time search changes.
+  useEffect(() => {
+    (async () => {
+      const [meRes, cpRes] = await Promise.all([fetch("/api/auth/me"), fetch("/api/company-profile")]);
+      const [meData, cpData] = await Promise.all([meRes.json().catch(() => ({})), cpRes.json().catch(() => ({}))]);
+      if (meRes.ok) setCurrentUser(meData.user);
+      if (cpRes.ok) setCompanyProfile(cpData.profile);
+
+      const isAdminUser = meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN";
+      if (isAdminUser) {
+        const deptRes = await fetch("/api/departments");
+        const deptData = await deptRes.json().catch(() => ({}));
+        if (deptRes.ok) setDepartments(deptData.departments);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -93,7 +146,7 @@ export function QuotationsList() {
 
   useEffect(() => {
     if (!socket) return;
-    const onChange = () => loadQuotations();
+    const onChange = () => refreshQuotations();
     socket.on("quotation_created", onChange);
     socket.on("quotation_updated", onChange);
     socket.on("quotation_deleted", onChange);
@@ -102,17 +155,10 @@ export function QuotationsList() {
       socket.off("quotation_updated", onChange);
       socket.off("quotation_deleted", onChange);
     };
-  }, [socket]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, quotations.length]);
 
   const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return quotations;
-    return quotations.filter((row) =>
-      [row.quotationNumber, row.clientName, row.clientEmail].filter(Boolean).some((f) => f!.toLowerCase().includes(q))
-    );
-  }, [quotations, query]);
 
   async function openPreview(id: string) {
     setPreviewOpen(true);
@@ -162,7 +208,7 @@ export function QuotationsList() {
     if (res.ok) {
       const { deleted } = await res.json().catch(() => ({ deleted: selectedIds.size }));
       exitSelection();
-      await loadQuotations();
+      await refreshQuotations();
       toast.success(`${deleted} quotation${deleted === 1 ? "" : "s"} deleted`);
     } else {
       toast.error("Couldn't delete quotations");
@@ -173,14 +219,17 @@ export function QuotationsList() {
     if (!deleteId) return;
     const res = await fetch(`/api/quotations/${deleteId}`, { method: "DELETE" });
     if (res.ok) {
-      await loadQuotations();
+      await refreshQuotations();
       toast.success("Quotation deleted");
     } else {
       toast.error("Couldn't delete quotation");
     }
   }
 
-  const allSelected = filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id));
+  // "Select all" covers whatever's currently loaded, not necessarily every
+  // quotation matching the search — same convention as Gmail et al:
+  // paginated lists select the loaded page, not silently everything.
+  const allSelected = quotations.length > 0 && quotations.every((r) => selectedIds.has(r.id));
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -209,7 +258,7 @@ export function QuotationsList() {
                 allSelected={allSelected}
                 onSelectAll={() =>
                   setSelectedIds((prev) => {
-                    const ids = filtered.map((r) => r.id);
+                    const ids = quotations.map((r) => r.id);
                     const all = ids.every((id) => prev.has(id));
                     const next = new Set(prev);
                     if (all) ids.forEach((id) => next.delete(id));
@@ -222,7 +271,7 @@ export function QuotationsList() {
               />
             ) : (
               <motion.div key="actions" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>
-                <NewQuotationDialog isAdmin={!!isAdmin} departments={departments} companyProfile={companyProfile} onCreated={loadQuotations} />
+                <NewQuotationDialog isAdmin={!!isAdmin} departments={departments} companyProfile={companyProfile} onCreated={refreshQuotations} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -246,7 +295,7 @@ export function QuotationsList() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => {
+              {quotations.map((row) => {
                 const selected = selectedIds.has(row.id);
                 return (
                   <tr
@@ -292,7 +341,7 @@ export function QuotationsList() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && (
+              {quotations.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
                     No quotations found
@@ -301,6 +350,19 @@ export function QuotationsList() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && quotations.length > 0 && (
+        <div className="flex items-center justify-center gap-3 py-1">
+          <span className="text-xs text-muted-foreground">
+            Showing {quotations.length} of {total} quotation{total === 1 ? "" : "s"}
+          </span>
+          {hasMore && (
+            <Button type="button" variant="outline" size="sm" onClick={loadMoreQuotations} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </Button>
+          )}
         </div>
       )}
 
@@ -329,8 +391,8 @@ export function QuotationsList() {
         currentUser={currentUser}
         companyProfile={companyProfile}
         onClose={() => setEditId(null)}
-        onChanged={loadQuotations}
-        onDeleted={loadQuotations}
+        onChanged={refreshQuotations}
+        onDeleted={refreshQuotations}
       />
 
       <ConfirmDialog

@@ -36,6 +36,9 @@ const SORT_OPTIONS = [
   { value: "pinned", label: "Pinned first" },
 ];
 
+/** How many notes a single fetch loads — both the initial page and each "Load more". */
+const PAGE_SIZE = 50;
+
 interface Candidate {
   id: string;
   name: string;
@@ -53,6 +56,9 @@ export function NotesView() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
 
   const [notes, setNotes] = useState<NoteRow[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [rawQuery, setRawQuery] = useState("");
   const [q, setQ] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
@@ -180,7 +186,7 @@ export function NotesView() {
     }
   }, [isAdmin, isDeptAdmin]);
 
-  const load = useCallback(async () => {
+  function notesSearchParams(opts: { take: number; skip: number }) {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (quickFilter !== "all") params.set("filter", quickFilter);
@@ -188,11 +194,50 @@ export function NotesView() {
     if (departmentFilter) params.set("departmentId", departmentFilter);
     if (authorFilter) params.set("authorId", authorFilter);
     if (tagFilter) params.set("tag", tagFilter);
+    params.set("take", String(opts.take));
+    if (opts.skip) params.set("skip", String(opts.skip));
+    return params.toString();
+  }
 
-    const res = await fetch(`/api/notes?${params.toString()}`);
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) setNotes(data.notes ?? []);
-  }, [q, quickFilter, sort, departmentFilter, authorFilter, tagFilter]);
+  // The one reactive fetch: re-runs (resetting to the first page) whenever a
+  // filter, sort, or the search query changes. `take` lets a live-update
+  // refresh ask for as many notes as were already loaded, instead of
+  // collapsing the grid back to page one.
+  const load = useCallback(
+    async (take: number = PAGE_SIZE) => {
+      const qs = notesSearchParams({ take: Math.max(take, PAGE_SIZE), skip: 0 });
+      const res = await fetch(`/api/notes?${qs}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setNotes(data.notes ?? []);
+        setTotal(data.total ?? 0);
+        setHasMore(!!data.hasMore);
+      }
+    },
+    [q, quickFilter, sort, departmentFilter, authorFilter, tagFilter] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const qs = notesSearchParams({ take: PAGE_SIZE, skip: notes?.length ?? 0 });
+      const res = await fetch(`/api/notes?${qs}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't load more notes", data.error);
+      setNotes((prev) => [...(prev ?? []), ...(data.notes ?? [])]);
+      setTotal(data.total ?? 0);
+      setHasMore(!!data.hasMore);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  // A live update re-fetches in place, preserving however many notes were
+  // already loaded (via "Load more"), rather than collapsing the grid back
+  // to page one.
+  function refreshNotes() {
+    return load(notes?.length ?? PAGE_SIZE);
+  }
 
   // The tag filter's own option list and the editor's autocomplete share this
   // — every tag across the notes this user can see, not just the ones in the
@@ -215,7 +260,7 @@ export function NotesView() {
   useEffect(() => {
     if (!socket) return;
     const refresh = () => {
-      load();
+      refreshNotes();
       loadTags();
     };
     socket.on("note_created", refresh);
@@ -226,7 +271,8 @@ export function NotesView() {
       socket.off("note_updated", refresh);
       socket.off("note_deleted", refresh);
     };
-  }, [socket, load, loadTags]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, load, loadTags, notes?.length]);
 
   const authorOptions = useMemo(() => {
     const me = meId ? [{ value: meId, label: "Me" }] : [];
@@ -246,7 +292,7 @@ export function NotesView() {
     }
     toast.success("Note created");
     if (data.isPinned && body.note?.id) openFloat(body.note.id);
-    load();
+    refreshNotes();
     if (data.tags.length > 0) loadTags();
   }
 
@@ -275,6 +321,7 @@ export function NotesView() {
     } else {
       toast.success("Note deleted");
       setNotes((prev) => (prev ? prev.filter((n) => n.id !== id) : prev));
+      setTotal((t) => Math.max(0, t - 1));
       setFloating((prev) => {
         if (!(id in prev)) return prev;
         const next = { ...prev };
@@ -341,7 +388,7 @@ export function NotesView() {
       return changed ? next : prev;
     });
     exitSelectionMode();
-    load();
+    refreshNotes();
   }
 
   function openCreate() {
@@ -398,7 +445,7 @@ export function NotesView() {
       else openFloat(note.id);
       return;
     }
-    load();
+    refreshNotes();
   }
 
   async function recolor(note: NoteRow, nextColor: string | null) {
@@ -413,7 +460,7 @@ export function NotesView() {
       return;
     }
     toast.success("Note duplicated");
-    load();
+    refreshNotes();
   }
 
   function toggleFloat(note: NoteRow) {
@@ -559,6 +606,19 @@ export function NotesView() {
               onToggleSelect={() => toggleSelected(note.id)}
             />
           ))}
+        </div>
+      )}
+
+      {notes && notes.length > 0 && (
+        <div className="flex items-center justify-center gap-3 py-1">
+          <span className="text-xs text-muted-foreground">
+            Showing {notes.length} of {total} note{total === 1 ? "" : "s"}
+          </span>
+          {hasMore && (
+            <Button type="button" variant="outline" size="sm" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </Button>
+          )}
         </div>
       )}
 

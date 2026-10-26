@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,9 +42,16 @@ function birthdayLabel(key: string) {
   return `${day} · in ${info.daysUntil} days`;
 }
 
+/** How many clients a single fetch loads — both the initial page and each "Load more". */
+const PAGE_SIZE = 50;
+
 export function ClientsAdminView() {
   const toast = useToast();
   const [clients, setClients] = useState<ClientRow[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [counts, setCounts] = useState<Record<string, number>>({ ALL: 0 });
   const [category, setCategory] = useState<ClientCategory | "ALL">("ALL");
   const [query, setQuery] = useState("");
   const [viewing, setViewing] = useState<ClientRow | null>(null);
@@ -52,29 +59,68 @@ export function ClientsAdminView() {
   const [editing, setEditing] = useState<ClientRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ClientRow | null>(null);
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/clients");
-    setClients(res.ok ? (await res.json()).clients : []);
-  }, []);
+  // Debounced so typing into search doesn't fire a request per keystroke.
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQ(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  function clientsFetchUrl(take: number, skip: number) {
+    const params = new URLSearchParams();
+    if (category !== "ALL") params.set("category", category);
+    if (q) params.set("q", q);
+    params.set("take", String(take));
+    if (skip) params.set("skip", String(skip));
+    return `/api/clients?${params.toString()}`;
+  }
+
+  // The one reactive fetch: re-runs (resetting to the first page) whenever
+  // the category or search changes — both now filter server-side, so this
+  // is also what makes "Load more" safe. `take` lets a post-mutation
+  // refresh ask for as many as were already loaded, instead of collapsing
+  // the table back to page one. The category tabs' own counts always come
+  // from the response's company-wide `counts`, never from `clients.length`.
+  const load = useCallback(
+    async (take: number = PAGE_SIZE) => {
+      const res = await fetch(clientsFetchUrl(Math.max(take, PAGE_SIZE), 0));
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setClients(data.clients ?? []);
+        setTotal(data.total ?? 0);
+        setHasMore(!!data.hasMore);
+        setCounts(data.counts ?? { ALL: 0 });
+      } else {
+        setClients([]);
+      }
+    },
+    [category, q] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  async function loadMoreClients() {
+    setLoadingMore(true);
+    try {
+      const res = await fetch(clientsFetchUrl(PAGE_SIZE, clients?.length ?? 0));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't load more clients", data.error);
+      setClients((prev) => [...(prev ?? []), ...(data.clients ?? [])]);
+      setTotal(data.total ?? 0);
+      setHasMore(!!data.hasMore);
+      setCounts(data.counts ?? { ALL: 0 });
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  // Preserves however many clients were already loaded (via "Load more"),
+  // rather than collapsing the table back to page one.
+  function refreshClients() {
+    return load(clients?.length ?? PAGE_SIZE);
+  }
 
   useEffect(() => {
     load();
   }, [load]);
-
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { ALL: clients?.length ?? 0 };
-    for (const cl of clients ?? []) c[cl.category] = (c[cl.category] ?? 0) + 1;
-    return c;
-  }, [clients]);
-
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return (clients ?? []).filter(
-      (c) =>
-        (category === "ALL" || c.category === category) &&
-        (!q || [c.name, c.ownerName, c.mobile, c.email, c.reason, ...c.team.map((m) => m.name)].some((v) => v?.toLowerCase().includes(q)))
-    );
-  }, [clients, category, query]);
 
   // Keeps the detail dialog's content while it animates out after being closed.
   const detail = useDialogState(viewing);
@@ -85,7 +131,7 @@ export function ClientsAdminView() {
     if (!res.ok) toast.error("Couldn't delete the client");
     else toast.success("Client deleted", target.name);
     setViewing(null);
-    load();
+    refreshClients();
   }
 
   return (
@@ -137,10 +183,10 @@ export function ClientsAdminView() {
 
       {!clients ? (
         <SkeletonTable rows={6} columns={5} />
-      ) : visible.length === 0 ? (
+      ) : clients.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            {clients.length === 0 ? "No clients yet. Add the first one." : "No clients match."}
+            {counts.ALL === 0 ? "No clients yet. Add the first one." : "No clients match."}
           </CardContent>
         </Card>
       ) : (
@@ -158,7 +204,7 @@ export function ClientsAdminView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map((cl) => (
+                  {clients.map((cl) => (
                     <tr
                       key={cl.id}
                       onClick={() => setViewing(cl)}
@@ -204,6 +250,19 @@ export function ClientsAdminView() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {clients && clients.length > 0 && (
+        <div className="flex items-center justify-center gap-3 py-1">
+          <span className="text-xs text-muted-foreground">
+            Showing {clients.length} of {total} client{total === 1 ? "" : "s"}
+          </span>
+          {hasMore && (
+            <Button type="button" variant="outline" size="sm" onClick={loadMoreClients} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </Button>
+          )}
+        </div>
       )}
 
       <Dialog open={detail.open} onOpenChange={(v) => !v && setViewing(null)}>
@@ -265,7 +324,7 @@ export function ClientsAdminView() {
         </DialogContent>
       </Dialog>
 
-      <ClientFormDialog open={formOpen} onOpenChange={setFormOpen} client={editing} onSaved={load} />
+      <ClientFormDialog open={formOpen} onOpenChange={setFormOpen} client={editing} onSaved={refreshClients} />
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(v) => !v && setDeleteTarget(null)}

@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { userOptionLabel } from "@/lib/user-display";
 import { AnimatePresence, motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Dropdown } from "@/components/ui/dropdown";
 import { FilterMenu, type FilterFacet } from "@/components/ui/filter-menu";
-import { facetMatches, type FilterValue } from "@/lib/filter-utils";
+import { filterValueToParam, UNASSIGNED, type FilterValue } from "@/lib/filter-utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SkeletonBoard } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
@@ -35,8 +36,8 @@ import {
 } from "@/components/tasks/types";
 import { cn } from "@/lib/utils";
 
-/** Sentinel for the "no assignee" choice, kept distinct from a real user id. */
-const UNASSIGNED = "__unassigned__";
+/** How many tasks a single fetch loads — both the initial page and each "Load more". */
+const PAGE_SIZE = 50;
 
 type ViewMode = "pipeline" | "list";
 
@@ -52,12 +53,36 @@ const PRIORITY_VARIANT = {
   URGENT: "destructive",
 } as const;
 
+/** Builds the Tasks list query string — shared by the initial/filtered fetch and "Load more", so both always agree on what's currently being searched for. */
+function tasksSearchParams(opts: {
+  scope?: string;
+  filters: { assignee: FilterValue; status: FilterValue; priority: FilterValue };
+  q: string;
+  take: number;
+  skip: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts.scope) params.set("scope", opts.scope);
+  const assignee = filterValueToParam(opts.filters.assignee);
+  if (assignee) params.set("assignee", assignee);
+  const status = filterValueToParam(opts.filters.status);
+  if (status) params.set("status", status);
+  const priority = filterValueToParam(opts.filters.priority);
+  if (priority) params.set("priority", priority);
+  if (opts.q) params.set("q", opts.q);
+  params.set("take", String(opts.take));
+  if (opts.skip) params.set("skip", String(opts.skip));
+  return params.toString();
+}
+
 export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:${string}` } = {}) {
-  const tasksUrl = scope ? `/api/tasks?scope=${scope}` : "/api/tasks";
   const { query } = useSearch();
   const toast = useToast();
   const { socket } = useSocket();
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const [currentUserName, setCurrentUserName] = useState<string | undefined>(undefined);
   const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null);
@@ -81,64 +106,96 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   const { containerRef: scrollContainerRef, onDragOver: handleBoardDragOver, stop: stopAutoScroll } =
     useDragAutoScroll<HTMLDivElement>();
 
-  const loadTasks = useCallback(async () => {
-    const res = await fetch(tasksUrl);
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setTasks(data.tasks);
-      setForbidden(false);
-    } else if (scope && res.status === 403) {
-      setForbidden(true);
-    } else {
-      toast.error("Couldn't load tasks", data.error);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasksUrl]);
+  // Debounced so free-text search (typed into the shared header search bar)
+  // doesn't fire a request per keystroke.
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQ(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  const loadAll = useCallback(async () => {
-    setLoading(true);
+  // The one reactive fetch: re-runs (resetting to the first page) whenever
+  // the scope, a filter, or the search query changes — search/filtering now
+  // happens server-side, so this is also what makes "Load more" safe: a
+  // later page can never contain something an earlier page's filter should
+  // have excluded. `take` lets a live-update/post-mutation refresh ask for
+  // as many as were already loaded, instead of collapsing back to page one.
+  const loadTasks = useCallback(
+    async (take: number = PAGE_SIZE) => {
+      setLoading(true);
+      try {
+        const qs = tasksSearchParams({ scope, filters, q, take: Math.max(take, PAGE_SIZE), skip: 0 });
+        const res = await fetch(`/api/tasks?${qs}`);
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setTasks(data.tasks ?? []);
+          setTotal(data.total ?? 0);
+          setHasMore(!!data.hasMore);
+          setForbidden(false);
+        } else if (scope && res.status === 403) {
+          setForbidden(true);
+        } else {
+          toast.error("Couldn't load tasks", data.error);
+        }
+      } catch {
+        toast.error("Couldn't load tasks", "Check your connection and try again.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [scope, filters, q] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  async function loadMoreTasks() {
+    setLoadingMore(true);
     try {
-      const [tasksRes, usersRes, meRes] = await Promise.all([
-        fetch(tasksUrl),
-        fetch("/api/users/assignable?scope=all"),
-        fetch("/api/auth/me"),
-      ]);
-      const [tasksData, usersData, meData] = await Promise.all([
-        tasksRes.json().catch(() => ({})),
-        usersRes.json().catch(() => ({})),
-        meRes.json().catch(() => ({})),
-      ]);
-      if (tasksRes.ok) {
-        setTasks(tasksData.tasks);
-        setForbidden(false);
-      } else if (scope && tasksRes.status === 403) {
-        setForbidden(true);
-      } else {
-        toast.error("Couldn't load tasks", tasksData.error);
-      }
-      if (usersRes.ok) setAssignableUsers(usersData.users);
-      if (meRes.ok) {
-        setCurrentUserName(meData.user?.name);
-        setCurrentUserAvatar(meData.user?.avatarDataUrl ?? null);
-        setCurrentUserId(meData.user?.id ?? null);
-        setCurrentUserRole(meData.user?.role);
-        setHasTasksGrant(!!meData.user?.modulePermissions?.includes("TASKS"));
-      }
-    } catch {
-      toast.error("Couldn't load tasks", "Check your connection and try again.");
+      const qs = tasksSearchParams({ scope, filters, q, take: PAGE_SIZE, skip: tasks.length });
+      const res = await fetch(`/api/tasks?${qs}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't load more tasks", data.error);
+      setTasks((prev) => [...prev, ...(data.tasks ?? [])]);
+      setTotal(data.total ?? 0);
+      setHasMore(!!data.hasMore);
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasksUrl]);
+  }
+
+  // A live update or a mutation (duplicate, delete, an edit) re-fetches in
+  // place — preserving however many tasks were already loaded (via "Load
+  // more"), rather than collapsing the list back to page one.
+  function refreshTasks() {
+    return loadTasks(tasks.length);
+  }
 
   useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+    loadTasks();
+  }, [loadTasks]);
+
+  // Assignable users and the current user don't depend on any filter —
+  // loaded once, not re-fetched every time a filter changes.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [usersRes, meRes] = await Promise.all([fetch("/api/users/assignable?scope=all"), fetch("/api/auth/me")]);
+        const [usersData, meData] = await Promise.all([usersRes.json().catch(() => ({})), meRes.json().catch(() => ({}))]);
+        if (usersRes.ok) setAssignableUsers(usersData.users);
+        if (meRes.ok) {
+          setCurrentUserName(meData.user?.name);
+          setCurrentUserAvatar(meData.user?.avatarDataUrl ?? null);
+          setCurrentUserId(meData.user?.id ?? null);
+          setCurrentUserRole(meData.user?.role);
+          setHasTasksGrant(!!meData.user?.modulePermissions?.includes("TASKS"));
+        }
+      } catch {
+        // The tasks fetch itself already surfaces a connection-error toast.
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!socket) return;
-    const onTaskChange = () => loadTasks();
+    const onTaskChange = () => refreshTasks();
     socket.on("task_created", onTaskChange);
     socket.on("task_updated", onTaskChange);
     socket.on("task_deleted", onTaskChange);
@@ -147,24 +204,8 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
       socket.off("task_updated", onTaskChange);
       socket.off("task_deleted", onTaskChange);
     };
-  }, [socket, loadTasks]);
-
-  const filteredTasks = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return tasks.filter((task) => {
-      if (
-        !facetMatches(filters.assignee, (v) =>
-          v === UNASSIGNED ? taskAssignees(task).length === 0 : taskAssignees(task).some((a) => a.id === v)
-        )
-      ) {
-        return false;
-      }
-      if (!facetMatches(filters.status, (v) => task.status === v)) return false;
-      if (!facetMatches(filters.priority, (v) => task.priority === v)) return false;
-      if (!q) return true;
-      return [task.title, task.description].filter(Boolean).some((field) => field!.toLowerCase().includes(q));
-    });
-  }, [tasks, query, filters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, tasks.length]);
 
   // The Social Media Team console gets multi-select within each facet (pick
   // several statuses/priorities/assignees at once); everywhere else stays
@@ -266,7 +307,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
     });
     if (res.ok) {
       exitSelectionMode();
-      await loadTasks();
+      await refreshTasks();
     }
   }
 
@@ -291,7 +332,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return toast.error("Couldn't duplicate the task", data.error);
     toast.success("Task duplicated");
-    await loadTasks();
+    await refreshTasks();
   }
 
   function taskActions(task: TaskSummary): RowAction[] {
@@ -317,10 +358,13 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
 
   async function deleteTask(id: string) {
     const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
-    if (res.ok) await loadTasks();
+    if (res.ok) await refreshTasks();
   }
 
-  const allFilteredSelected = filteredTasks.length > 0 && filteredTasks.every((t) => selectedIds.has(t.id));
+  // "Select all" covers whatever's currently loaded, not necessarily every
+  // task matching the filters — same convention as Gmail et al: paginated
+  // lists select the loaded page, not silently everything that matches.
+  const allTasksSelected = tasks.length > 0 && tasks.every((t) => selectedIds.has(t.id));
 
   if (forbidden) {
     return (
@@ -361,8 +405,8 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
               <SelectionBar
                 key="selection"
                 count={selectedIds.size}
-                allSelected={allFilteredSelected}
-                onSelectAll={() => toggleSelectAllIds(filteredTasks.map((t) => t.id))}
+                allSelected={allTasksSelected}
+                onSelectAll={() => toggleSelectAllIds(tasks.map((t) => t.id))}
                 onCancel={exitSelectionMode}
                 onDelete={() => setConfirmOpen(true)}
               />
@@ -387,7 +431,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
                   assignableUsers={assignableUsers}
                   assignedByName={currentUserName}
                   assignedByAvatar={currentUserAvatar}
-                  onCreated={loadTasks}
+                  onCreated={refreshTasks}
                 />
               </motion.div>
             )}
@@ -399,7 +443,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
 
       {!loading && view === "list" && (
         <TasksListView
-          tasks={filteredTasks}
+          tasks={tasks}
           onSelect={handleTaskClick}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelected}
@@ -419,7 +463,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
           onDragOver={handleBoardDragOver}
         >
           {TASK_STATUSES.map((col) => {
-            const columnTasks = filteredTasks.filter((t) => t.status === col.value);
+            const columnTasks = tasks.filter((t) => t.status === col.value);
             const isDragOver = dragOverStatus === col.value;
             const allColumnSelected = columnTasks.length > 0 && columnTasks.every((t) => selectedIds.has(t.id));
             return (
@@ -546,6 +590,19 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         </div>
       )}
 
+      {!loading && tasks.length > 0 && (
+        <div className="flex shrink-0 items-center justify-center gap-3 py-1">
+          <span className="text-xs text-muted-foreground">
+            Showing {tasks.length} of {total} task{total === 1 ? "" : "s"}
+          </span>
+          {hasMore && (
+            <Button type="button" variant="outline" size="sm" onClick={loadMoreTasks} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </Button>
+          )}
+        </div>
+      )}
+
       <TaskDetailDialog
         taskId={selectedTask?.id ?? null}
         initialSummary={selectedTask}
@@ -553,10 +610,10 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         currentUserId={currentUserId}
         isAdmin={isAdmin}
         onClose={() => setSelectedTask(null)}
-        onChanged={loadTasks}
+        onChanged={refreshTasks}
         onDeleted={() => {
           setSelectedTask(null);
-          loadTasks();
+          refreshTasks();
         }}
       />
 

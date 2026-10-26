@@ -13,25 +13,42 @@ import {
   toNumber,
 } from "@/lib/billing";
 import { broadcastInvoiceChange, nextInvoiceNumber } from "@/lib/invoices";
+import { parsePageParams } from "@/lib/pagination";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const rows = await db.invoice.findMany({
-    where: billingListWhere(user),
-    include: {
-      department: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-      payments: { select: { amount: true } },
-      _count: { select: { items: true } },
-    },
-    // The list view never renders these — only the single-document view
-    // does — but they're base64 images that can each run tens of KB, so
-    // every list load was shipping that dead weight per row for nothing.
-    omit: { sellerLogoDataUrl: true, sellerSignatureDataUrl: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const params = req.nextUrl.searchParams;
+  const and: object[] = [billingListWhere(user)];
+
+  const q = params.get("q")?.trim();
+  if (q) {
+    and.push({ OR: [{ invoiceNumber: { contains: q } }, { clientName: { contains: q } }, { clientEmail: { contains: q } }] });
+  }
+
+  const where = { AND: and };
+  const { take, skip } = parsePageParams(params, { defaultTake: 50, maxTake: 200 });
+
+  const [rows, total] = await Promise.all([
+    db.invoice.findMany({
+      where,
+      include: {
+        department: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, name: true } },
+        payments: { select: { amount: true } },
+        _count: { select: { items: true } },
+      },
+      // The list view never renders these — only the single-document view
+      // does — but they're base64 images that can each run tens of KB, so
+      // every list load was shipping that dead weight per row for nothing.
+      omit: { sellerLogoDataUrl: true, sellerSignatureDataUrl: true },
+      orderBy: { createdAt: "desc" },
+      take,
+      skip,
+    }),
+    db.invoice.count({ where }),
+  ]);
 
   const invoices = rows.map((inv) => {
     const amountPaid = inv.payments.reduce((sum, p) => sum + toNumber(p.amount), 0);
@@ -45,7 +62,7 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ invoices });
+  return NextResponse.json({ invoices, total, hasMore: skip + invoices.length < total });
 }
 
 const itemSchema = z.object({

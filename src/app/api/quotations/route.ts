@@ -16,35 +16,54 @@ import {
   toNumber,
 } from "@/lib/billing";
 import { broadcastQuotationChange, nextQuotationNumber } from "@/lib/quotations";
+import { parsePageParams } from "@/lib/pagination";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const rows = await db.quotation.findMany({
-    where: billingListWhere(user),
-    include: {
-      department: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-      _count: { select: { items: true, invoices: true } },
-    },
-    // The list view never renders these — only the single-document view
-    // does — but they're base64 images that can each run tens of KB, so
-    // every list load was shipping that dead weight per row for nothing.
-    omit: { sellerLogoDataUrl: true, sellerSignatureDataUrl: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const params = req.nextUrl.searchParams;
+  const and: object[] = [billingListWhere(user)];
 
-  const quotations = rows.map((q) => ({
-    ...q,
-    subtotal: toNumber(q.subtotal),
-    gstAmount: toNumber(q.gstAmount),
-    discount: toNumber(q.discount),
-    total: toNumber(q.total),
+  const q = params.get("q")?.trim();
+  if (q) {
+    and.push({
+      OR: [{ quotationNumber: { contains: q } }, { clientName: { contains: q } }, { clientEmail: { contains: q } }],
+    });
+  }
+
+  const where = { AND: and };
+  const { take, skip } = parsePageParams(params, { defaultTake: 50, maxTake: 200 });
+
+  const [rows, total] = await Promise.all([
+    db.quotation.findMany({
+      where,
+      include: {
+        department: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, name: true } },
+        _count: { select: { items: true, invoices: true } },
+      },
+      // The list view never renders these — only the single-document view
+      // does — but they're base64 images that can each run tens of KB, so
+      // every list load was shipping that dead weight per row for nothing.
+      omit: { sellerLogoDataUrl: true, sellerSignatureDataUrl: true },
+      orderBy: { createdAt: "desc" },
+      take,
+      skip,
+    }),
+    db.quotation.count({ where }),
+  ]);
+
+  const quotations = rows.map((q2) => ({
+    ...q2,
+    subtotal: toNumber(q2.subtotal),
+    gstAmount: toNumber(q2.gstAmount),
+    discount: toNumber(q2.discount),
+    total: toNumber(q2.total),
   }));
 
-  return NextResponse.json({ quotations });
+  return NextResponse.json({ quotations, total, hasMore: skip + quotations.length < total });
 }
 
 const itemSchema = z.object({

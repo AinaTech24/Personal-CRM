@@ -57,9 +57,15 @@ const CALL_TYPE_STYLE: Record<CallType, string> = {
   MISSED: "bg-red-500/15 text-red-600 dark:text-red-400",
 };
 
+/** How many calls a single fetch loads — both the initial page and each "Load more". */
+const PAGE_SIZE = 50;
+
 export function CallsView({ scope }: { scope?: "crm" } = {}) {
   const callsUrl = scope ? `/api/calls?scope=${scope}` : "/api/calls";
   const [calls, setCalls] = useState<Call[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [leads, setLeads] = useState<CallLead[]>([]);
   const [users, setUsers] = useState<CallUser[]>([]);
   const [meId, setMeId] = useState("");
@@ -69,24 +75,59 @@ export function CallsView({ scope }: { scope?: "crm" } = {}) {
   const [editing, setEditing] = useState<Call | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Call | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  function callsFetchUrl(take: number, skip: number) {
+    const params = new URLSearchParams();
+    if (scope) params.set("scope", scope);
+    params.set("take", String(take));
+    if (skip) params.set("skip", String(skip));
+    return `/api/calls?${params.toString()}`;
+  }
+
+  // `take` lets a post-mutation refresh ask for as many calls as were
+  // already loaded, instead of collapsing the table back to page one.
+  const load = useCallback(
+    async (take: number = PAGE_SIZE) => {
+      setLoading(true);
+      try {
+        const [cRes, lRes, uRes, meRes] = await Promise.all([
+          fetch(callsFetchUrl(Math.max(take, PAGE_SIZE), 0)),
+          fetch("/api/leads"),
+          fetch("/api/users/assignable?scope=all"),
+          fetch("/api/auth/me"),
+        ]);
+        const [cData, lData, uData, meData] = await Promise.all([cRes.json(), lRes.json(), uRes.json(), meRes.json()]);
+        setCalls(cData.calls ?? []);
+        setTotal(cData.total ?? 0);
+        setHasMore(!!cData.hasMore);
+        setLeads(lData.leads ?? []);
+        setUsers(uData.users ?? []);
+        if (meRes.ok) setMeId(meData.user?.id ?? "");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [callsUrl] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  async function loadMoreCalls() {
+    setLoadingMore(true);
     try {
-      const [cRes, lRes, uRes, meRes] = await Promise.all([
-        fetch(callsUrl),
-        fetch("/api/leads"),
-        fetch("/api/users/assignable?scope=all"),
-        fetch("/api/auth/me"),
-      ]);
-      const [cData, lData, uData, meData] = await Promise.all([cRes.json(), lRes.json(), uRes.json(), meRes.json()]);
-      setCalls(cData.calls ?? []);
-      setLeads(lData.leads ?? []);
-      setUsers(uData.users ?? []);
-      if (meRes.ok) setMeId(meData.user?.id ?? "");
+      const res = await fetch(callsFetchUrl(PAGE_SIZE, calls.length));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      setCalls((prev) => [...prev, ...(data.calls ?? [])]);
+      setTotal(data.total ?? 0);
+      setHasMore(!!data.hasMore);
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
-  }, [callsUrl]);
+  }
+
+  // Preserves however many calls were already loaded (via "Load more"),
+  // rather than collapsing the table back to page one.
+  function refreshCalls() {
+    return load(calls.length);
+  }
 
   useEffect(() => {
     load();
@@ -119,7 +160,7 @@ export function CallsView({ scope }: { scope?: "crm" } = {}) {
 
   async function deleteCall(id: string) {
     const res = await fetch(`/api/calls/${id}`, { method: "DELETE" });
-    if (res.ok) load();
+    if (res.ok) refreshCalls();
   }
 
   return (
@@ -211,6 +252,19 @@ export function CallsView({ scope }: { scope?: "crm" } = {}) {
         </Card>
       )}
 
+      {!loading && calls.length > 0 && (
+        <div className="flex items-center justify-center gap-3 py-1">
+          <span className="text-xs text-muted-foreground">
+            Showing {calls.length} of {total} call{total === 1 ? "" : "s"}
+          </span>
+          {hasMore && (
+            <Button type="button" variant="outline" size="sm" onClick={loadMoreCalls} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </Button>
+          )}
+        </div>
+      )}
+
       <CallDialog
         key={openSeq}
         open={dialogOpen}
@@ -221,7 +275,7 @@ export function CallsView({ scope }: { scope?: "crm" } = {}) {
         onClose={() => setDialogOpen(false)}
         onSaved={() => {
           setDialogOpen(false);
-          load();
+          refreshCalls();
         }}
       />
 

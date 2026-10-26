@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { userOptionLabel } from "@/lib/user-display";
-import { format, isAfter, parseISO } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dropdown } from "@/components/ui/dropdown";
 import { MultiUserSelect } from "@/components/ui/multi-user-select";
 import { FilterMenu, type FilterFacet } from "@/components/ui/filter-menu";
-import { facetMatches, type FilterValue } from "@/lib/filter-utils";
+import { filterValueToParam, type FilterValue } from "@/lib/filter-utils";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle } from "@/components/ui/dialog";
@@ -70,10 +70,41 @@ const STATUS_STYLE: Record<MeetingStatus, string> = {
 
 const isLink = (s: string) => /^https?:\/\//i.test(s.trim());
 
+/** How many meetings a single fetch loads — both the initial page and each "Load more", independently per section. */
+const PAGE_SIZE = 50;
+
+/** Builds the Meetings list query string — shared by every fetch (initial, "Load more", and in-place refresh), so they always agree on what's currently being searched for. */
+function meetingsSearchParams(opts: {
+  scope?: string;
+  filters: { organizer: FilterValue; status: FilterValue; involvement: FilterValue };
+  when: "upcoming" | "past";
+  take: number;
+  skip: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts.scope) params.set("scope", opts.scope);
+  const organizer = filterValueToParam(opts.filters.organizer);
+  if (organizer) params.set("organizer", organizer);
+  const status = filterValueToParam(opts.filters.status);
+  if (status) params.set("status", status);
+  const involvement = filterValueToParam(opts.filters.involvement);
+  if (involvement) params.set("involvement", involvement);
+  params.set("when", opts.when);
+  params.set("take", String(opts.take));
+  if (opts.skip) params.set("skip", String(opts.skip));
+  return params.toString();
+}
+
 export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team:${string}` } = {}) {
   const toast = useToast();
-  const meetingsUrl = scope ? `/api/meetings?scope=${scope}` : "/api/meetings";
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [upcomingMeetings, setUpcomingMeetings] = useState<Meeting[]>([]);
+  const [upcomingTotal, setUpcomingTotal] = useState(0);
+  const [upcomingHasMore, setUpcomingHasMore] = useState(false);
+  const [loadingMoreUpcoming, setLoadingMoreUpcoming] = useState(false);
+  const [pastMeetings, setPastMeetings] = useState<Meeting[]>([]);
+  const [pastTotal, setPastTotal] = useState(0);
+  const [pastHasMore, setPastHasMore] = useState(false);
+  const [loadingMorePast, setLoadingMorePast] = useState(false);
   const [users, setUsers] = useState<MeetingUser[]>([]);
   const [meId, setMeId] = useState<string>("");
   const [isAdmin, setIsAdmin] = useState(false);
@@ -100,73 +131,111 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
   const { containerRef: scrollContainerRef, onDragOver: handleBoardDragOver, stop: stopAutoScroll } =
     useDragAutoScroll<HTMLDivElement>();
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // Both sections are independent paginated queries — "Upcoming" sorted
+  // soonest-first, "Past & closed" sorted most-recent-first, each filtered
+  // and paginated server-side (see the API route's comment for why: a
+  // single combined fetch sorted one direction can't give either section a
+  // sane "Load more" at the same time). The pipeline/Kanban view groups
+  // whatever's currently loaded across both by status instead.
+  const loadMeetings = useCallback(
+    async (upcomingTake: number = PAGE_SIZE, pastTake: number = PAGE_SIZE) => {
+      setLoading(true);
+      try {
+        const [upRes, pastRes] = await Promise.all([
+          fetch(`/api/meetings?${meetingsSearchParams({ scope, filters, when: "upcoming", take: Math.max(upcomingTake, PAGE_SIZE), skip: 0 })}`),
+          fetch(`/api/meetings?${meetingsSearchParams({ scope, filters, when: "past", take: Math.max(pastTake, PAGE_SIZE), skip: 0 })}`),
+        ]);
+        const [upData, pastData] = await Promise.all([upRes.json().catch(() => ({})), pastRes.json().catch(() => ({}))]);
+        if (upRes.ok && pastRes.ok) {
+          setUpcomingMeetings(upData.meetings ?? []);
+          setUpcomingTotal(upData.total ?? 0);
+          setUpcomingHasMore(!!upData.hasMore);
+          setPastMeetings(pastData.meetings ?? []);
+          setPastTotal(pastData.total ?? 0);
+          setPastHasMore(!!pastData.hasMore);
+          setForbidden(false);
+        } else if (scope && (upRes.status === 403 || pastRes.status === 403)) {
+          setForbidden(true);
+        } else {
+          toast.error("Couldn't load meetings", upData.error ?? pastData.error);
+        }
+      } catch {
+        toast.error("Couldn't load meetings", "Check your connection and try again.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [scope, filters] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  async function loadMoreUpcoming() {
+    setLoadingMoreUpcoming(true);
     try {
-      const [mRes, uRes, meRes] = await Promise.all([
-        fetch(meetingsUrl),
-        fetch("/api/users/assignable?scope=all"),
-        fetch("/api/auth/me"),
-      ]);
-      const [mData, uData, meData] = await Promise.all([
-        mRes.json().catch(() => ({})),
-        uRes.json().catch(() => ({})),
-        meRes.json().catch(() => ({})),
-      ]);
-      if (mRes.ok) {
-        setMeetings(mData.meetings ?? []);
-        setForbidden(false);
-      } else if (scope && mRes.status === 403) {
-        setForbidden(true);
-      } else {
-        toast.error("Couldn't load meetings", mData.error);
-      }
-      if (uRes.ok) setUsers(uData.users ?? []);
-      if (meRes.ok) {
-        setMeId(meData.user?.id ?? "");
-        setIsAdmin(meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN");
-        setHasMeetingsGrant(!!meData.user?.modulePermissions?.includes("MEETINGS"));
-      }
-    } catch {
-      toast.error("Couldn't load meetings", "Check your connection and try again.");
+      const qs = meetingsSearchParams({ scope, filters, when: "upcoming", take: PAGE_SIZE, skip: upcomingMeetings.length });
+      const res = await fetch(`/api/meetings?${qs}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't load more meetings", data.error);
+      setUpcomingMeetings((prev) => [...prev, ...(data.meetings ?? [])]);
+      setUpcomingTotal(data.total ?? 0);
+      setUpcomingHasMore(!!data.hasMore);
     } finally {
-      setLoading(false);
+      setLoadingMoreUpcoming(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meetingsUrl]);
+  }
+
+  async function loadMorePast() {
+    setLoadingMorePast(true);
+    try {
+      const qs = meetingsSearchParams({ scope, filters, when: "past", take: PAGE_SIZE, skip: pastMeetings.length });
+      const res = await fetch(`/api/meetings?${qs}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't load more meetings", data.error);
+      setPastMeetings((prev) => [...prev, ...(data.meetings ?? [])]);
+      setPastTotal(data.total ?? 0);
+      setPastHasMore(!!data.hasMore);
+    } finally {
+      setLoadingMorePast(false);
+    }
+  }
+
+  // A live update or a mutation (duplicate, delete, an edit) re-fetches both
+  // sections in place — preserving however much was already loaded (via
+  // "Load more"), rather than collapsing either one back to page one.
+  function refreshMeetings() {
+    return loadMeetings(upcomingMeetings.length, pastMeetings.length);
+  }
+
+  function updateMeetingInPlace(id: string, patch: Partial<Meeting>) {
+    setUpcomingMeetings((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+    setPastMeetings((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  }
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadMeetings();
+  }, [loadMeetings]);
 
-  const filteredMeetings = useMemo(() => {
-    return meetings.filter((m) => {
-      if (!facetMatches(filters.organizer, (v) => m.organizer.id === v)) return false;
-      if (!facetMatches(filters.status, (v) => m.status === v)) return false;
-      // "Involving me" spans both roles: organiser or on the attendee list.
-      if (
-        !facetMatches(filters.involvement, (v) =>
-          v === "mine" ? m.organizer.id === meId || m.attendees.some((a) => a.id === meId) : true
-        )
-      ) {
-        return false;
+  // Assignable users and the current user don't depend on any filter —
+  // loaded once, not re-fetched every time a filter changes.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [uRes, meRes] = await Promise.all([fetch("/api/users/assignable?scope=all"), fetch("/api/auth/me")]);
+        const [uData, meData] = await Promise.all([uRes.json().catch(() => ({})), meRes.json().catch(() => ({}))]);
+        if (uRes.ok) setUsers(uData.users ?? []);
+        if (meRes.ok) {
+          setMeId(meData.user?.id ?? "");
+          setIsAdmin(meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN");
+          setHasMeetingsGrant(!!meData.user?.modulePermissions?.includes("MEETINGS"));
+        }
+      } catch {
+        // The meetings fetch itself already surfaces a connection-error toast.
       }
-      return true;
-    });
-  }, [meetings, filters, meId]);
+    })();
+  }, []);
 
-  const { upcoming, past } = useMemo(() => {
-    const now = new Date();
-    const up: Meeting[] = [];
-    const pa: Meeting[] = [];
-    for (const m of filteredMeetings) {
-      if (m.status === "SCHEDULED" && isAfter(parseISO(m.startsAt), now)) up.push(m);
-      else pa.push(m);
-    }
-    up.sort((a, b) => a.startsAt.localeCompare(b.startsAt)); // soonest first
-    pa.sort((a, b) => b.startsAt.localeCompare(a.startsAt)); // most recent first
-    return { upcoming: up, past: pa };
-  }, [filteredMeetings]);
+  // The pipeline/Kanban view isn't split into Upcoming/Past — it groups
+  // whatever's currently loaded, across both sections, by status instead.
+  const pipelineMeetings = useMemo(() => [...upcomingMeetings, ...pastMeetings], [upcomingMeetings, pastMeetings]);
 
   // The Social Media Team console gets multi-select within each facet;
   // everywhere else stays the original single-select behavior.
@@ -230,7 +299,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return toast.error("Couldn't duplicate the meeting", data.error);
     toast.success("Meeting duplicated");
-    await load();
+    await refreshMeetings();
   }
 
   function meetingActions(m: Meeting): RowAction[] {
@@ -256,15 +325,15 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
 
   async function deleteMeeting(id: string) {
     const res = await fetch(`/api/meetings/${id}`, { method: "DELETE" });
-    if (res.ok) load();
+    if (res.ok) refreshMeetings();
   }
 
   /** Optimistic status update for a pipeline drag, rolled back if the PATCH fails — same pattern as leads-board.tsx's moveLead. */
   async function moveMeeting(meetingId: string, status: MeetingStatus) {
-    const current = meetings.find((m) => m.id === meetingId);
+    const current = pipelineMeetings.find((m) => m.id === meetingId);
     if (!current || current.status === status) return;
 
-    setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, status } : m)));
+    updateMeetingInPlace(meetingId, { status });
 
     const res = await fetch(`/api/meetings/${meetingId}`, {
       method: "PATCH",
@@ -273,7 +342,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
     });
 
     if (!res.ok) {
-      setMeetings((prev) => prev.map((m) => (m.id === meetingId ? { ...m, status: current.status } : m)));
+      updateMeetingInPlace(meetingId, { status: current.status });
       const data = await res.json().catch(() => ({}));
       toast.error("Couldn't move the meeting", data.error);
     }
@@ -287,6 +356,8 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
       </Card>
     );
   }
+
+  const totalMeetings = upcomingTotal + pastTotal;
 
   return (
     <div className="flex flex-col gap-6">
@@ -309,7 +380,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
           </HelpDialog>
         </div>
         <div className="flex items-center gap-2">
-          {meetings.length > 0 && (
+          {totalMeetings > 0 && (
             <>
               <Dropdown size="sm" value={view} onChange={(v) => setView(v as ViewMode)} options={VIEW_OPTIONS} className="w-40" />
               <FilterMenu facets={filterFacets} />
@@ -326,7 +397,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
         <div className="flex justify-center min-h-[55vh] flex-1 items-center">
           <SkeletonList rows={5} />
         </div>
-      ) : meetings.length === 0 ? (
+      ) : totalMeetings === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
             <p className="text-sm text-muted-foreground">No meetings yet.</p>
@@ -344,7 +415,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
             onDragOver={handleBoardDragOver}
           >
             {STATUS_OPTIONS.map((col) => {
-              const columnMeetings = filteredMeetings.filter((m) => m.status === col.value);
+              const columnMeetings = pipelineMeetings.filter((m) => m.status === col.value);
               const isDragOver = dragOverStatus === col.value;
               return (
                 <div
@@ -413,8 +484,30 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          <Section title="Upcoming" meetings={upcoming} meId={meId} onOpen={openMeeting} actionsFor={meetingActions} emptyLabel="No upcoming meetings." />
-          <Section title="Past & closed" meetings={past} meId={meId} onOpen={openMeeting} actionsFor={meetingActions} emptyLabel="Nothing here yet." />
+          <Section
+            title="Upcoming"
+            meetings={upcomingMeetings}
+            total={upcomingTotal}
+            hasMore={upcomingHasMore}
+            loadingMore={loadingMoreUpcoming}
+            onLoadMore={loadMoreUpcoming}
+            meId={meId}
+            onOpen={openMeeting}
+            actionsFor={meetingActions}
+            emptyLabel="No upcoming meetings."
+          />
+          <Section
+            title="Past & closed"
+            meetings={pastMeetings}
+            total={pastTotal}
+            hasMore={pastHasMore}
+            loadingMore={loadingMorePast}
+            onLoadMore={loadMorePast}
+            meId={meId}
+            onOpen={openMeeting}
+            actionsFor={meetingActions}
+            emptyLabel="Nothing here yet."
+          />
         </div>
       )}
 
@@ -427,7 +520,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
         onClose={() => setDialogOpen(false)}
         onSaved={() => {
           setDialogOpen(false);
-          load();
+          refreshMeetings();
         }}
       />
 
@@ -448,6 +541,10 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
 function Section({
   title,
   meetings,
+  total,
+  hasMore,
+  loadingMore,
+  onLoadMore,
   meId,
   onOpen,
   actionsFor,
@@ -455,6 +552,10 @@ function Section({
 }: {
   title: string;
   meetings: Meeting[];
+  total: number;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
   meId: string;
   onOpen: (m: Meeting) => void;
   actionsFor: (m: Meeting) => RowAction[];
@@ -463,7 +564,7 @@ function Section({
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm font-medium text-muted-foreground">
-        {title} <span className="tabular-nums">({meetings.length})</span>
+        {title} <span className="tabular-nums">({total})</span>
       </p>
       {meetings.length === 0 ? (
         <p className="px-1 py-3 text-sm text-muted-foreground/70">{emptyLabel}</p>
@@ -473,6 +574,11 @@ function Section({
             <MeetingCard key={m.id} meeting={m} meId={meId} onOpen={onOpen} actions={actionsFor(m)} />
           ))}
         </div>
+      )}
+      {hasMore && (
+        <Button type="button" variant="outline" size="sm" className="self-center" onClick={onLoadMore} disabled={loadingMore}>
+          {loadingMore ? "Loading…" : "Load more"}
+        </Button>
       )}
     </div>
   );

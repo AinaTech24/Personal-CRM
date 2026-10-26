@@ -6,6 +6,8 @@ import { isAdmin } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
 import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
+import { parsePageParams } from "@/lib/pagination";
+import { parseFilterParam } from "@/lib/filter-utils";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -13,21 +15,31 @@ const meetingInclude = {
 };
 
 /**
- * List meetings the user organizes or attends (admins see all), newest
- * first. A Social Media lead additionally sees every meeting organized by,
- * or attended by, anyone on their team.
+ * List meetings the user organizes or attends (admins see all). A Social
+ * Media lead additionally sees every meeting organized by, or attended by,
+ * anyone on their team.
  *
  * The Social Media / CRM Team console's Meetings tab passes
  * `scope=social-media|crm` to explicitly ask for the team-only view —
  * narrower than an Admin's usual `{}` company-wide list, which has no team
  * concept built in.
+ *
+ * `when=upcoming|past` additionally splits the result the way the board's
+ * own two sections do (`SCHEDULED` and still ahead vs. everything else),
+ * each independently paginated and sorted the direction that section reads
+ * naturally (soonest-first ahead, most-recent-first behind) — omit it for
+ * the single combined list the pipeline/Kanban view groups by status
+ * instead. The board's own organizer/status/"involving me" filters are
+ * applied here too, alongside `take`/`skip`, so loading more of one section
+ * never has to re-filter an ever-growing in-memory list.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (await isModuleBlocked(user, "MEETINGS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { teamOnly, teamUserIds } = await resolveTeamScope(user, req.nextUrl.searchParams.get("scope"));
+  const params = req.nextUrl.searchParams;
+  const { teamOnly, teamUserIds } = await resolveTeamScope(user, params.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   let where: object;
@@ -51,12 +63,35 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const meetings = await db.meeting.findMany({
-    where,
-    include: meetingInclude,
-    orderBy: { startsAt: "desc" },
-  });
-  return NextResponse.json({ meetings });
+  const and: object[] = [where];
+
+  const organizerFilter = parseFilterParam(params.get("organizer"));
+  if (organizerFilter) and.push({ organizerId: { in: organizerFilter } });
+  const statusFilter = parseFilterParam(params.get("status"));
+  if (statusFilter) and.push({ status: { in: statusFilter } });
+  const involvementFilter = parseFilterParam(params.get("involvement"));
+  if (involvementFilter?.includes("mine")) {
+    and.push({ OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }] });
+  }
+
+  const now = new Date();
+  const when = params.get("when");
+  if (when === "upcoming") {
+    and.push({ status: "SCHEDULED", startsAt: { gt: now } });
+  } else if (when === "past") {
+    and.push({ OR: [{ status: { not: "SCHEDULED" } }, { startsAt: { lte: now } }] });
+  }
+
+  const finalWhere = { AND: and };
+  const { take, skip } = parsePageParams(params, { defaultTake: 50, maxTake: 200 });
+  const orderBy = when === "upcoming" ? ({ startsAt: "asc" as const }) : ({ startsAt: "desc" as const });
+
+  const [meetings, total] = await Promise.all([
+    db.meeting.findMany({ where: finalWhere, include: meetingInclude, orderBy, take, skip }),
+    db.meeting.count({ where: finalWhere }),
+  ]);
+
+  return NextResponse.json({ meetings, total, hasMore: skip + meetings.length < total });
 }
 
 const bodySchema = z.object({
