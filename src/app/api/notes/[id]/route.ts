@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageNote, broadcastNoteChange, isRecordNotFoundError } from "@/lib/notes";
 import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-store";
+import { isValidHexColor } from "@/lib/note-colors";
 
 const noteInclude = {
   author: { select: { id: true, name: true, surname: true, avatarDataUrl: true } },
@@ -13,7 +14,13 @@ const noteInclude = {
 const patchSchema = z.object({
   title: z.string().trim().max(200).optional(),
   content: z.string().trim().max(20000).optional(),
-  color: z.enum(["WHITE", "PINK", "BLUE", "GREEN", "YELLOW", "LAVENDER", "PEACH", "GRAY"]).optional(),
+  // A hex string ("#fecdd3"), or null to clear back to the default theme card background.
+  color: z
+    .string()
+    .trim()
+    .refine(isValidHexColor, "Must be a #rrggbb color")
+    .nullable()
+    .optional(),
   isPinned: z.boolean().optional(),
 });
 
@@ -29,7 +36,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (await isModuleBlocked(user, "NOTES")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const existing = await db.note.findUnique({ where: { id }, select: { authorId: true, departmentId: true } });
+  const existing = await db.note.findUnique({ where: { id }, select: { authorId: true, departmentId: true, updatedAt: true } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const scope = await moduleAccessScope(user, "NOTES", "UPDATE");
   if (!canManageNote(user, existing, scope)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -41,6 +48,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Give the note a title or some content" }, { status: 400 });
   }
 
+  // Pinning/unpinning alone shouldn't disturb anything else about the note —
+  // not its "last updated" sort position, not its "updated Xm ago" label —
+  // so a pin-only PATCH keeps the existing updatedAt instead of letting
+  // Prisma's @updatedAt bump it.
+  const isPinOnlyToggle = d.isPinned !== undefined && d.title === undefined && d.content === undefined && d.color === undefined;
+
   const note = await db.note.update({
     where: { id },
     data: {
@@ -48,6 +61,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(d.content !== undefined && { content: d.content }),
       ...(d.color !== undefined && { color: d.color }),
       ...(d.isPinned !== undefined && { isPinned: d.isPinned }),
+      ...(isPinOnlyToggle && { updatedAt: existing.updatedAt }),
     },
     include: noteInclude,
   });

@@ -1,15 +1,20 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { IconChevronDown, IconChevronUp, IconPencil, IconX } from "@/components/icons";
+import { createPortal } from "react-dom";
+import { IconChevronDown, IconChevronUp, IconCopy, IconX } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
-import { noteColorMeta } from "@/lib/note-colors";
+import { useToast } from "@/components/providers/toast-provider";
+import { contrastTextColor, rotationFor, shade, tapeColorFor } from "@/lib/note-colors";
 import { cn } from "@/lib/utils";
 import type { NoteRow } from "@/components/notes/note-card";
 
 const PANEL_WIDTH = 260;
-const PANEL_HEIGHT = 220;
+const CONTENT_MAX_HEIGHT = 170;
 const MINIMIZED_WIDTH = 180;
+// A pointerdown→pointerup with less movement than this counts as a click
+// (opening the editor) rather than a drag.
+const DRAG_THRESHOLD = 4;
 
 export interface FloatingState {
   x: number;
@@ -18,17 +23,20 @@ export interface FloatingState {
 }
 
 /**
- * A pinned note, shown as a draggable panel within the Notes page's own
- * bounds (the container this is rendered into is `position: relative` and
- * exactly the page's content area — not the viewport — so a floating note
- * can never cover the sidebar/topbar or survive onto another tab). Dragging
- * is pointer-event based (no extra dependency): pointerdown on the title
- * bar starts it, pointermove on the window tracks it, pointerup ends it.
+ * A pinned note, shown as a small draggable panel — portaled to
+ * `document.body` and positioned with `position: fixed` in viewport
+ * coordinates, so it can be dragged anywhere on screen rather than being
+ * boxed into the Notes page's own content area. It still only exists while
+ * NotesView is mounted (it's plain React state, not a global store), so
+ * navigating away from Notes closes every floating panel — it just isn't
+ * visually clipped to a small container while the page is open. Dragging is
+ * pointer-event based (no extra dependency): pointerdown on the title bar
+ * starts it, pointer capture keeps tracking it even once the cursor leaves
+ * the panel, pointerup ends it.
  */
 export function FloatingNote({
   note,
   state,
-  bounds,
   onMove,
   onToggleMinimize,
   onClose,
@@ -36,21 +44,26 @@ export function FloatingNote({
 }: {
   note: NoteRow;
   state: FloatingState;
-  /** The workspace container's current size, so dragging/clamping stays correct across resizes. */
-  bounds: { width: number; height: number };
   onMove: (x: number, y: number) => void;
   onToggleMinimize: () => void;
   onClose: () => void;
   onEdit: () => void;
 }) {
+  const toast = useToast();
   const [dragging, setDragging] = useState(false);
   const dragOffset = useRef({ dx: 0, dy: 0 });
-  const meta = noteColorMeta(note.color);
+  const pointerStart = useRef({ x: 0, y: 0 });
+  const didDrag = useRef(false);
   const width = state.minimized ? MINIMIZED_WIDTH : PANEL_WIDTH;
+  const base = note.color ?? "#f4f4f5";
+  const textColor = contrastTextColor(base);
+  const tape = tapeColorFor(note.id, note.color);
+  const contentBg = shade(base, note.color ? -0.08 : -0.04, 0.08);
+  const tapeRotation = rotationFor(`${note.id}-tape`) * 1.6;
 
   function clamp(x: number, y: number) {
-    const maxX = Math.max(0, bounds.width - width);
-    const maxY = Math.max(0, bounds.height - 40);
+    const maxX = Math.max(0, window.innerWidth - width);
+    const maxY = Math.max(0, window.innerHeight - 40);
     return { x: Math.min(Math.max(0, x), maxX), y: Math.min(Math.max(0, y), maxY) };
   }
 
@@ -58,12 +71,18 @@ export function FloatingNote({
     // Only the title bar itself starts a drag — not its buttons.
     if ((e.target as HTMLElement).closest("button")) return;
     setDragging(true);
+    didDrag.current = false;
+    pointerStart.current = { x: e.clientX, y: e.clientY };
     dragOffset.current = { dx: e.clientX - state.x, dy: e.clientY - state.y };
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: React.PointerEvent) {
     if (!dragging) return;
+    if (!didDrag.current) {
+      const moved = Math.hypot(e.clientX - pointerStart.current.x, e.clientY - pointerStart.current.y);
+      if (moved > DRAG_THRESHOLD) didDrag.current = true;
+    }
     const next = clamp(e.clientX - dragOffset.current.dx, e.clientY - dragOffset.current.dy);
     onMove(next.x, next.y);
   }
@@ -74,69 +93,127 @@ export function FloatingNote({
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   }
 
+  // A plain click on the title bar (no real drag happened) opens the editor,
+  // same as clicking the card itself does in the grid — no separate edit
+  // icon needed.
+  function onHeaderClick(e: React.MouseEvent) {
+    if ((e.target as HTMLElement).closest("button")) return;
+    if (didDrag.current) {
+      didDrag.current = false;
+      return;
+    }
+    onEdit();
+  }
+
   function nudge(dx: number, dy: number) {
     const next = clamp(state.x + dx, state.y + dy);
     onMove(next.x, next.y);
   }
 
-  return (
-    <div
-      className={cn("absolute z-30 flex flex-col overflow-hidden rounded-lg border shadow-lg", meta.card)}
-      style={{ left: state.x, top: state.y, width, height: state.minimized ? "auto" : PANEL_HEIGHT }}
-    >
+  function copyContent(e: React.MouseEvent) {
+    e.stopPropagation();
+    const text = [note.title, note.content].filter(Boolean).join("\n\n");
+    navigator.clipboard.writeText(text).then(
+      () => toast.success("Copied"),
+      () => toast.error("Couldn't copy")
+    );
+  }
+
+  const panel = (
+    <div style={{ left: state.x, top: state.y, width }} className="fixed z-40 pt-3 transition-[width] duration-200 ease-out">
+      {/* Washi tape — same sticky-note accent as the card this floated from. */}
       <div
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onKeyDown={(e) => {
-          // Keyboard-accessible alternative to dragging: arrow keys nudge the panel.
-          const step = e.shiftKey ? 24 : 8;
-          if (e.key === "ArrowLeft") nudge(-step, 0);
-          else if (e.key === "ArrowRight") nudge(step, 0);
-          else if (e.key === "ArrowUp") nudge(0, -step);
-          else if (e.key === "ArrowDown") nudge(0, step);
-          else return;
-          e.preventDefault();
-        }}
-        tabIndex={0}
-        role="toolbar"
-        aria-label={`${note.title || "Untitled note"} — drag, or use arrow keys to move`}
-        className={cn(
-          "flex shrink-0 cursor-grab items-center justify-between gap-1 border-b border-black/10 px-2 py-1.5 text-xs font-medium active:cursor-grabbing dark:border-white/10",
-          dragging && "cursor-grabbing"
-        )}
-      >
-        <span className="min-w-0 flex-1 truncate">{note.title || "Untitled note"}</span>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {!state.minimized && (
-            <Tooltip label="Edit" side="bottom">
-              <button type="button" onClick={onEdit} aria-label="Edit note" className="flex h-5 w-5 items-center justify-center rounded hover:bg-black/10 dark:hover:bg-white/10">
-                <IconPencil className="h-3 w-3" />
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-0 z-10 h-6 w-14 rounded-[2px] opacity-80 shadow-sm"
+        style={{ backgroundColor: tape, transform: `translateX(-50%) rotate(${tapeRotation}deg)` }}
+      />
+      <div style={{ backgroundColor: base, color: textColor }} className="relative flex flex-col overflow-hidden rounded-xl shadow-xl">
+        <div
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onClick={onHeaderClick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              onEdit();
+              return;
+            }
+            // Keyboard-accessible alternative to dragging: arrow keys nudge the panel.
+            const step = e.shiftKey ? 24 : 8;
+            if (e.key === "ArrowLeft") nudge(-step, 0);
+            else if (e.key === "ArrowRight") nudge(step, 0);
+            else if (e.key === "ArrowUp") nudge(0, -step);
+            else if (e.key === "ArrowDown") nudge(0, step);
+            else return;
+            e.preventDefault();
+          }}
+          tabIndex={0}
+          role="toolbar"
+          aria-label={`${note.title || "Untitled note"} — click or press Enter to edit, drag or use arrow keys to move`}
+          className={cn(
+            "flex shrink-0 cursor-grab items-start justify-between gap-1 px-4 pb-2 pt-5 text-sm font-semibold leading-snug active:cursor-grabbing",
+            dragging && "cursor-grabbing"
+          )}
+        >
+          <span className="min-w-0 flex-1 truncate">{note.title || "Untitled note"}</span>
+          <div className="flex shrink-0 items-center gap-0.5 opacity-70">
+            <Tooltip label="Copy note" side="bottom">
+              <button type="button" onClick={copyContent} aria-label="Copy note content" className="flex h-5 w-5 items-center justify-center rounded hover:bg-black/10">
+                <IconCopy className="h-3 w-3" />
               </button>
             </Tooltip>
+            <Tooltip label={state.minimized ? "Expand" : "Minimize"} side="bottom">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleMinimize();
+                }}
+                aria-label={state.minimized ? "Expand" : "Minimize"}
+                className="flex h-5 w-5 items-center justify-center rounded hover:bg-black/10"
+              >
+                {state.minimized ? <IconChevronUp className="h-3 w-3" /> : <IconChevronDown className="h-3 w-3" />}
+              </button>
+            </Tooltip>
+            <Tooltip label="Close" side="bottom">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }}
+                aria-label="Close floating note"
+                className="flex h-5 w-5 items-center justify-center rounded hover:bg-black/10"
+              >
+                <IconX className="h-3 w-3" />
+              </button>
+            </Tooltip>
+          </div>
+        </div>
+        <div
+          className={cn(
+            "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
+            state.minimized ? "max-h-0 opacity-0" : "opacity-100"
           )}
-          <Tooltip label={state.minimized ? "Expand" : "Minimize"} side="bottom">
-            <button
-              type="button"
-              onClick={onToggleMinimize}
-              aria-label={state.minimized ? "Expand" : "Minimize"}
-              className="flex h-5 w-5 items-center justify-center rounded hover:bg-black/10 dark:hover:bg-white/10"
-            >
-              {state.minimized ? <IconChevronUp className="h-3 w-3" /> : <IconChevronDown className="h-3 w-3" />}
-            </button>
-          </Tooltip>
-          <Tooltip label="Close" side="bottom">
-            <button type="button" onClick={onClose} aria-label="Close floating note" className="flex h-5 w-5 items-center justify-center rounded hover:bg-black/10 dark:hover:bg-white/10">
-              <IconX className="h-3 w-3" />
-            </button>
-          </Tooltip>
+          style={{ maxHeight: state.minimized ? 0 : CONTENT_MAX_HEIGHT }}
+        >
+          <div
+            onClick={onEdit}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onEdit();
+            }}
+            aria-label="Edit note content"
+            className="mx-4 mb-4 cursor-pointer overflow-y-auto rounded-lg p-3 text-xs transition-[filter] hover:brightness-95"
+            style={{ backgroundColor: contentBg, maxHeight: CONTENT_MAX_HEIGHT - 16 }}
+          >
+            <p className="whitespace-pre-line">{note.content || <span className="italic opacity-70">No content</span>}</p>
+          </div>
         </div>
       </div>
-      {!state.minimized && (
-        <div className="flex-1 overflow-y-auto p-2.5 text-xs">
-          <p className="whitespace-pre-line text-muted-foreground">{note.content || <span className="italic">No content</span>}</p>
-        </div>
-      )}
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(panel, document.body) : null;
 }

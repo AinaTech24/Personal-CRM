@@ -4,15 +4,13 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { noteListWhere, canManageNote, broadcastNoteChange } from "@/lib/notes";
-import { NOTE_COLORS } from "@/lib/note-colors";
+import { isValidHexColor } from "@/lib/note-colors";
 import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-store";
 
 const noteInclude = {
   author: { select: { id: true, name: true, surname: true, avatarDataUrl: true } },
   department: { select: { id: true, name: true } },
 };
-
-const COLOR_KEYS = NOTE_COLORS.map((c) => c.key);
 
 /**
  * Every note this user may see (noteListWhere), optionally narrowed by a
@@ -39,7 +37,7 @@ export async function GET(req: NextRequest) {
 
   if (filter === "pinned") and.push({ isPinned: true });
   if (filter === "mine") and.push({ authorId: user.id });
-  if (color && COLOR_KEYS.includes(color as (typeof COLOR_KEYS)[number])) and.push({ color });
+  if (color && isValidHexColor(color)) and.push({ color });
 
   if (departmentIdParam && (isAdmin(user) || (isDepartmentAdmin(user) && user.departmentId === departmentIdParam))) {
     and.push({ departmentId: departmentIdParam });
@@ -74,7 +72,13 @@ export async function GET(req: NextRequest) {
 const bodySchema = z.object({
   title: z.string().trim().max(200).default(""),
   content: z.string().trim().max(20000).default(""),
-  color: z.enum(["WHITE", "PINK", "BLUE", "GREEN", "YELLOW", "LAVENDER", "PEACH", "GRAY"]).default("WHITE"),
+  // A hex string ("#fecdd3"), or null/omitted for the default theme card background.
+  color: z
+    .string()
+    .trim()
+    .refine(isValidHexColor, "Must be a #rrggbb color")
+    .nullable()
+    .optional(),
   isPinned: z.boolean().default(false),
 });
 
@@ -95,7 +99,7 @@ export async function POST(req: NextRequest) {
     data: {
       title: d.title || "Untitled note",
       content: d.content,
-      color: d.color,
+      color: d.color ?? null,
       isPinned: d.isPinned,
       authorId: user.id,
       departmentId: user.departmentId,
