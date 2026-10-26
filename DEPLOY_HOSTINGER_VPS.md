@@ -47,18 +47,45 @@ before reaching Node. Set it to `10m` (below).
 
 ### 3. The build talks to the database
 
-`npm run build` is `prisma generate && prisma db push && next build`. The push is
-what creates and updates tables — this project has no migrations directory, so
-`schema.prisma` is the source of truth.
+`npm run build` is `prisma generate && tsx scripts/migrate-deploy-safe.ts && next build`.
+That script runs `prisma migrate deploy`, which applies whatever migration
+files in `prisma/migrations/` the target database hasn't seen yet, in order,
+then records them as applied — it never generates or guesses SQL on its own,
+so a deploy can't silently drop a column or table the way
+`prisma db push --accept-data-loss` could (that flag is gone; it used to
+reconcile `schema.prisma` against the live database on every build and
+silently apply whatever `--accept-data-loss` made Prisma think was
+necessary, with no review step).
 
-That means `DATABASE_URL` must be set **at build time**, not just at runtime, and
-MySQL must be running before you build.
+That means `DATABASE_URL` must be set **at build time**, not just at runtime,
+and MySQL must be running before you build — same as before.
 
-It also means a schema edit that MySQL can't apply non-destructively **fails the
-build**. That's deliberate — the alternative is silent drift. When that happens,
-Prisma will suggest `--force-reset`. **That drops the entire database. Never add
-it to the build.** Fix the schema instead (make the column nullable, add a
-default, backfill first).
+**The workflow for a schema change is now:**
+
+1. Edit `prisma/schema.prisma`.
+2. Locally: `npm run db:migrate -- --name <short-description>` (this is
+   `prisma migrate dev --name <short-description>`). It generates a new,
+   readable SQL file under `prisma/migrations/<timestamp>_<description>/`
+   and applies it to your local dev database so you can test the change.
+3. **Read the generated SQL** before committing it — that's the whole point.
+   If it contains `DROP COLUMN`/`DROP TABLE` you didn't expect, stop and
+   reconsider rather than letting it ship.
+4. Commit the new `prisma/migrations/...` folder along with your code change.
+5. Deploy normally. `prisma migrate deploy` applies that one new migration
+   on the VPS. If it can't apply cleanly, the build fails loudly instead of
+   guessing — fix the migration (or the data) and redeploy.
+
+This VPS was previously running on `db push`, so its database has every
+table but no Prisma migration history yet. `prisma/migrations/0_init` is a
+migration representing that exact schema already live. `migrate-deploy-safe.ts`
+handles the one-time transition automatically: it tries `migrate deploy`
+first, and if Prisma reports the database isn't baselined, it runs
+`prisma migrate resolve --applied 0_init` — which only records that 0_init
+already matches reality, running no SQL against any table or row — then
+retries `migrate deploy`. That happens once, on the first deploy after this
+change ships; every deploy after that already has history, so it goes
+straight through `migrate deploy` with no retry. Every migration added from
+here on is new and actually gets applied for real.
 
 ---
 
@@ -127,9 +154,9 @@ FLUSH PRIVILEGES;
 EXIT;
 ```
 
-`ALL PRIVILEGES` on that one database is required: `prisma db push` issues DDL
-(CREATE/ALTER TABLE) during every build, so a data-only grant would fail the
-build.
+`ALL PRIVILEGES` on that one database is required: `prisma migrate deploy`
+issues DDL (CREATE/ALTER TABLE) whenever a new migration ships, so a
+data-only grant would fail the build the next time the schema changes.
 
 Confirm MySQL is bound to localhost only:
 
@@ -235,7 +262,7 @@ Install, build, seed:
 
 ```bash
 npm ci
-npm run build      # generate + db push (creates every table) + next build
+npm run build      # generate + migrate deploy (creates every table) + next build
 npm run db:seed    # first super admin
 ```
 
@@ -382,7 +409,7 @@ Cookies are `secure` in production, so the app only works over HTTPS anyway.
 cd /home/aina/aina-crm
 git pull origin main
 npm ci
-npm run build        # applies any schema change via db push
+npm run build        # applies any new migration via `prisma migrate deploy`
 pm2 restart aina-crm
 ```
 
@@ -390,8 +417,11 @@ There's a gap between `pm2 restart` and the app being ready (Next boots, Prisma
 connects), so expect a few seconds of 502. For an internal CRM that's fine; if it
 isn't, `pm2 reload` needs cluster mode, which this app can't use — see gotcha 1.
 
-If a build fails on `db push`, **stop and read it**. It means the schema change
-can't apply without data loss. Fix the schema; never reach for `--force-reset`.
+If a build fails on `migrate deploy`, **stop and read it**. It means a pending
+migration couldn't apply as-is against the live data (e.g. a `NOT NULL` column
+with no default, added to a table that already has rows). Fix it with a new
+migration — add a default, backfill first, or split it into two migrations —
+rather than editing the failed one after it's been committed.
 
 ---
 
@@ -507,7 +537,7 @@ never fired (check `grep CRON /var/log/syslog` or `journalctl -u cron`).
 | Sockets fall back to polling / drop | `Upgrade`/`Connection` headers missing from the nginx location block. |
 | Every session shows the same IP | `X-Forwarded-For` not set. |
 | Slow, dev-mode behaviour in production | `NODE_ENV` set in `.env` instead of PM2 — `server.js` reads it before Next loads the file, so it never sees it and starts in dev mode. |
-| Build fails on `db push` | A destructive schema change. Fix the schema — never `--force-reset`. |
+| Build fails on `migrate deploy` | A migration couldn't apply against the live data. Fix it with a new migration — never edit or delete a committed one. |
 | Invite links point at the wrong host | `APP_URL` / Settings → Workspace → Application. |
 | Everyone signed out after a deploy | `JWT_SECRET` changed. |
 | SMTP `ENETUNREACH` | Host has no outbound IPv6. Already handled — the mailer resolves mail hosts to IPv4. |

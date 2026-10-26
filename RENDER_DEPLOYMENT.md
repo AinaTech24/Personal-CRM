@@ -90,23 +90,22 @@ Render auto-sets `PORT`; `server.js` already reads `process.env.PORT` so no chan
 
 ---
 
-## 4. First deploy — push the schema and seed the admin
+## 4. First deploy — seed the admin
 
-Render runs your build/start commands automatically on every push, but the database schema
-needs to be applied once (and any time the schema changes). Easiest way: run it from your own
-machine, pointed at the production database.
+`npm run build` (Render's build command) runs `prisma migrate deploy`, which applies every
+migration in `prisma/migrations/` — including `0_init`, the baseline that creates every
+table — so the schema is already in place once the first deploy succeeds. Only the one-time
+admin seed still needs a manual run, pointed at the production database:
 
 ```bash
 # From the project root, temporarily set DATABASE_URL to the production DB
-DATABASE_URL="mysql://USER:PASSWORD@HOST:PORT/DB" npx prisma db push
 DATABASE_URL="mysql://USER:PASSWORD@HOST:PORT/DB" npx tsx prisma/seed.ts
 ```
 
-(On Windows PowerShell: `$env:DATABASE_URL="..."; npx prisma db push`.)
+(On Windows PowerShell: `$env:DATABASE_URL="..."; npx tsx prisma/seed.ts`.)
 
 Alternatively, use Render's **Shell** tab on the deployed service (once the first deploy
-succeeds) to run `npx prisma db push` and `npm run db:seed` directly against the already-wired
-`DATABASE_URL`.
+succeeds) to run `npm run db:seed` directly against the already-wired `DATABASE_URL`.
 
 ---
 
@@ -144,9 +143,10 @@ the right URL.
 
 ## 8. Updating / redeploying
 
-Render auto-deploys on every push to `main` by default. For schema changes, remember to run
-`npx prisma db push` (or `prisma migrate deploy` once you adopt migrations) against the
-production `DATABASE_URL` — Render does **not** do this automatically as part of the build.
+Render auto-deploys on every push to `main` by default. For a schema change, generate the
+migration locally first (`npx prisma migrate dev --name <description>`, see
+DEPLOY_HOSTINGER_VPS.md §3) and commit the new `prisma/migrations/...` folder — the build's
+`prisma migrate deploy` applies it automatically on the next deploy, no manual step needed.
 
 ---
 
@@ -166,5 +166,5 @@ app's data.
 | Build fails on `prisma generate` | Make sure `DATABASE_URL` is set in the environment (Prisma needs it at generate time in some configs) — it is, from step 3. |
 | 502 / service won't start | Check the Logs tab; usually a missing env var. Confirm `DATABASE_URL` is reachable from Render's network (Railway/Aiven dashboards show an "allow all IPs" or Render-specific allowlist option). |
 | Realtime not updating | Confirm you're on the Starter plan or above — the Free plan spins the service down after 15 minutes of inactivity, which drops open Socket.io connections and adds cold-start delay. |
-| Login fails after first deploy | Confirm you ran `prisma db push` + the seed script against the production DB (step 4). |
+| Login fails after first deploy | Confirm you ran the seed script against the production DB (step 4) — the schema itself is applied automatically by the build. |
 | Invite links point to the wrong domain | Set `APP_URL` correctly and redeploy/restart. |

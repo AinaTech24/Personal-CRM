@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node server.js",
-    "build": "prisma generate && prisma db push --accept-data-loss && next build && tsx scripts/dedupe-onboarding-forms.ts && tsx scripts/hash-form-slugs.ts && tsx scripts/upgrade-module-permissions-to-crud.ts && tsx scripts/migrate-social-crm-to-teams.ts && tsx scripts/encrypt-stored-secrets.ts",
+    "build": "prisma generate && tsx scripts/migrate-deploy-safe.ts && next build && tsx scripts/dedupe-onboarding-forms.ts && tsx scripts/hash-form-slugs.ts && tsx scripts/upgrade-module-permissions-to-crud.ts && tsx scripts/migrate-social-crm-to-teams.ts && tsx scripts/encrypt-stored-secrets.ts",
     "start": "cross-env NODE_ENV=production node server.js",
     "lint": "eslint",
     "test": "vitest run",
