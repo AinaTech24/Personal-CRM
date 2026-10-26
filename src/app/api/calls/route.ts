@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { callListWhere, broadcastCallChange } from "@/lib/calls";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
+import { parsePageParams } from "@/lib/pagination";
 
 const callInclude = {
   lead: { select: { id: true, name: true, company: true } },
@@ -15,22 +16,26 @@ const callInclude = {
 /**
  * List calls the user owns or logged (admins/CRM leads see the whole team).
  * `scope=crm` explicitly asks for the CRM Team console's team-only view —
- * same convention as Leads/Tasks/Meetings/Projects.
+ * same convention as Leads/Tasks/Meetings/Projects. A naturally fast-growing
+ * log, so paginated with `take`/`skip` like the other list endpoints.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { teamOnly, teamUserIds } = await resolveTeamScope(user, req.nextUrl.searchParams.get("scope"));
+  const params = req.nextUrl.searchParams;
+  const { teamOnly, teamUserIds } = await resolveTeamScope(user, params.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const calls = await db.call.findMany({
-    where: callListWhere(user, teamUserIds, teamOnly),
-    include: callInclude,
-    orderBy: { startTime: "desc" },
-  });
+  const where = callListWhere(user, teamUserIds, teamOnly);
+  const { take, skip } = parsePageParams(params, { defaultTake: 50, maxTake: 200 });
 
-  return NextResponse.json({ calls });
+  const [calls, total] = await Promise.all([
+    db.call.findMany({ where, include: callInclude, orderBy: { startTime: "desc" }, take, skip }),
+    db.call.count({ where }),
+  ]);
+
+  return NextResponse.json({ calls, total, hasMore: skip + calls.length < total });
 }
 
 const bodySchema = z.object({
