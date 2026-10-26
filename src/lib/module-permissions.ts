@@ -19,6 +19,7 @@ export const MANAGED_MODULES: ManagedModule[] = [
   "MESSAGES",
   "PROJECTS",
   "EXPENSES",
+  "NOTES",
 ];
 
 export const MODULE_LABEL: Record<ManagedModule, string> = {
@@ -29,9 +30,10 @@ export const MODULE_LABEL: Record<ManagedModule, string> = {
   LEADS: "Leads",
   CLIENTS: "Clients",
   BIRTHDAYS: "Birthdays",
-  MESSAGES: "Messages",
+  MESSAGES: "Chat",
   PROJECTS: "Projects",
   EXPENSES: "Expenses",
+  NOTES: "Notes",
 };
 
 /** The four independent actions a module grant can carry. */

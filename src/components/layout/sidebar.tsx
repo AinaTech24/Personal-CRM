@@ -60,7 +60,7 @@ const mainNav: NavItem[] = [
   { href: "/tasks", label: "Tasks", icon: IconTasks },
   { href: "/projects", label: "Projects", icon: IconProjects },
   { href: "/meetings", label: "Meetings", icon: IconCalendar },
-  { href: "/messages", label: "Messages", icon: IconMessage },
+  { href: "/messages", label: "Chat", icon: IconMessage },
   { href: "/notes", label: "Notes", icon: IconNotes },
   { href: "/quotations", label: "Quotations", icon: IconQuotations },
   { href: "/invoices", label: "Invoices", icon: IconInvoices },
@@ -153,6 +153,7 @@ const MAIN_NAV_HREF_MODULE: Partial<Record<string, ManagedModule>> = {
   "/projects": "PROJECTS",
   "/meetings": "MEETINGS",
   "/attendance": "ATTENDANCE",
+  "/notes": "NOTES",
 };
 
 /**
@@ -175,6 +176,7 @@ const BLOCKABLE_HREF_MODULE: Partial<Record<string, ManagedModule>> = {
   "/messages": "MESSAGES",
   "/clients": "CLIENTS",
   "/expenses": "EXPENSES",
+  "/notes": "NOTES",
 };
 
 function NavLinkItem({
@@ -434,11 +436,8 @@ export function Sidebar({
     : mainNav.filter((item) => {
         // "My Activity" is a personal record of one's own actions, not a
         // toggleable module — an admin hiding it would just be hiding the
-        // one place a regular user can see their own history. Notes is the
-        // same kind of always-available personal space, with its own fixed
-        // 3-tier visibility (see src/lib/notes.ts) rather than a Permission
-        // Manager grant, so there's nothing here for an admin to hide either.
-        if (item.href === "/" || item.href === "/activity" || item.href === "/notes") return true;
+        // one place a regular user can see their own history.
+        if (item.href === "/" || item.href === "/activity") return true;
         if (!hiddenModules.includes(item.href.replace(/^\//, ""))) return true;
         const grantedModule = MAIN_NAV_HREF_MODULE[item.href];
         return !!grantedModule && managedModuleSet.has(grantedModule);

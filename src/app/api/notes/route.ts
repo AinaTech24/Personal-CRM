@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { noteListWhere, canManageNote, broadcastNoteChange } from "@/lib/notes";
 import { NOTE_COLORS } from "@/lib/note-colors";
+import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-store";
 
 const noteInclude = {
   author: { select: { id: true, name: true, surname: true, avatarDataUrl: true } },
@@ -24,6 +25,7 @@ const COLOR_KEYS = NOTE_COLORS.map((c) => c.key);
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "NOTES")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const params = req.nextUrl.searchParams;
   const q = params.get("q")?.trim();
@@ -32,7 +34,8 @@ export async function GET(req: NextRequest) {
   const departmentIdParam = params.get("departmentId");
   const authorIdParam = params.get("authorId");
 
-  const and: object[] = [noteListWhere(user)];
+  const scope = await moduleAccessScope(user, "NOTES", "READ");
+  const and: object[] = [noteListWhere(user, scope)];
 
   if (filter === "pinned") and.push({ isPinned: true });
   if (filter === "mine") and.push({ authorId: user.id });
@@ -64,7 +67,7 @@ export async function GET(req: NextRequest) {
     orderBy,
   });
 
-  const withPermissions = notes.map((n) => ({ ...n, canManage: canManageNote(user, n) }));
+  const withPermissions = notes.map((n) => ({ ...n, canManage: canManageNote(user, n, scope) }));
   return NextResponse.json({ notes: withPermissions });
 }
 
@@ -79,6 +82,7 @@ const bodySchema = z.object({
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "NOTES")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

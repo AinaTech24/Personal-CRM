@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageNote, broadcastNoteChange, isRecordNotFoundError } from "@/lib/notes";
+import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-store";
 
 const noteInclude = {
   author: { select: { id: true, name: true, surname: true, avatarDataUrl: true } },
@@ -25,10 +26,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (await isModuleBlocked(user, "NOTES")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const { id } = await params;
   const existing = await db.note.findUnique({ where: { id }, select: { authorId: true, departmentId: true } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!canManageNote(user, existing)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const scope = await moduleAccessScope(user, "NOTES", "UPDATE");
+  if (!canManageNote(user, existing, scope)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
@@ -56,10 +60,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (await isModuleBlocked(user, "NOTES")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const { id } = await params;
   const existing = await db.note.findUnique({ where: { id }, select: { authorId: true, departmentId: true } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!canManageNote(user, existing)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const scope = await moduleAccessScope(user, "NOTES", "DELETE");
+  if (!canManageNote(user, existing, scope)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     await db.note.delete({ where: { id } });

@@ -47,6 +47,7 @@ enum ManagedModule {
   MESSAGES
   PROJECTS
   EXPENSES
+  NOTES
 }
 
 enum NoteColor {
@@ -60,11 +61,12 @@ enum NoteColor {
   GRAY
 }
 
-/// A personal note. Visibility is its own fixed 3-tier model (Admin/Super
+/// A personal note. Visibility is its own fixed 3-tier floor (Admin/Super
 /// Admin → everyone; a Department Admin → their own department; everyone
-/// else → only their own notes) — deliberately NOT routed through the
-/// Permission Manager's module-grant system, unlike most other modules.
-/// `departmentId` snapshots the author's department at creation time, same
+/// else → only their own notes), which a Permission Manager NOTES grant can
+/// still widen the same way a Tasks/Leads/Meetings grant does — see
+/// src/lib/notes.ts. `departmentId` snapshots the author's department at
+/// creation time, same
 /// as Lead/Task/etc., so department-scoped visibility survives the author
 /// later moving departments or being deactivated.
 model Note {

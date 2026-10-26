@@ -232,7 +232,7 @@ function PermissionManager() {
                 <p>Widens a grant from just the person&apos;s own department to everything, company-wide — for a Department Admin who should see what an Admin sees in one specific module, without making them a full Admin. Only a company Admin can turn this on; a Department Admin or team lead editing their own people&apos;s grants never sees this column.</p>
               </HelpSection>
             )}
-            <HelpSection heading="Messages">
+            <HelpSection heading="Chat">
               <p>Nav/page-only, since conversations work by membership rather than ownership — there&apos;s no department-scoped visibility to grant here.</p>
             </HelpSection>
             <HelpSection heading="Who can use this page">

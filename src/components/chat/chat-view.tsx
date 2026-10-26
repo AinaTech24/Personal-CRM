@@ -829,14 +829,6 @@ export function ChatView() {
 
   const activeMatchId = searchMatches[Math.min(searchIndex, Math.max(0, searchMatches.length - 1))] ?? null;
 
-  if (loading) {
-    return (
-      <div className="h-full">
-        <SkeletonList rows={6} />
-      </div>
-    );
-  }
-
   return (
     // h-full, not a viewport calc: subtracting a hardcoded 7rem for the topbar
     // and padding was 24px off, leaving dead space under the panel, and it went
@@ -846,8 +838,8 @@ export function ChatView() {
       <div className={cn("flex w-full flex-col border-r border-border sm:w-72 lg:w-80", activeId && "hidden sm:flex")}>
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div className="flex items-center gap-1.5">
-            <h1 className="text-base font-semibold">Messages</h1>
-            <HelpDialog title="Messages — help">
+            <h1 className="text-base font-semibold">Chat</h1>
+            <HelpDialog title="Chat — help">
               <HelpSection heading="What this page is for">
                 <p>Direct and group conversations with anyone else at the company — text, file attachments, reactions, replies, and forwarding.</p>
               </HelpSection>
@@ -861,7 +853,10 @@ export function ChatView() {
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {conversations.map((c) => {
+          {loading ? (
+            <SkeletonList rows={6} />
+          ) : (
+          conversations.map((c) => {
             const other = c.type === "DIRECT" ? c.members.find((m) => m.id !== me.id) : null;
             return (
               <div
@@ -918,7 +913,7 @@ export function ChatView() {
                 )}
               </div>
             );
-          })}
+          }))}
         </div>
       </div>
 
