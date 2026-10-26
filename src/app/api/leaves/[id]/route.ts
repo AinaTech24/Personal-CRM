@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
+import { attendanceAccessScope } from "@/lib/attendance-query";
 
-/** Admin (anyone), or an Attendance module grant (their own department only): cancel a leave entry. The attendance record it stamped is left alone. */
+/** Admin (anyone), a Department Admin (their own department), or an Attendance module grant: cancel a leave entry. The attendance record it stamped is left alone. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const scope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "ATTENDANCE", "DELETE");
+  const scope = await attendanceAccessScope(user, "DELETE");
   if (scope === null) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;

@@ -94,8 +94,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   const demoting = data.role !== undefined && data.role !== "SUPER_ADMIN" && target.role === "SUPER_ADMIN";
   const blocking = data.isActive === false && target.isActive;
+  const unblocking = data.isActive === true && !target.isActive;
   if ((demoting || blocking) && target.role === "SUPER_ADMIN" && (await wouldRemoveLastSuperAdmin(target.id))) {
     return NextResponse.json({ error: "At least one active Super Admin is required" }, { status: 400 });
+  }
+
+  // Blocking removes them from their department entirely (and any
+  // department-head status with it), snapshotting the department first so
+  // unblocking can restore it — department-head status itself is never
+  // restored this way; a company Admin has to re-grant it deliberately.
+  // Unblocking restores that snapshot only if the department still exists.
+  // Computed as a plain object (not spread fragments) so it's obvious these
+  // always win over whatever department/head values the request itself may
+  // also carry: being blocked (or restored on unblock) overrides them.
+  const departmentUpdate: { departmentId?: string | null; isDepartmentAdmin?: boolean; previousDepartmentId?: string | null } = {};
+  if (blocking) {
+    departmentUpdate.departmentId = null;
+    departmentUpdate.isDepartmentAdmin = false;
+    departmentUpdate.previousDepartmentId = target.departmentId ?? target.previousDepartmentId;
+  } else if (unblocking && target.previousDepartmentId) {
+    const stillExists = await db.department.findUnique({ where: { id: target.previousDepartmentId }, select: { id: true } });
+    departmentUpdate.previousDepartmentId = null;
+    if (stillExists) departmentUpdate.departmentId = stillExists.id;
   }
 
   const updated = await db.user.update({
@@ -110,6 +130,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.dateOfJoining !== undefined && {
         dateOfJoining: data.dateOfJoining ? new Date(`${data.dateOfJoining}T00:00:00.000Z`) : null,
       }),
+      ...departmentUpdate,
     },
     include: {
       department: true,

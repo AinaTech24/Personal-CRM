@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { requestDevice } from "@/lib/request-info";
 import { sharesLedTeamWith } from "@/lib/teams";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
+import { attendanceAccessScope } from "@/lib/attendance-query";
 
 const bodySchema = z.object({
   decision: z.enum(["APPROVED", "REJECTED"]),
@@ -12,7 +12,8 @@ const bodySchema = z.object({
 });
 
 /**
- * Approve or reject a record — a company Admin for anyone, or the lead of
+ * Approve or reject a record — a company Admin for anyone, a Department
+ * Admin for their own department, an Attendance module grant, or the lead of
  * any team the record's owner belongs to. Approval finalizes it into the
  * summary; rejection excludes it. Both are audited.
  */
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const record = await db.attendance.findUnique({ where: { id }, include: { user: { select: { departmentId: true } } } });
   if (!record) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const scope = await moduleAccessScope(actor, "ATTENDANCE", "UPDATE");
+  const scope = await attendanceAccessScope(actor, "UPDATE");
   const scopeAllowed = scope === "all" || (scope !== null && record.user.departmentId === scope.departmentId);
   if (!scopeAllowed && !(await sharesLedTeamWith(actor.id, record.userId))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

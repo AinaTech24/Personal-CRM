@@ -2,17 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
+import { attendanceAccessScope } from "@/lib/attendance-query";
 import { grantLeaveDay } from "@/lib/leave";
 
-/** Admins see everyone's leave; an Attendance module grant sees their own department's; a regular user sees only their own. */
+/** Admins and Department Admins see their (own/department's) leave automatically; an Attendance module grant widens it further; a regular user sees only their own. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const scope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "ATTENDANCE", "READ");
+  const scope = await attendanceAccessScope(user, "READ");
 
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");
@@ -49,16 +48,16 @@ const bodySchema = z.object({
 });
 
 /**
- * Admin (anyone), or an Attendance module grant (their own department
- * only): put a user on leave. Full-day leave also stamps that day's
- * attendance as Absent with the reason, so the record reflects it without
- * any check-in.
+ * Admin (anyone), a Department Admin (their own department), or an
+ * Attendance module grant (their own department unless widened): put a user
+ * on leave. Full-day leave also stamps that day's attendance as Absent with
+ * the reason, so the record reflects it without any check-in.
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const scope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "ATTENDANCE", "CREATE");
+  const scope = await attendanceAccessScope(user, "CREATE");
   if (scope === null) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

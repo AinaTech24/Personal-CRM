@@ -1,14 +1,36 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { dateFromKey } from "@/lib/attendance";
+import { isAdmin, isDepartmentAdmin, type PermissionUser } from "@/lib/permissions";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
+import type { ModuleAction } from "@/lib/module-permissions";
 
 const STATUSES = ["PRESENT", "HALF_DAY", "ABSENT"];
 const APPROVALS = ["PENDING", "APPROVED", "REJECTED"];
 
 /**
+ * How far this user's Attendance access reaches: "all" for an Admin or a
+ * company-wide grant, their own department for a department-scoped grant —
+ * or, same exception Notes already makes, a Department Admin's own
+ * department even with no Permission Manager grant at all. A grant never
+ * narrows this floor, only widens past it (e.g. to "all" via allDepartments).
+ * null means no access whatsoever.
+ */
+export async function attendanceAccessScope(
+  user: PermissionUser,
+  action: ModuleAction
+): Promise<"all" | { departmentId: string } | null> {
+  if (isAdmin(user)) return "all";
+  const granted = await moduleAccessScope(user, "ATTENDANCE", action);
+  if (granted) return granted;
+  if (isDepartmentAdmin(user) && user.departmentId) return { departmentId: user.departmentId };
+  return null;
+}
+
+/**
  * Shared filter builder for the admin attendance list and its CSV export.
- * `scope` (an Attendance module grant, from moduleAccessScope) narrows the
- * result to the grant holder's own department when it isn't "all" — an
- * Admin passes "all" (or omits it) for the unrestricted company-wide view.
+ * `scope` (from attendanceAccessScope) narrows the result to one department
+ * when it isn't "all" — an Admin (or a company-wide grant) passes "all" for
+ * the unrestricted view.
  */
 export function buildAttendanceWhere(
   params: URLSearchParams,

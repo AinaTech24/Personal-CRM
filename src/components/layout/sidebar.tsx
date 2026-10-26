@@ -822,6 +822,10 @@ export function Sidebar({
     ? adminNav
     : adminNav.filter((item) => {
         if (item.href === "/admin/permissions") return isDepartmentAdmin;
+        // A Department Admin reaches their own department's attendance
+        // automatically, same exception Notes already makes elsewhere — no
+        // Permission Manager grant required, but an explicit block still wins.
+        if (item.href === "/admin/attendance" && isDepartmentAdmin && !blockedModules.includes("ATTENDANCE")) return true;
         const grantedModule = ADMIN_HREF_MODULE.get(item.href);
         return !!grantedModule && managedModuleSet.has(grantedModule) && !blockedModules.includes(grantedModule);
       });
@@ -921,7 +925,7 @@ export function Sidebar({
     return () => clearTimeout(t);
   }, [pathname]);
 
-  const canSeeAttendanceAdmin = isAdmin || managedModuleSet.has("ATTENDANCE");
+  const canSeeAttendanceAdmin = isAdmin || isDepartmentAdmin || managedModuleSet.has("ATTENDANCE");
   const canSeeLeaveAdmin = isAdmin || managedModuleSet.has("LEAVE");
   const canSeeExpensesAdmin = isAdmin || managedModuleSet.has("EXPENSES");
 
