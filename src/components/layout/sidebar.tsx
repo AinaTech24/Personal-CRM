@@ -9,6 +9,7 @@ import {
   DndContext,
   PointerSensor,
   closestCenter,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -44,6 +45,7 @@ import {
   IconX,
   IconNotes,
   IconBuildingCog,
+  IconPencil,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -275,6 +277,10 @@ function NavLinkItem({
 
 const NAV_ORDER_KEY = "aina-sidebar-nav-order";
 const COLLAPSED_SECTIONS_KEY = "aina-sidebar-collapsed-sections";
+const GROUP_OVERRIDES_KEY = "aina-sidebar-group-overrides";
+const GROUP_TITLES_KEY = "aina-sidebar-group-titles";
+/** The id a drag targets to drop into a section that currently has no items of its own to collide with. */
+const EMPTY_DROP_PREFIX = "__empty__";
 
 /** A per-browser layout preference, same storage mechanism as the collapsed state right below — not synced across devices, nothing to lose by keeping it purely local. */
 function loadNavOrder(): string[] | null {
@@ -310,6 +316,63 @@ function loadCollapsedSections(): SidebarGroupKey[] {
 function saveCollapsedSections(keys: SidebarGroupKey[]) {
   try {
     localStorage.setItem(COLLAPSED_SECTIONS_KEY, JSON.stringify(keys));
+  } catch {
+    // Same best-effort as saveNavOrder.
+  }
+}
+
+/**
+ * Which section a browser has dragged a given href's item into — a personal
+ * override of that item's default `group`, same storage mechanism as the
+ * order/collapse preferences above. Absent here, an item falls back to its
+ * built-in group.
+ */
+function loadGroupOverrides(): Record<string, SidebarGroupKey> {
+  try {
+    const raw = localStorage.getItem(GROUP_OVERRIDES_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || typeof parsed !== "object") return {};
+    const result: Record<string, SidebarGroupKey> = {};
+    for (const [href, group] of Object.entries(parsed)) {
+      if (typeof href === "string" && typeof group === "string" && SIDEBAR_GROUP_KEYS.includes(group as SidebarGroupKey)) {
+        result[href] = group as SidebarGroupKey;
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function saveGroupOverrides(overrides: Record<string, SidebarGroupKey>) {
+  try {
+    localStorage.setItem(GROUP_OVERRIDES_KEY, JSON.stringify(overrides));
+  } catch {
+    // Same best-effort as saveNavOrder.
+  }
+}
+
+/** A browser's own rename of a section heading — every role can do this, it's a personal label, not a company-wide setting. Missing/blank falls back to the built-in title. */
+function loadGroupTitles(): Partial<Record<SidebarGroupKey, string>> {
+  try {
+    const raw = localStorage.getItem(GROUP_TITLES_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || typeof parsed !== "object") return {};
+    const result: Partial<Record<SidebarGroupKey, string>> = {};
+    for (const [key, title] of Object.entries(parsed)) {
+      if (SIDEBAR_GROUP_KEYS.includes(key as SidebarGroupKey) && typeof title === "string" && title.trim()) {
+        result[key as SidebarGroupKey] = title.trim().slice(0, 40);
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function saveGroupTitles(titles: Partial<Record<SidebarGroupKey, string>>) {
+  try {
+    localStorage.setItem(GROUP_TITLES_KEY, JSON.stringify(titles));
   } catch {
     // Same best-effort as saveNavOrder.
   }
@@ -382,11 +445,35 @@ function SortableNavItem({
 }
 
 /**
- * One of the four fixed sidebar sections (Workspace/Finance/My Work/
- * Administration) — a collapsible heading over its own SortableContext, so a
- * drag never crosses between sections. Renders nothing if this user has no
- * items in the section at all (a non-admin with zero Administration items,
- * say), rather than an empty collapsible heading.
+ * The drop target a cross-section drag lands on when its destination section
+ * currently has no items of its own to collide with — `closestCenter` has
+ * nothing to compare against in a genuinely empty SortableContext, so this
+ * registers the section itself as a droppable zone instead. Only rendered
+ * while rearranging, and only for an otherwise-empty section.
+ */
+function EmptySectionDropZone({ groupKey }: { groupKey: SidebarGroupKey }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `${EMPTY_DROP_PREFIX}${groupKey}` });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "mx-0.5 mb-0.5 rounded-md border border-dashed border-border px-2.5 py-2.5 text-center text-xs text-muted-foreground/60 transition-colors",
+        isOver && "border-ring/60 bg-primary/5 text-foreground"
+      )}
+    >
+      Drop here
+    </div>
+  );
+}
+
+/**
+ * One of the four sidebar sections (Workspace/Finance/My Work/Administration
+ * by default) — a collapsible, renamable heading over its own SortableContext.
+ * A drag normally reorders within one section, but can also move an item into
+ * a different one (see handleNavDragEnd), so this renders even with zero
+ * items while actively rearranging, to stay a valid drop target; otherwise an
+ * empty section (a non-admin with nothing in Administration, say) renders
+ * nothing at all.
  *
  * `open` always wins over the user's own collapse preference while the rail
  * itself is collapsed to icons (there's no room for a heading to collapse
@@ -396,11 +483,16 @@ function SortableNavItem({
  * heading the user collapsed earlier).
  */
 function SidebarSection({
+  groupKey,
   title,
   items,
   userCollapsed,
   forceOpen,
   onToggle,
+  editing,
+  onStartRename,
+  onRename,
+  onCancelRename,
   collapsed,
   labelClass,
   rearranging,
@@ -409,11 +501,16 @@ function SidebarSection({
   toneFor,
   onNavigate,
 }: {
+  groupKey: SidebarGroupKey;
   title: string;
   items: NavItem[];
   userCollapsed: boolean;
   forceOpen: boolean;
   onToggle: () => void;
+  editing: boolean;
+  onStartRename: () => void;
+  onRename: (title: string) => void;
+  onCancelRename: () => void;
   collapsed: boolean;
   labelClass: string;
   rearranging: boolean;
@@ -422,28 +519,53 @@ function SidebarSection({
   toneFor: (href: string) => "attention" | "count";
   onNavigate?: () => void;
 }) {
-  if (items.length === 0) return null;
+  if (items.length === 0 && !rearranging) return null;
   const open = collapsed || forceOpen || !userCollapsed;
 
   return (
     <div className="flex flex-col">
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={collapsed}
-        aria-expanded={open}
-        className={cn(
-          "mt-4 mb-1 flex h-4 shrink-0 items-center justify-between gap-1 rounded px-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground/70 transition-colors",
-          !collapsed && "hover:text-foreground"
-        )}
-      >
-        <span className={cn("truncate", labelClass)}>{title}</span>
-        {!collapsed && (
-          <IconChevronDown
-            className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", labelClass, open && "rotate-180")}
+      <div className="mt-4 mb-1 flex h-6 shrink-0 items-center gap-0.5 px-2.5">
+        {editing ? (
+          <input
+            autoFocus
+            defaultValue={title}
+            maxLength={40}
+            onFocus={(e) => e.currentTarget.select()}
+            onBlur={(e) => onRename(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              else if (e.key === "Escape") onCancelRename();
+            }}
+            className="h-5 min-w-0 flex-1 rounded border border-ring/50 bg-background px-1 text-xs font-medium normal-case tracking-normal text-foreground outline-none"
           />
+        ) : (
+          <button
+            type="button"
+            onClick={onToggle}
+            disabled={collapsed}
+            aria-expanded={open}
+            className={cn(
+              "flex min-w-0 flex-1 items-center justify-between gap-1 rounded text-xs font-medium uppercase tracking-wide text-muted-foreground/70 transition-colors",
+              !collapsed && "hover:text-foreground"
+            )}
+          >
+            <span className={cn("truncate", labelClass)}>{title}</span>
+            {!collapsed && (
+              <IconChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", labelClass, open && "rotate-180")} />
+            )}
+          </button>
         )}
-      </button>
+        {!collapsed && !editing && (
+          <button
+            type="button"
+            onClick={onStartRename}
+            aria-label={`Rename "${title}" section`}
+            className={cn("shrink-0 text-muted-foreground/50 transition-colors hover:text-foreground", labelClass)}
+          >
+            <IconPencil className="h-3 w-3" />
+          </button>
+        )}
+      </div>
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
@@ -471,6 +593,7 @@ function SidebarSection({
                 ))}
               </div>
             </SortableContext>
+            {items.length === 0 && rearranging && <EmptySectionDropZone groupKey={groupKey} />}
           </motion.div>
         )}
       </AnimatePresence>
@@ -527,6 +650,9 @@ export function Sidebar({
   const [rearranging, setRearranging] = useState(false);
   const [navOrder, setNavOrder] = useState<string[] | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<SidebarGroupKey[]>([]);
+  const [groupOverrides, setGroupOverrides] = useState<Record<string, SidebarGroupKey>>({});
+  const [groupTitles, setGroupTitles] = useState<Partial<Record<SidebarGroupKey, string>>>({});
+  const [editingGroup, setEditingGroup] = useState<SidebarGroupKey | null>(null);
   const [navSearch, setNavSearch] = useState("");
   const { socket } = useSocket();
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -534,7 +660,24 @@ export function Sidebar({
   useEffect(() => {
     setNavOrder(loadNavOrder());
     setCollapsedSections(loadCollapsedSections());
+    setGroupOverrides(loadGroupOverrides());
+    setGroupTitles(loadGroupTitles());
   }, []);
+
+  function renameSection(key: SidebarGroupKey, rawTitle: string) {
+    setEditingGroup(null);
+    const trimmed = rawTitle.trim();
+    const defaultTitle = SIDEBAR_GROUPS.find((g) => g.key === key)?.title ?? "";
+    setGroupTitles((prev) => {
+      const next = { ...prev };
+      // Typing it back to the built-in name (or clearing it) just drops the
+      // override rather than storing a redundant copy of the default.
+      if (!trimmed || trimmed === defaultTitle) delete next[key];
+      else next[key] = trimmed.slice(0, 40);
+      saveGroupTitles(next);
+      return next;
+    });
+  }
 
   // Collapsing mid-rearrange would hide the toggle that turns it back off,
   // with no room for drag handles anyway — so collapsing always exits it.
@@ -544,6 +687,7 @@ export function Sidebar({
     if (collapsed) {
       setRearranging(false);
       setNavSearch("");
+      setEditingGroup(null);
     }
   }, [collapsed]);
 
@@ -691,12 +835,13 @@ export function Sidebar({
     ? combinedVisible.filter((item) => item.label.toLowerCase().includes(navSearchQuery))
     : combinedVisible;
 
-  // Every visible (optionally search-filtered) item, bucketed into its fixed
-  // section and then reordered by the user's own per-section drag
-  // preference — both steps preserve whatever relative order the
-  // permission/splicing logic above already established.
+  // Every visible (optionally search-filtered) item, bucketed into its
+  // section — the browser's own drag-to-another-section override if it has
+  // one, else the item's built-in default — then reordered by the user's own
+  // per-section drag preference. Both steps preserve whatever relative order
+  // the permission/splicing logic above already established.
   const groupedNav: Record<SidebarGroupKey, NavItem[]> = { workspace: [], finance: [], mywork: [], admin: [] };
-  for (const item of combinedSearched) groupedNav[item.group].push(item);
+  for (const item of combinedSearched) groupedNav[groupOverrides[item.href] ?? item.group].push(item);
   for (const key of SIDEBAR_GROUP_KEYS) groupedNav[key] = applyNavOrder(groupedNav[key], navOrder);
 
   const navSearchHasResults = SIDEBAR_GROUP_KEYS.some((key) => groupedNav[key].length > 0);
@@ -847,22 +992,56 @@ export function Sidebar({
     collapsed ? "opacity-0" : "opacity-100"
   );
 
-  // Every section drags within itself only — a drag never crosses the
-  // boundary between Workspace/Finance/My Work/Administration. All four
-  // sections' positions live in the same saved order list; applyNavOrder()
-  // already filters that list down to whichever items are actually in play
-  // for a given section.
+  // A drag reorders within its own section when dropped on another item
+  // there, same as before — but dropping on an item (or the empty-section
+  // placeholder, see EmptySectionDropZone) that belongs to a DIFFERENT
+  // section instead moves it there: the item's `group` is overridden to the
+  // destination for this browser, and it lands at the dropped position (or
+  // at the end, if the destination was empty). All four sections' positions
+  // live in the same saved order list; applyNavOrder() already filters that
+  // list down to whichever items are actually in play for a given section.
   function handleNavDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const groupKey = SIDEBAR_GROUP_KEYS.find((key) => groupedNav[key].some((i) => i.href === active.id));
-    if (!groupKey) return;
-    const list = groupedNav[groupKey];
-    const oldIndex = list.findIndex((i) => i.href === active.id);
-    const newIndex = list.findIndex((i) => i.href === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
-    const reordered = arrayMove(list, oldIndex, newIndex);
-    const combined = SIDEBAR_GROUP_KEYS.flatMap((key) => (key === groupKey ? reordered : groupedNav[key]).map((i) => i.href));
+    if (!over) return;
+    const activeHref = String(active.id);
+    const overId = String(over.id);
+    if (activeHref === overId) return;
+
+    const activeGroupKey = SIDEBAR_GROUP_KEYS.find((key) => groupedNav[key].some((i) => i.href === activeHref));
+    if (!activeGroupKey) return;
+
+    const emptyDropGroup = overId.startsWith(EMPTY_DROP_PREFIX) ? (overId.slice(EMPTY_DROP_PREFIX.length) as SidebarGroupKey) : null;
+    const overGroupKey = emptyDropGroup ?? SIDEBAR_GROUP_KEYS.find((key) => groupedNav[key].some((i) => i.href === overId));
+    if (!overGroupKey) return;
+
+    if (activeGroupKey === overGroupKey && !emptyDropGroup) {
+      const list = groupedNav[activeGroupKey];
+      const oldIndex = list.findIndex((i) => i.href === activeHref);
+      const newIndex = list.findIndex((i) => i.href === overId);
+      if (oldIndex === -1 || newIndex === -1) return;
+      const reordered = arrayMove(list, oldIndex, newIndex);
+      const combined = SIDEBAR_GROUP_KEYS.flatMap((key) => (key === activeGroupKey ? reordered : groupedNav[key]).map((i) => i.href));
+      setNavOrder(combined);
+      saveNavOrder(combined);
+      return;
+    }
+
+    const activeItem = groupedNav[activeGroupKey].find((i) => i.href === activeHref);
+    if (!activeItem) return;
+    const sourceList = groupedNav[activeGroupKey].filter((i) => i.href !== activeHref);
+    const destList = [...groupedNav[overGroupKey]];
+    const overIndex = emptyDropGroup ? destList.length : destList.findIndex((i) => i.href === overId);
+    destList.splice(overIndex === -1 ? destList.length : overIndex, 0, activeItem);
+
+    const nextOverrides = { ...groupOverrides, [activeHref]: overGroupKey };
+    setGroupOverrides(nextOverrides);
+    saveGroupOverrides(nextOverrides);
+
+    const combined = SIDEBAR_GROUP_KEYS.flatMap((key) => {
+      if (key === activeGroupKey) return sourceList.map((i) => i.href);
+      if (key === overGroupKey) return destList.map((i) => i.href);
+      return groupedNav[key].map((i) => i.href);
+    });
     setNavOrder(combined);
     saveNavOrder(combined);
   }
@@ -1002,11 +1181,16 @@ export function Sidebar({
             {SIDEBAR_GROUPS.map((group) => (
               <SidebarSection
                 key={group.key}
-                title={group.title}
+                groupKey={group.key}
+                title={groupTitles[group.key] ?? group.title}
                 items={groupedNav[group.key]}
                 userCollapsed={collapsedSections.includes(group.key)}
                 forceOpen={sectionsForceOpen}
                 onToggle={() => toggleSection(group.key)}
+                editing={editingGroup === group.key}
+                onStartRename={() => setEditingGroup(group.key)}
+                onRename={(title) => renameSection(group.key, title)}
+                onCancelRename={() => setEditingGroup(null)}
                 collapsed={collapsed}
                 labelClass={labelClass}
                 rearranging={effectiveRearranging && !collapsed}

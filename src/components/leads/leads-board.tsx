@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { FilterMenu, type FilterFacet } from "@/components/ui/filter-menu";
-import { facetMatches, type FilterValue } from "@/lib/filter-utils";
+import { filterValueToParam, UNASSIGNED, type FilterValue } from "@/lib/filter-utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SkeletonBoard } from "@/components/ui/skeleton";
 import { HoverCheckbox } from "@/components/ui/checkbox";
@@ -38,8 +38,8 @@ import {
 } from "@/components/leads/types";
 import { cn } from "@/lib/utils";
 
-/** Sentinel for the "no assignee" choice, kept distinct from a real user id. */
-const UNASSIGNED = "__unassigned__";
+/** How many leads a single fetch loads — both the initial page and each "Load more". */
+const PAGE_SIZE = 50;
 
 interface Department {
   id: string;
@@ -67,13 +67,39 @@ const PRIORITY_VARIANT = {
   URGENT: "destructive",
 } as const;
 
+/** Builds the Leads list query string — shared by the initial/filtered fetch and "Load more", so both always agree on what's currently being searched for. */
+function leadsSearchParams(opts: {
+  scope?: string;
+  filters: { assignee: FilterValue; status: FilterValue; priority: FilterValue; meeting: FilterValue };
+  q: string;
+  take: number;
+  skip: number;
+}) {
+  const params = new URLSearchParams();
+  if (opts.scope) params.set("scope", opts.scope);
+  const assignee = filterValueToParam(opts.filters.assignee);
+  if (assignee) params.set("assignee", assignee);
+  const status = filterValueToParam(opts.filters.status);
+  if (status) params.set("status", status);
+  const priority = filterValueToParam(opts.filters.priority);
+  if (priority) params.set("priority", priority);
+  const meeting = filterValueToParam(opts.filters.meeting);
+  if (meeting) params.set("meeting", meeting);
+  if (opts.q) params.set("q", opts.q);
+  params.set("take", String(opts.take));
+  if (opts.skip) params.set("skip", String(opts.skip));
+  return params.toString();
+}
+
 export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:${string}` } = {}) {
-  const leadsUrl = scope ? `/api/leads?scope=${scope}` : "/api/leads";
   const router = useRouter();
   const toast = useToast();
   const { query } = useSearch();
   const { socket } = useSocket();
   const [leads, setLeads] = useState<LeadSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -98,65 +124,97 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   const { containerRef: scrollContainerRef, onDragOver: handleBoardDragOver, stop: stopAutoScroll } =
     useDragAutoScroll<HTMLDivElement>();
 
-  const loadLeads = useCallback(async () => {
-    const res = await fetch(leadsUrl);
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setLeads(data.leads);
-      setForbidden(false);
-    } else if (scope && res.status === 403) {
-      setForbidden(true);
-    } else {
-      toast.error("Couldn't load leads", data.error);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadsUrl]);
+  // Debounced so free-text search (typed into the shared header search bar)
+  // doesn't fire a request per keystroke.
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQ(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  const loadAll = useCallback(async () => {
-    setLoading(true);
+  // The one reactive fetch: re-runs (resetting to the first page) whenever
+  // the scope, a filter, or the search query changes — search/filtering now
+  // happens server-side, so this is also what makes "Load more" safe: a
+  // later page can never contain something an earlier page's filter should
+  // have excluded. `take` lets a live-update/post-mutation refresh ask for
+  // as many as were already loaded, instead of collapsing back to page one.
+  const loadLeads = useCallback(
+    async (take: number = PAGE_SIZE) => {
+      setLoading(true);
+      try {
+        const qs = leadsSearchParams({ scope, filters, q, take: Math.max(take, PAGE_SIZE), skip: 0 });
+        const res = await fetch(`/api/leads?${qs}`);
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setLeads(data.leads ?? []);
+          setTotal(data.total ?? 0);
+          setHasMore(!!data.hasMore);
+          setForbidden(false);
+        } else if (scope && res.status === 403) {
+          setForbidden(true);
+        } else {
+          toast.error("Couldn't load leads", data.error);
+        }
+      } catch {
+        toast.error("Couldn't load leads", "Check your connection and try again.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [scope, filters, q] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  async function loadMoreLeads() {
+    setLoadingMore(true);
     try {
-      const [leadsRes, usersRes, meRes] = await Promise.all([
-        fetch(leadsUrl),
-        fetch("/api/users/assignable"),
-        fetch("/api/auth/me"),
-      ]);
-      const [leadsData, usersData, meData] = await Promise.all([
-        leadsRes.json().catch(() => ({})),
-        usersRes.json().catch(() => ({})),
-        meRes.json().catch(() => ({})),
-      ]);
-      if (leadsRes.ok) {
-        setLeads(leadsData.leads);
-        setForbidden(false);
-      } else if (scope && leadsRes.status === 403) {
-        setForbidden(true);
-      } else {
-        toast.error("Couldn't load leads", leadsData.error);
-      }
-      if (usersRes.ok) setAssignableUsers(usersData.users);
-      if (meRes.ok) setCurrentUser(meData.user);
-
-      const isAdmin = meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN";
-      if (isAdmin) {
-        const deptRes = await fetch("/api/departments");
-        const deptData = await deptRes.json().catch(() => ({}));
-        if (deptRes.ok) setDepartments(deptData.departments);
-      }
-    } catch {
-      toast.error("Couldn't load leads", "Check your connection and try again.");
+      const qs = leadsSearchParams({ scope, filters, q, take: PAGE_SIZE, skip: leads.length });
+      const res = await fetch(`/api/leads?${qs}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't load more leads", data.error);
+      setLeads((prev) => [...prev, ...(data.leads ?? [])]);
+      setTotal(data.total ?? 0);
+      setHasMore(!!data.hasMore);
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadsUrl]);
+  }
+
+  // A live update or a mutation (duplicate, bulk delete/reassign, an edit)
+  // re-fetches in place — preserving however many leads were already loaded
+  // (via "Load more"), rather than collapsing the list back to page one.
+  function refreshLeads() {
+    return loadLeads(leads.length);
+  }
 
   useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+    loadLeads();
+  }, [loadLeads]);
+
+  // Assignable users, departments, and the current user don't depend on any
+  // filter — loaded once, not re-fetched every time a filter changes.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [usersRes, meRes] = await Promise.all([fetch("/api/users/assignable"), fetch("/api/auth/me")]);
+        const [usersData, meData] = await Promise.all([usersRes.json().catch(() => ({})), meRes.json().catch(() => ({}))]);
+        if (usersRes.ok) setAssignableUsers(usersData.users);
+        if (meRes.ok) setCurrentUser(meData.user);
+
+        const isAdminUser = meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN";
+        if (isAdminUser) {
+          const deptRes = await fetch("/api/departments");
+          const deptData = await deptRes.json().catch(() => ({}));
+          if (deptRes.ok) setDepartments(deptData.departments);
+        }
+      } catch {
+        // The leads fetch itself already surfaces a connection-error toast.
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!socket) return;
-    const onLeadChange = () => loadLeads();
+    const onLeadChange = () => refreshLeads();
     socket.on("lead_created", onLeadChange);
     socket.on("lead_updated", onLeadChange);
     socket.on("lead_deleted", onLeadChange);
@@ -165,7 +223,8 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
       socket.off("lead_updated", onLeadChange);
       socket.off("lead_deleted", onLeadChange);
     };
-  }, [socket, loadLeads]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, leads.length]);
 
   const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
   // A Social Media team member (regular or lead) who isn't also a company
@@ -174,22 +233,6 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
   // (scope="social-media"), since every lead in view uses that pipeline.
   const isSocialMediaOnly = scope === "social-media" || (!isAdmin && !!currentUser?.socialMedia?.hasAccess);
   const statusOptions = useMemo(() => getLeadStatusOptions(isSocialMediaOnly), [isSocialMediaOnly]);
-
-  const filteredLeads = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return leads.filter((lead) => {
-      if (!facetMatches(filters.assignee, (v) => (v === UNASSIGNED ? lead.assignedTo === null : lead.assignedTo?.id === v))) {
-        return false;
-      }
-      if (!facetMatches(filters.status, (v) => lead.status === v)) return false;
-      if (!facetMatches(filters.priority, (v) => lead.priority === v)) return false;
-      if (!facetMatches(filters.meeting, (v) => lead.meetingStatus === v)) return false;
-      if (!q) return true;
-      return [lead.name, lead.company, lead.email, lead.product]
-        .filter(Boolean)
-        .some((field) => field!.toLowerCase().includes(q));
-    });
-  }, [leads, query, filters]);
 
   // The Social Media Team console gets multi-select within each facet (pick
   // several statuses/priorities/assignees at once); everywhere else stays
@@ -308,7 +351,7 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
     });
     if (res.ok) {
       exitSelectionMode();
-      await loadLeads();
+      await refreshLeads();
     }
   }
 
@@ -330,7 +373,7 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
       setReassignOpen(false);
       setReassignTo("");
       exitSelectionMode();
-      await loadLeads();
+      await refreshLeads();
     } finally {
       setReassigning(false);
     }
@@ -357,7 +400,7 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return toast.error("Couldn't duplicate the lead", data.error);
     toast.success("Lead duplicated");
-    await loadLeads();
+    await refreshLeads();
   }
 
   function leadActions(lead: LeadSummary): RowAction[] {
@@ -383,10 +426,13 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
 
   async function deleteLead(id: string) {
     const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
-    if (res.ok) await loadLeads();
+    if (res.ok) await refreshLeads();
   }
 
-  const allFilteredSelected = filteredLeads.length > 0 && filteredLeads.every((l) => selectedIds.has(l.id));
+  // "Select all" covers whatever's currently loaded, not necessarily every
+  // lead matching the filters — same convention as Gmail et al: paginated
+  // lists select the loaded page, not silently everything that matches.
+  const allLeadsSelected = leads.length > 0 && leads.every((l) => selectedIds.has(l.id));
 
   if (forbidden) {
     return (
@@ -427,8 +473,8 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
               <SelectionBar
                 key="selection"
                 count={selectedIds.size}
-                allSelected={allFilteredSelected}
-                onSelectAll={() => toggleSelectAllIds(filteredLeads.map((l) => l.id))}
+                allSelected={allLeadsSelected}
+                onSelectAll={() => toggleSelectAllIds(leads.map((l) => l.id))}
                 onCancel={exitSelectionMode}
                 onDelete={() => setConfirmOpen(true)}
                 extraActions={
@@ -458,7 +504,7 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
                   isAdmin={!!isAdmin}
                   assignableUsers={assignableUsers}
                   departments={departments}
-                  onCreated={loadLeads}
+                  onCreated={refreshLeads}
                 />
               </motion.div>
             )}
@@ -470,7 +516,7 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
 
       {!loading && view === "list" && (
         <LeadsListView
-          leads={filteredLeads}
+          leads={leads}
           statusOptions={statusOptions}
           onSelect={handleLeadClick}
           selectedIds={selectedIds}
@@ -491,7 +537,7 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
           onDragOver={handleBoardDragOver}
         >
           {statusOptions.map((col) => {
-            const columnLeads = filteredLeads.filter((l) => l.status === col.value);
+            const columnLeads = leads.filter((l) => l.status === col.value);
             const isDragOver = dragOverStatus === col.value;
             const allColumnSelected = columnLeads.length > 0 && columnLeads.every((l) => selectedIds.has(l.id));
             return (
@@ -611,16 +657,29 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         </div>
       )}
 
+      {!loading && leads.length > 0 && (
+        <div className="flex shrink-0 items-center justify-center gap-3 py-1">
+          <span className="text-xs text-muted-foreground">
+            Showing {leads.length} of {total} lead{total === 1 ? "" : "s"}
+          </span>
+          {hasMore && (
+            <Button type="button" variant="outline" size="sm" onClick={loadMoreLeads} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </Button>
+          )}
+        </div>
+      )}
+
       <LeadDetailDialog
         leadId={selectedLead?.id ?? null}
         initialSummary={selectedLead}
         assignableUsers={assignableUsers}
         statusOptions={statusOptions}
         onClose={() => setSelectedLead(null)}
-        onChanged={loadLeads}
+        onChanged={refreshLeads}
         onDeleted={() => {
           setSelectedLead(null);
-          loadLeads();
+          refreshLeads();
         }}
       />
 
