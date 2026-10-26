@@ -127,10 +127,10 @@ export function NoteCard({
 
   return (
     <div className="group relative mb-5 break-inside-avoid pt-3" style={{ ["--rot" as string]: `${rotation}deg` }}>
-      {/* Washi tape */}
+      {/* Washi tape — stays above the card's own z-20 hover/focus lift, so it never slips behind the note it's supposed to be pinning down. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-0 z-10 h-6 w-14 rounded-[2px] opacity-80 shadow-sm"
+        className="pointer-events-none absolute left-1/2 top-0 z-30 h-6 w-14 rounded-[2px] opacity-80 shadow-sm"
         style={{ backgroundColor: tape, transform: `translateX(-50%) rotate(${tapeRotation}deg)` }}
       />
 
