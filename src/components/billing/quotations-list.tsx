@@ -186,8 +186,8 @@ export function QuotationsList() {
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <h1 className="text-xl font-semibold">Quotations</h1>
-          <HelpDialog title="Quotations — help">
+          <h1 className="text-xl font-semibold">Quotes</h1>
+          <HelpDialog title="Quotes — help">
             <HelpSection heading="What this page is for">
               <p>Draft a quotation with line items, GST and a discount, send it for approval, and convert an approved one straight into an invoice.</p>
             </HelpSection>

@@ -92,8 +92,8 @@ export function ClientsAdminView() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <h1 className="text-xl font-semibold">Client Accounts</h1>
-          <HelpDialog title="Client Accounts — help">
+          <h1 className="text-xl font-semibold">Clients</h1>
+          <HelpDialog title="Clients — help">
             <HelpSection heading="What this page is for">
               <p>A company-wide directory of who you build for — category, owner contact details, which team handles them, and product dates. This is separate from the Social Media module&apos;s own Clients list.</p>
             </HelpSection>

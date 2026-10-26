@@ -97,7 +97,7 @@ export function CrmTeamConsole() {
               <p>Always have full access here, same as a team lead.</p>
             </HelpSection>
             <HelpSection heading="CRM Team leads">
-              <p>Add or remove members, grant the Permission Manager&apos;s module access to people on the team, and manage team-wide records.</p>
+              <p>Add or remove members, grant module access through Permissions to people on the team, and manage team-wide records.</p>
             </HelpSection>
             <HelpSection heading="Everyone else on the team">
               <p>View-only — you can see the team&apos;s roster, attendance and activity, but can&apos;t manage membership or grants.</p>

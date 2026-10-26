@@ -30,7 +30,7 @@ export const MODULE_LABEL: Record<ManagedModule, string> = {
   LEADS: "Leads",
   CLIENTS: "Clients",
   BIRTHDAYS: "Birthdays",
-  MESSAGES: "Chat",
+  MESSAGES: "Messages",
   PROJECTS: "Projects",
   EXPENSES: "Expenses",
   NOTES: "Notes",

@@ -182,8 +182,8 @@ export function LeaveAdminView({
             <HelpSection heading="Admins & Super Admins">
               <p>See and decide on every request across every department.</p>
             </HelpSection>
-            <HelpSection heading="Department Admins & Permission Manager grants">
-              <p>See and decide on requests only where explicitly granted (Permission Manager → Leave) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
+            <HelpSection heading="Department Admins & Permission grants">
+              <p>See and decide on requests only where explicitly granted (Permissions → Leave) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
             </HelpSection>
           </HelpDialog>
         </div>

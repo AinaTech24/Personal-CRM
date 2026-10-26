@@ -208,10 +208,10 @@ export default function AuditLogsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold">View logs</h1>
-          <HelpDialog title="View logs — help">
+          <h1 className="text-xl font-semibold">System Logs</h1>
+          <HelpDialog title="System Logs — help">
             <HelpSection heading="What this page is for">
-              <p>Every create/update/delete across the whole app, who did it and when — an audit trail, not an activity feed for you personally (see My Activity for that).</p>
+              <p>Every create/update/delete across the whole app, who did it and when — an audit trail, not an activity feed for you personally (see Activity Log for that).</p>
             </HelpSection>
             <HelpSection heading="Who can see this">
               <p>Admins and Super Admins only.</p>

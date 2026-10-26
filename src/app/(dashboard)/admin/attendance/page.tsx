@@ -218,8 +218,8 @@ export default function AdminAttendancePage() {
             <HelpSection heading="Admins & Super Admins">
               <p>See and manage attendance for every department.</p>
             </HelpSection>
-            <HelpSection heading="Department Admins & Permission Manager grants">
-              <p>See and manage attendance only where explicitly granted (Permission Manager → Attendance) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
+            <HelpSection heading="Department Admins & Permission grants">
+              <p>See and manage attendance only where explicitly granted (Permissions → Attendance) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
             </HelpSection>
           </HelpDialog>
         </div>

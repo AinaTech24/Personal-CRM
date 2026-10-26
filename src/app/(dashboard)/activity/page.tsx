@@ -88,8 +88,8 @@ export default function MyActivityPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <h1 className="text-xl font-semibold">My Activity</h1>
-          <HelpDialog title="My Activity — help">
+          <h1 className="text-xl font-semibold">Activity Log</h1>
+          <HelpDialog title="Activity Log — help">
             <HelpSection heading="What this page is for">
               <p>A personal feed of what you&apos;ve created, updated, or been assigned, across every module — filterable by module with the dropdown.</p>
             </HelpSection>

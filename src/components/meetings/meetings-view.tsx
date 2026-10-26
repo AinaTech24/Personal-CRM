@@ -300,8 +300,8 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
             <HelpSection heading="Admins & Super Admins">
               <p>See and manage every meeting across every department.</p>
             </HelpSection>
-            <HelpSection heading="Department Admins & Permission Manager grants">
-              <p>A Department Admin sees only what they&apos;re explicitly granted (Permission Manager → Meetings) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
+            <HelpSection heading="Department Admins & Permission grants">
+              <p>A Department Admin sees only what they&apos;re explicitly granted (Permissions → Meetings) — their own department by default, or every department if a company Admin turned on &quot;All departments&quot; for them.</p>
             </HelpSection>
             <HelpSection heading="Everyone else">
               <p>You see meetings you organized or were invited to.</p>
