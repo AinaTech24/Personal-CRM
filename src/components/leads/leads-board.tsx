@@ -18,7 +18,8 @@ import { HoverCheckbox } from "@/components/ui/checkbox";
 import { SelectionBar } from "@/components/ui/selection-bar";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { HorizontalScrollbar } from "@/components/ui/horizontal-scrollbar";
-import { IconPencil, IconTrash, IconBell } from "@/components/icons";
+import { RecencyBadge } from "@/components/ui/recency-badge";
+import { IconPencil, IconTrash, IconBell, IconCopy } from "@/components/icons";
 import { NewLeadDialog } from "@/components/leads/new-lead-dialog";
 import { LeadDetailDialog } from "@/components/leads/lead-detail-dialog";
 import { LeadsListView } from "@/components/leads/leads-list-view";
@@ -351,10 +352,19 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
     toast.success("Reminder sent", lead.name);
   }
 
+  async function duplicateLead(lead: LeadSummary) {
+    const res = await fetch(`/api/leads/${lead.id}/duplicate`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error("Couldn't duplicate the lead", data.error);
+    toast.success("Lead duplicated");
+    await loadLeads();
+  }
+
   function leadActions(lead: LeadSummary): RowAction[] {
     const actions: RowAction[] = [];
     if (canManageLead(lead)) {
       actions.push({ key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => setSelectedLead(lead) });
+      actions.push({ key: "duplicate", label: "Duplicate", icon: <IconCopy className="h-3.5 w-3.5" />, onSelect: () => duplicateLead(lead) });
     }
     if (fullLeadAccess && (lead.assignedTo?.id ?? lead.createdBy.id) !== currentUser?.id) {
       actions.push({ key: "remind", label: "Send reminder", icon: <IconBell className="h-3.5 w-3.5" />, onSelect: () => remindLead(lead) });
@@ -568,6 +578,7 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
                             <p className="line-clamp-2 text-sm font-medium">{lead.name}</p>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
+                            <RecencyBadge createdAt={lead.createdAt} />
                             <Badge variant={PRIORITY_VARIANT[lead.priority]}>{lead.priority}</Badge>
                             {selectedIds.size === 0 && (
                               <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">

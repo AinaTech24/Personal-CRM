@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin, type PermissionUser } from "@/lib/permissions";
+import { isAdmin } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 import { combinedTeamScopeFor } from "@/lib/team-scope";
 import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
-import type { ModuleAction } from "@/lib/module-permissions";
+import { canManageMeeting as canManage } from "@/lib/meetings";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -23,31 +23,6 @@ const patchSchema = z.object({
   attendeeIds: z.array(z.string()).optional(),
   remindAt: z.string().nullable().optional(),
 });
-
-/**
- * Only the organizer, an admin, or a Social Media/CRM lead managing a
- * meeting organized by (or attended by) someone on their team may change or
- * remove a meeting.
- */
-async function canManage(user: PermissionUser, meetingId: string, action: Extract<ModuleAction, "UPDATE" | "DELETE">) {
-  if (isAdmin(user)) return true;
-  const m = await db.meeting.findUnique({
-    where: { id: meetingId },
-    select: { organizerId: true, organizer: { select: { departmentId: true } }, attendees: { select: { id: true, departmentId: true } } },
-  });
-  if (!m) return false;
-  if (m.organizerId === user.id) return true;
-
-  const scope = await moduleAccessScope(user, "MEETINGS", action);
-  if (scope === "all") return true;
-  if (scope && (m.organizer.departmentId === scope.departmentId || m.attendees.some((a) => a.departmentId === scope.departmentId))) {
-    return true;
-  }
-
-  const teamUserIds = await combinedTeamScopeFor(user);
-  if (!teamUserIds) return false;
-  return teamUserIds.includes(m.organizerId) || m.attendees.some((a) => teamUserIds.includes(a.id));
-}
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();

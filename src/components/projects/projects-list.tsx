@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { RecencyBadge } from "@/components/ui/recency-badge";
 import { Button } from "@/components/ui/button";
 import { Dropdown } from "@/components/ui/dropdown";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -446,6 +447,7 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
                       <p className="truncate text-sm font-medium">{project.name}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
+                      <RecencyBadge createdAt={project.createdAt} />
                       {!project.isActive && <Badge variant="secondary">Disabled</Badge>}
                       <Badge variant={PROJECT_STATUS_VARIANT[project.status]}>{statusLabel(project.status)}</Badge>
                     </div>
