@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
@@ -11,10 +12,13 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { useToast } from "@/components/providers/toast-provider";
 import { useSocket } from "@/components/providers/socket-provider";
-import { IconNotes, IconPlus, IconSearch } from "@/components/icons";
+import { IconNotes, IconPictureInPicture, IconPlus, IconSearch } from "@/components/icons";
 import { NoteCard, type NoteRow } from "@/components/notes/note-card";
 import { NoteEditorDialog } from "@/components/notes/note-editor-dialog";
 import { FloatingNote, type FloatingState } from "@/components/notes/floating-note";
+import { DesktopNotesPanel } from "@/components/notes/desktop-notes-panel";
+import { isDocumentPipSupported, openDocumentPip } from "@/lib/document-pip";
+import { safeAreaInset } from "@/lib/safe-area";
 
 type QuickFilter = "all" | "pinned" | "mine";
 
@@ -59,6 +63,82 @@ export function NotesView() {
   const [editingNote, setEditingNote] = useState<NoteRow | null>(null);
   const [deleting, setDeleting] = useState<NoteRow | null>(null);
   const [floating, setFloating] = useState<Record<string, FloatingState>>({});
+
+  // Document Picture-in-Picture: a real OS-level window that floats on top
+  // of other applications, not just other browser tabs. Chromium-only
+  // (Chrome/Edge/Brave) — resolved after mount to avoid a server/client
+  // render mismatch, since `window` isn't available during SSR.
+  const [pipSupported, setPipSupported] = useState(false);
+  const [pipWindow, setPipWindow] = useState<Window | null>(null);
+  useEffect(() => setPipSupported(isDocumentPipSupported()), []);
+
+  async function toggleDesktopPanel() {
+    if (pipWindow) {
+      pipWindow.close();
+      setPipWindow(null);
+      return;
+    }
+    const pip = await openDocumentPip({ width: 320, height: 480 });
+    if (!pip) {
+      toast.error("Couldn't pop out", "Try Chrome, Edge, or Brave — this isn't supported in every browser.");
+      return;
+    }
+    pip.addEventListener("pagehide", () => setPipWindow(null), { once: true });
+    setPipWindow(pip);
+  }
+
+  // Closes the pop-out if it's still open when Notes unmounts (e.g.
+  // navigating away) — it's a companion to this page, not a standalone window.
+  useEffect(() => {
+    return () => {
+      pipWindow?.close();
+    };
+  }, [pipWindow]);
+
+  // Restoring from localStorage only once (per meId resolving) — and only
+  // persisting afterward — avoids overwriting a just-restored state with the
+  // empty default before it has a chance to load.
+  const floatingRestoredRef = useRef(false);
+
+  // Floating panels otherwise live only in React state, so a refresh would
+  // silently drop them even though the notes are still pinned — restore
+  // whichever ones this browser had open last, keyed per-user since the
+  // browser profile may be shared.
+  useEffect(() => {
+    if (!meId || floatingRestoredRef.current) return;
+    floatingRestoredRef.current = true;
+    try {
+      const raw = localStorage.getItem(`notes-floating:${meId}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, Partial<FloatingState>>;
+      if (!parsed || typeof parsed !== "object") return;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const minX = safeAreaInset("--safe-left");
+      const minY = safeAreaInset("--safe-top");
+      const restored: Record<string, FloatingState> = {};
+      for (const [id, v] of Object.entries(parsed)) {
+        if (!v || typeof v.x !== "number" || typeof v.y !== "number") continue;
+        restored[id] = {
+          x: Math.min(Math.max(minX, v.x), Math.max(minX, w - 260)),
+          y: Math.min(Math.max(minY, v.y), Math.max(minY, h - 40)),
+          minimized: !!v.minimized,
+        };
+      }
+      if (Object.keys(restored).length > 0) setFloating(restored);
+    } catch {
+      // Corrupted or inaccessible storage (e.g. private browsing) — just start empty.
+    }
+  }, [meId]);
+
+  useEffect(() => {
+    if (!meId || !floatingRestoredRef.current) return;
+    try {
+      localStorage.setItem(`notes-floating:${meId}`, JSON.stringify(floating));
+    } catch {
+      // Storage full or blocked — floating panels still work for this session, just won't survive a refresh.
+    }
+  }, [floating, meId]);
 
   // Debounce free-text search so every keystroke doesn't fire a request.
   useEffect(() => {
@@ -143,6 +223,7 @@ export function NotesView() {
       throw new Error(body.error);
     }
     toast.success("Note created");
+    if (data.isPinned && body.note?.id) openFloat(body.note.id);
     load();
   }
 
@@ -189,22 +270,50 @@ export function NotesView() {
     setEditorOpen(true);
   }
 
-  // Unpinning also closes its floating panel, if open — a floating note only
-  // ever exists because it's pinned, so the two states must move together.
-  // Reloads afterward (rather than just splicing the local list) so an
-  // active filter — e.g. the "Pinned" quick filter — drops a note the
-  // instant it no longer matches, instead of leaving a stale row in place
-  // until the next unrelated refresh.
+  function openFloat(id: string) {
+    setFloating((prev) => {
+      if (id in prev) return prev;
+      const openCount = Object.keys(prev).length;
+      // Clears the app's own sticky topbar (h-14 + the device's safe-area
+      // inset) so a freshly-opened panel doesn't spawn already overlapping
+      // it — it's still freely draggable from there afterward.
+      const x = 24 + safeAreaInset("--safe-left") + openCount * 24;
+      const y = 72 + safeAreaInset("--safe-top") + openCount * 24;
+      return { ...prev, [id]: { x, y, minimized: false } };
+    });
+  }
+
+  function closeFloat(id: string) {
+    setFloating((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  // Pinning and unpinning always move the floating panel with them — a
+  // floating note only ever exists because it's pinned, so there's no
+  // separate "pin but don't show it" state to end up in. Reloads afterward
+  // (rather than just splicing the local list) so an active filter — e.g.
+  // the "Pinned" quick filter — drops a note the instant it no longer
+  // matches, instead of leaving a stale row in place until the next
+  // unrelated refresh.
   async function togglePin(note: NoteRow) {
     const nextPinned = !note.isPinned;
-    await updateNote(note.id, { isPinned: nextPinned }).catch(() => {});
-    if (!nextPinned) {
-      setFloating((prev) => {
-        if (!(note.id in prev)) return prev;
-        const next = { ...prev };
-        delete next[note.id];
-        return next;
-      });
+    // Optimistic: flip the card and open/close its floating panel right on
+    // click, instead of waiting on the PATCH round trip to even start —
+    // that's what made pinning feel laggy. Reverted below if the save fails.
+    setNotes((prev) => (prev ? prev.map((n) => (n.id === note.id ? { ...n, isPinned: nextPinned } : n)) : prev));
+    if (nextPinned) openFloat(note.id);
+    else closeFloat(note.id);
+
+    const saved = await updateNote(note.id, { isPinned: nextPinned }).catch(() => null);
+    if (!saved) {
+      setNotes((prev) => (prev ? prev.map((n) => (n.id === note.id ? { ...n, isPinned: !nextPinned } : n)) : prev));
+      if (nextPinned) closeFloat(note.id);
+      else openFloat(note.id);
+      return;
     }
     load();
   }
@@ -225,15 +334,8 @@ export function NotesView() {
   }
 
   function toggleFloat(note: NoteRow) {
-    setFloating((prev) => {
-      if (note.id in prev) {
-        const next = { ...prev };
-        delete next[note.id];
-        return next;
-      }
-      const openCount = Object.keys(prev).length;
-      return { ...prev, [note.id]: { x: 24 + openCount * 24, y: 24 + openCount * 24, minimized: false } };
-    });
+    if (note.id in floating) closeFloat(note.id);
+    else openFloat(note.id);
   }
 
   const floatingNotes = notes?.filter((n) => n.id in floating) ?? [];
@@ -263,6 +365,28 @@ export function NotesView() {
             <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input value={rawQuery} onChange={(e) => setRawQuery(e.target.value)} placeholder="Search notes…" className="pl-8" />
           </div>
+          <Tooltip
+            label={
+              !pipSupported
+                ? "Needs Chrome, Edge, or Brave"
+                : pipWindow
+                  ? "Return pinned notes to this window"
+                  : "Pop pinned notes out to a floating desktop window"
+            }
+          >
+            <span>
+              <Button
+                type="button"
+                variant={pipWindow ? "default" : "outline"}
+                size="icon"
+                aria-label={pipWindow ? "Return pinned notes to this window" : "Pop pinned notes out to a floating desktop window"}
+                onClick={toggleDesktopPanel}
+                disabled={!pipSupported}
+              >
+                <IconPictureInPicture className="h-4 w-4" />
+              </Button>
+            </span>
+          </Tooltip>
           <Tooltip label="New note">
             <Button type="button" size="icon" aria-label="New note" onClick={openCreate}>
               <IconPlus className="h-4 w-4" />
@@ -333,19 +457,31 @@ export function NotesView() {
         </div>
       )}
 
-      {floatingNotes.map((note) => (
-        <FloatingNote
-          key={note.id}
-          note={note}
-          state={floating[note.id]}
-          onMove={(x, y) => setFloating((prev) => ({ ...prev, [note.id]: { ...prev[note.id], x, y } }))}
-          onToggleMinimize={() =>
-            setFloating((prev) => ({ ...prev, [note.id]: { ...prev[note.id], minimized: !prev[note.id].minimized } }))
-          }
-          onClose={() => toggleFloat(note)}
-          onEdit={() => openEdit(note)}
-        />
-      ))}
+      {pipWindow
+        ? createPortal(
+            <DesktopNotesPanel
+              notes={floatingNotes}
+              onEdit={(note) => {
+                openEdit(note);
+                window.focus();
+              }}
+              onUnpin={(note) => togglePin(note)}
+            />,
+            pipWindow.document.body
+          )
+        : floatingNotes.map((note) => (
+            <FloatingNote
+              key={note.id}
+              note={note}
+              state={floating[note.id]}
+              onMove={(x, y) => setFloating((prev) => ({ ...prev, [note.id]: { ...prev[note.id], x, y } }))}
+              onToggleMinimize={() =>
+                setFloating((prev) => ({ ...prev, [note.id]: { ...prev[note.id], minimized: !prev[note.id].minimized } }))
+              }
+              onClose={() => toggleFloat(note)}
+              onEdit={() => openEdit(note)}
+            />
+          ))}
 
       <NoteEditorDialog
         note={editingNote}
@@ -354,14 +490,8 @@ export function NotesView() {
         onSave={async (data) => {
           if (editingNote) {
             await updateNote(editingNote.id, data);
-            if (!data.isPinned) {
-              setFloating((prev) => {
-                if (!(editingNote.id in prev)) return prev;
-                const next = { ...prev };
-                delete next[editingNote.id];
-                return next;
-              });
-            }
+            if (data.isPinned) openFloat(editingNote.id);
+            else closeFloat(editingNote.id);
           } else {
             await createNote(data);
           }
