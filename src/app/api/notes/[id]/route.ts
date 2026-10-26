@@ -7,7 +7,7 @@ import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-sto
 import { isValidHexColor } from "@/lib/note-colors";
 
 const noteInclude = {
-  author: { select: { id: true, name: true, surname: true, avatarDataUrl: true } },
+  author: { select: { id: true, name: true, surname: true } },
   department: { select: { id: true, name: true } },
 };
 

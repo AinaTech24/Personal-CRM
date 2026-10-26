@@ -8,7 +8,9 @@ import { isValidHexColor } from "@/lib/note-colors";
 import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-store";
 
 const noteInclude = {
-  author: { select: { id: true, name: true, surname: true, avatarDataUrl: true } },
+  // No avatarDataUrl — the Notes UI never renders an author avatar image,
+  // so including that base64 blob on every row was pure dead weight.
+  author: { select: { id: true, name: true, surname: true } },
   department: { select: { id: true, name: true } },
 };
 
