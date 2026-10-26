@@ -721,6 +721,15 @@ export function IconHash(props: IconProps) {
   );
 }
 
+export function IconTag(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M11.5 3H5a2 2 0 0 0-2 2v6.5a2 2 0 0 0 .586 1.414l8.5 8.5a2 2 0 0 0 2.828 0l6.5-6.5a2 2 0 0 0 0-2.828l-8.5-8.5A2 2 0 0 0 11.5 3Z" />
+      <circle cx="8.5" cy="8.5" r="1.25" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function IconChevronSquare(props: IconProps) {
   return (
     <svg {...base(props)}>

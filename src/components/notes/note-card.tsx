@@ -5,6 +5,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { IconCopy, IconDots, IconPalette, IconPencil, IconPin, IconTrash } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { RecencyBadge } from "@/components/ui/recency-badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { NOTE_COLOR_PRESETS, contrastTextColor, rotationFor, shade, tapeColorFor } from "@/lib/note-colors";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,7 @@ export interface NoteRow {
   content: string;
   color: string | null;
   isPinned: boolean;
+  tags: string[];
   authorId: string;
   author: { id: string; name: string; surname: string | null };
   departmentId: string | null;
@@ -107,6 +109,9 @@ export function NoteCard({
   onToggleFloat,
   onDuplicate,
   floating,
+  selected,
+  selectionMode,
+  onToggleSelect,
 }: {
   note: NoteRow;
   /** Position in the current list — purely decorative, the "01/02/…" sticky-note label. */
@@ -120,6 +125,10 @@ export function NoteCard({
   onToggleFloat: () => void;
   onDuplicate: () => void;
   floating: boolean;
+  selected: boolean;
+  /** True once at least one note anywhere in the grid is selected — keeps every card's checkbox visible (not just on hover) and hides the per-card action menu, so a multi-select doesn't also fire a duplicate/delete from the wrong card. */
+  selectionMode: boolean;
+  onToggleSelect: () => void;
 }) {
   const base = note.color ?? "#f4f4f5";
   const textColor = contrastTextColor(base);
@@ -145,11 +154,31 @@ export function NoteCard({
           if (e.key === "Enter") onOpen();
         }}
         style={{ backgroundColor: base, color: textColor }}
-        className="relative flex cursor-pointer flex-col gap-3 rounded-xl p-4 pt-5 text-left shadow-md transition-transform duration-150 [transform:rotate(var(--rot))] hover:z-20 hover:[transform:rotate(0deg)] hover:shadow-lg focus-visible:z-20 focus-visible:[transform:rotate(0deg)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className={cn(
+          "relative flex cursor-pointer flex-col gap-3 rounded-xl p-4 pt-5 text-left shadow-md transition-transform duration-150 [transform:rotate(var(--rot))] hover:z-20 hover:[transform:rotate(0deg)] hover:shadow-lg focus-visible:z-20 focus-visible:[transform:rotate(0deg)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          selected && "z-20 [transform:rotate(0deg)] ring-2 ring-ring"
+        )}
       >
         <div className="flex items-start justify-between gap-2">
-          <span className="text-xs font-bold tracking-wide opacity-50">{String(index + 1).padStart(2, "0")}</span>
-          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+          <div className="flex items-center gap-2">
+            {note.canManage && (
+              <div
+                className={cn(
+                  "transition-opacity",
+                  selectionMode ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                )}
+              >
+                <Checkbox checked={selected} onChange={onToggleSelect} aria-label={`Select "${note.title || "Untitled note"}"`} />
+              </div>
+            )}
+            <span className="text-xs font-bold tracking-wide opacity-50">{String(index + 1).padStart(2, "0")}</span>
+          </div>
+          <div
+            className={cn(
+              "flex shrink-0 items-center gap-0.5 transition-opacity focus-within:opacity-100 group-hover:opacity-100",
+              selectionMode ? "hidden" : "opacity-0"
+            )}
+          >
             {note.isPinned && (
               <Tooltip label={floating ? "Hide floating note" : "Open as floating note"}>
                 <button
@@ -232,6 +261,16 @@ export function NoteCard({
         <div className="rounded-lg p-3 text-sm" style={{ backgroundColor: contentBg }}>
           <p className="whitespace-pre-line line-clamp-6">{note.content || <span className="italic opacity-70">No content</span>}</p>
         </div>
+
+        {note.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {note.tags.map((tag) => (
+              <span key={tag} className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: contentBg }}>
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-2 text-xs opacity-60">
           <span className="truncate">

@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { canManageNote, broadcastNoteChange, isRecordNotFoundError } from "@/lib/notes";
 import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-store";
 import { isValidHexColor } from "@/lib/note-colors";
+import { MAX_TAGS, MAX_TAG_LENGTH, parseTags, serializeTags } from "@/lib/note-tags";
 
 const noteInclude = {
   author: { select: { id: true, name: true, surname: true } },
@@ -22,6 +23,7 @@ const patchSchema = z.object({
     .nullable()
     .optional(),
   isPinned: z.boolean().optional(),
+  tags: z.array(z.string().trim().min(1).max(MAX_TAG_LENGTH)).max(MAX_TAGS).optional(),
 });
 
 /**
@@ -52,7 +54,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // not its "last updated" sort position, not its "updated Xm ago" label —
   // so a pin-only PATCH keeps the existing updatedAt instead of letting
   // Prisma's @updatedAt bump it.
-  const isPinOnlyToggle = d.isPinned !== undefined && d.title === undefined && d.content === undefined && d.color === undefined;
+  const isPinOnlyToggle =
+    d.isPinned !== undefined && d.title === undefined && d.content === undefined && d.color === undefined && d.tags === undefined;
 
   const note = await db.note.update({
     where: { id },
@@ -61,13 +64,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(d.content !== undefined && { content: d.content }),
       ...(d.color !== undefined && { color: d.color }),
       ...(d.isPinned !== undefined && { isPinned: d.isPinned }),
+      ...(d.tags !== undefined && { tags: serializeTags(d.tags) }),
       ...(isPinOnlyToggle && { updatedAt: existing.updatedAt }),
     },
     include: noteInclude,
   });
 
   broadcastNoteChange("note_updated", note);
-  return NextResponse.json({ note: { ...note, canManage: true } });
+  return NextResponse.json({ note: { ...note, tags: parseTags(note.tags), canManage: true } });
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

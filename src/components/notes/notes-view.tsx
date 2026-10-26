@@ -10,6 +10,7 @@ import { SkeletonList } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
+import { SelectionBar } from "@/components/ui/selection-bar";
 import { useToast } from "@/components/providers/toast-provider";
 import { useSocket } from "@/components/providers/socket-provider";
 import { IconNotes, IconPictureInPicture, IconPlus, IconSearch } from "@/components/icons";
@@ -58,10 +59,14 @@ export function NotesView() {
   const [sort, setSort] = useState("updated");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [authorFilter, setAuthorFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<NoteRow | null>(null);
   const [deleting, setDeleting] = useState<NoteRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [floating, setFloating] = useState<Record<string, FloatingState>>({});
 
   // Document Picture-in-Picture: a real OS-level window that floats on top
@@ -182,20 +187,37 @@ export function NotesView() {
     if (sort !== "updated") params.set("sort", sort);
     if (departmentFilter) params.set("departmentId", departmentFilter);
     if (authorFilter) params.set("authorId", authorFilter);
+    if (tagFilter) params.set("tag", tagFilter);
 
     const res = await fetch(`/api/notes?${params.toString()}`);
     const data = await res.json().catch(() => ({}));
     if (res.ok) setNotes(data.notes ?? []);
-  }, [q, quickFilter, sort, departmentFilter, authorFilter]);
+  }, [q, quickFilter, sort, departmentFilter, authorFilter, tagFilter]);
+
+  // The tag filter's own option list and the editor's autocomplete share this
+  // — every tag across the notes this user can see, not just the ones in the
+  // current (possibly already tag-filtered) result set.
+  const loadTags = useCallback(async () => {
+    const res = await fetch("/api/notes/tags");
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) setAvailableTags(data.tags ?? []);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    loadTags();
+  }, [loadTags]);
+
   // Live-refresh when anyone's note changes in a way that could affect this list.
   useEffect(() => {
     if (!socket) return;
-    const refresh = () => load();
+    const refresh = () => {
+      load();
+      loadTags();
+    };
     socket.on("note_created", refresh);
     socket.on("note_updated", refresh);
     socket.on("note_deleted", refresh);
@@ -204,14 +226,14 @@ export function NotesView() {
       socket.off("note_updated", refresh);
       socket.off("note_deleted", refresh);
     };
-  }, [socket, load]);
+  }, [socket, load, loadTags]);
 
   const authorOptions = useMemo(() => {
     const me = meId ? [{ value: meId, label: "Me" }] : [];
     return [{ value: "", label: "Everyone" }, ...me, ...candidates.map((c) => ({ value: c.id, label: [c.name, c.surname].filter(Boolean).join(" ") }))];
   }, [candidates, meId]);
 
-  async function createNote(data: { title: string; content: string; color: string | null; isPinned: boolean }) {
+  async function createNote(data: { title: string; content: string; color: string | null; isPinned: boolean; tags: string[] }) {
     const res = await fetch("/api/notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -225,9 +247,10 @@ export function NotesView() {
     toast.success("Note created");
     if (data.isPinned && body.note?.id) openFloat(body.note.id);
     load();
+    if (data.tags.length > 0) loadTags();
   }
 
-  async function updateNote(id: string, data: Partial<{ title: string; content: string; color: string | null; isPinned: boolean }>) {
+  async function updateNote(id: string, data: Partial<{ title: string; content: string; color: string | null; isPinned: boolean; tags: string[] }>) {
     const res = await fetch(`/api/notes/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -239,6 +262,7 @@ export function NotesView() {
       throw new Error(body.error);
     }
     setNotes((prev) => (prev ? prev.map((n) => (n.id === id ? body.note : n)) : prev));
+    if (data.tags !== undefined) loadTags();
     return body.note as NoteRow;
   }
 
@@ -259,6 +283,65 @@ export function NotesView() {
       });
     }
     setDeleting(null);
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllIds(ids: string[]) {
+    setSelectedIds((prev) => {
+      const allSelected = ids.length > 0 && ids.every((id) => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  function exitSelectionMode() {
+    setSelectedIds(new Set());
+  }
+
+  /** The grid's own click handler — while anything is selected, clicking a card toggles it instead of opening the editor (same convention as the leads board). */
+  function handleCardOpen(note: NoteRow) {
+    if (selectedIds.size > 0) toggleSelected(note.id);
+    else openEdit(note);
+  }
+
+  async function handleBulkDelete() {
+    const res = await fetch("/api/notes", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error("Couldn't delete notes");
+      return;
+    }
+    toast.success(
+      `Deleted ${body.deleted} note${body.deleted === 1 ? "" : "s"}`,
+      body.skipped > 0 ? `${body.skipped} skipped — no delete access` : undefined
+    );
+    setFloating((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const id of selectedIds) {
+        if (id in next) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    exitSelectionMode();
+    load();
   }
 
   function openCreate() {
@@ -360,39 +443,49 @@ export function NotesView() {
             </HelpSection>
           </HelpDialog>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative w-52">
-            <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input value={rawQuery} onChange={(e) => setRawQuery(e.target.value)} placeholder="Search notes…" className="pl-8" />
-          </div>
-          <Tooltip
-            label={
-              !pipSupported
-                ? "Needs Chrome, Edge, or Brave"
-                : pipWindow
-                  ? "Return pinned notes to this window"
-                  : "Pop pinned notes out to a floating desktop window"
-            }
-          >
-            <span>
-              <Button
-                type="button"
-                variant={pipWindow ? "default" : "outline"}
-                size="icon"
-                aria-label={pipWindow ? "Return pinned notes to this window" : "Pop pinned notes out to a floating desktop window"}
-                onClick={toggleDesktopPanel}
-                disabled={!pipSupported}
-              >
-                <IconPictureInPicture className="h-4 w-4" />
+        {selectedIds.size > 0 ? (
+          <SelectionBar
+            count={selectedIds.size}
+            allSelected={!!notes && notes.length > 0 && notes.every((n) => selectedIds.has(n.id))}
+            onSelectAll={() => toggleSelectAllIds((notes ?? []).map((n) => n.id))}
+            onCancel={exitSelectionMode}
+            onDelete={() => setBulkDeleteConfirm(true)}
+          />
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="relative w-52">
+              <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input value={rawQuery} onChange={(e) => setRawQuery(e.target.value)} placeholder="Search notes…" className="pl-8" />
+            </div>
+            <Tooltip
+              label={
+                !pipSupported
+                  ? "Needs Chrome, Edge, or Brave"
+                  : pipWindow
+                    ? "Return pinned notes to this window"
+                    : "Pop pinned notes out to a floating desktop window"
+              }
+            >
+              <span>
+                <Button
+                  type="button"
+                  variant={pipWindow ? "default" : "outline"}
+                  size="icon"
+                  aria-label={pipWindow ? "Return pinned notes to this window" : "Pop pinned notes out to a floating desktop window"}
+                  onClick={toggleDesktopPanel}
+                  disabled={!pipSupported}
+                >
+                  <IconPictureInPicture className="h-4 w-4" />
+                </Button>
+              </span>
+            </Tooltip>
+            <Tooltip label="New note">
+              <Button type="button" size="icon" aria-label="New note" onClick={openCreate}>
+                <IconPlus className="h-4 w-4" />
               </Button>
-            </span>
-          </Tooltip>
-          <Tooltip label="New note">
-            <Button type="button" size="icon" aria-label="New note" onClick={openCreate}>
-              <IconPlus className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-        </div>
+            </Tooltip>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -411,6 +504,15 @@ export function NotesView() {
           ))}
         </div>
         <Dropdown size="sm" value={sort} onChange={setSort} options={SORT_OPTIONS} className="w-40" />
+        {availableTags.length > 0 && (
+          <Dropdown
+            size="sm"
+            value={tagFilter}
+            onChange={setTagFilter}
+            options={[{ value: "", label: "Any tag" }, ...availableTags.map((t) => ({ value: t, label: t }))]}
+            className="w-36"
+          />
+        )}
         {isAdmin && departments.length > 0 && (
           <Dropdown
             size="sm"
@@ -431,7 +533,7 @@ export function NotesView() {
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
             <IconNotes className="h-6 w-6" />
-            {q || quickFilter !== "all" || departmentFilter || authorFilter ? "No notes match these filters." : "No notes yet. Create one to get started."}
+            {q || quickFilter !== "all" || departmentFilter || authorFilter || tagFilter ? "No notes match these filters." : "No notes yet. Create one to get started."}
           </CardContent>
         </Card>
       ) : (
@@ -445,13 +547,16 @@ export function NotesView() {
               note={note}
               index={i}
               showAuthor={(isAdmin || isDeptAdmin) && note.authorId !== meId}
-              onOpen={() => openEdit(note)}
+              onOpen={() => handleCardOpen(note)}
               onTogglePin={() => togglePin(note)}
               onSetColor={(c) => recolor(note, c)}
               onDelete={() => setDeleting(note)}
               onToggleFloat={() => toggleFloat(note)}
               onDuplicate={() => duplicateNote(note)}
               floating={note.id in floating}
+              selected={selectedIds.has(note.id)}
+              selectionMode={selectedIds.size > 0}
+              onToggleSelect={() => toggleSelected(note.id)}
             />
           ))}
         </div>
@@ -487,6 +592,7 @@ export function NotesView() {
         note={editingNote}
         open={editorOpen}
         onOpenChange={setEditorOpen}
+        tagSuggestions={availableTags}
         onSave={async (data) => {
           if (editingNote) {
             await updateNote(editingNote.id, data);
@@ -505,6 +611,15 @@ export function NotesView() {
         description={deleting ? `"${deleting.title || "Untitled note"}" will be permanently deleted.` : ""}
         confirmLabel="Delete"
         onConfirm={confirmDelete}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteConfirm}
+        onOpenChange={setBulkDeleteConfirm}
+        title={`Delete ${selectedIds.size} note${selectedIds.size === 1 ? "" : "s"}?`}
+        description="These notes will be permanently deleted. Any you don't actually have delete access to will be skipped."
+        confirmLabel="Delete"
+        onConfirm={handleBulkDelete}
       />
     </div>
   );

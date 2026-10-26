@@ -3,13 +3,14 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageNote, broadcastNoteChange } from "@/lib/notes";
 import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-store";
+import { parseTags } from "@/lib/note-tags";
 
 const noteInclude = {
   author: { select: { id: true, name: true, surname: true } },
   department: { select: { id: true, name: true } },
 };
 
-/** Duplicates a note as a new one owned by the actor — content and color carry over, pin state and author/department reset to theirs, like any other new note. */
+/** Duplicates a note as a new one owned by the actor — content, color, and tags carry over, pin state and author/department reset to theirs, like any other new note. */
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -26,6 +27,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       title: `${existing.title} (Copy)`,
       content: existing.content,
       color: existing.color,
+      tags: existing.tags,
       isPinned: false,
       authorId: user.id,
       departmentId: user.departmentId,
@@ -34,5 +36,5 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   });
 
   broadcastNoteChange("note_created", note);
-  return NextResponse.json({ note: { ...note, canManage: true } }, { status: 201 });
+  return NextResponse.json({ note: { ...note, tags: parseTags(note.tags), canManage: true } }, { status: 201 });
 }
