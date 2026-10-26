@@ -7,32 +7,75 @@ import { broadcastLeadChange, canDeleteLead, leadListWhere } from "@/lib/leads";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
 import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
+import { parsePageParams } from "@/lib/pagination";
+import { parseFilterParam, UNASSIGNED } from "@/lib/filter-utils";
 
+/**
+ * Every filter the board's own facets (assignee/status/priority/meeting) and
+ * free-text search apply — moved server-side, alongside `take`/`skip`
+ * pagination, so neither breaks the other: a search for something not yet
+ * loaded still finds it, and loading more doesn't have to re-filter an
+ * ever-growing in-memory list.
+ */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (await isModuleBlocked(user, "LEADS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const params = req.nextUrl.searchParams;
+
   // The Social Media / CRM Team console's Leads tab explicitly asks for the
   // team-only view (scope=social-media|crm) — narrower than an Admin's
   // normal company-wide list.
-  const { teamOnly, teamUserIds } = await resolveTeamScope(user, req.nextUrl.searchParams.get("scope"));
+  const { teamOnly, teamUserIds } = await resolveTeamScope(user, params.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const scope = await moduleAccessScope(user, "LEADS", "READ");
 
-  const leads = await db.lead.findMany({
-    where: leadListWhere(user, teamUserIds, teamOnly, scope),
-    include: {
-      assignedTo: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-      department: { select: { id: true, name: true } },
-      _count: { select: { notes: true, reminders: true } },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+  const and: object[] = [leadListWhere(user, teamUserIds, teamOnly, scope)];
 
-  return NextResponse.json({ leads });
+  const assigneeFilter = parseFilterParam(params.get("assignee"));
+  if (assigneeFilter) {
+    const or: object[] = [];
+    const ids = assigneeFilter.filter((v) => v !== UNASSIGNED);
+    if (ids.length > 0) or.push({ assignedToId: { in: ids } });
+    if (assigneeFilter.includes(UNASSIGNED)) or.push({ assignedToId: null });
+    and.push({ OR: or });
+  }
+  const statusFilter = parseFilterParam(params.get("status"));
+  if (statusFilter) and.push({ status: { in: statusFilter } });
+  const priorityFilter = parseFilterParam(params.get("priority"));
+  if (priorityFilter) and.push({ priority: { in: priorityFilter } });
+  const meetingFilter = parseFilterParam(params.get("meeting"));
+  if (meetingFilter) and.push({ meetingStatus: { in: meetingFilter } });
+
+  const q = params.get("q")?.trim();
+  if (q) {
+    and.push({
+      OR: [{ name: { contains: q } }, { company: { contains: q } }, { email: { contains: q } }, { product: { contains: q } }],
+    });
+  }
+
+  const where = { AND: and };
+  const { take, skip } = parsePageParams(params, { defaultTake: 50, maxTake: 200 });
+
+  const [leads, total] = await Promise.all([
+    db.lead.findMany({
+      where,
+      include: {
+        assignedTo: { select: { id: true, name: true } },
+        createdBy: { select: { id: true, name: true } },
+        department: { select: { id: true, name: true } },
+        _count: { select: { notes: true, reminders: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+      take,
+      skip,
+    }),
+    db.lead.count({ where }),
+  ]);
+
+  return NextResponse.json({ leads, total, hasMore: skip + leads.length < total });
 }
 
 const bodySchema = z.object({
