@@ -300,11 +300,15 @@ export function NotesView() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {notes.map((note) => (
+        // CSS columns rather than a strict grid — cards of different heights
+        // stack into a staggered, scattered-sticky-note layout instead of
+        // lining up in rigid rows.
+        <div className="columns-1 gap-5 rounded-2xl bg-muted/30 p-6 sm:columns-2 lg:columns-3 xl:columns-4">
+          {notes.map((note, i) => (
             <NoteCard
               key={note.id}
               note={note}
+              index={i}
               showAuthor={(isAdmin || isDeptAdmin) && note.authorId !== meId}
               onOpen={() => openEdit(note)}
               onTogglePin={() => togglePin(note)}
