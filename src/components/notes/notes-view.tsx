@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
@@ -11,10 +12,12 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { useToast } from "@/components/providers/toast-provider";
 import { useSocket } from "@/components/providers/socket-provider";
-import { IconNotes, IconPlus, IconSearch } from "@/components/icons";
+import { IconNotes, IconPictureInPicture, IconPlus, IconSearch } from "@/components/icons";
 import { NoteCard, type NoteRow } from "@/components/notes/note-card";
 import { NoteEditorDialog } from "@/components/notes/note-editor-dialog";
 import { FloatingNote, type FloatingState } from "@/components/notes/floating-note";
+import { DesktopNotesPanel } from "@/components/notes/desktop-notes-panel";
+import { isDocumentPipSupported, openDocumentPip } from "@/lib/document-pip";
 
 type QuickFilter = "all" | "pinned" | "mine";
 
@@ -59,6 +62,38 @@ export function NotesView() {
   const [editingNote, setEditingNote] = useState<NoteRow | null>(null);
   const [deleting, setDeleting] = useState<NoteRow | null>(null);
   const [floating, setFloating] = useState<Record<string, FloatingState>>({});
+
+  // Document Picture-in-Picture: a real OS-level window that floats on top
+  // of other applications, not just other browser tabs. Chromium-only
+  // (Chrome/Edge/Brave) — resolved after mount to avoid a server/client
+  // render mismatch, since `window` isn't available during SSR.
+  const [pipSupported, setPipSupported] = useState(false);
+  const [pipWindow, setPipWindow] = useState<Window | null>(null);
+  useEffect(() => setPipSupported(isDocumentPipSupported()), []);
+
+  async function toggleDesktopPanel() {
+    if (pipWindow) {
+      pipWindow.close();
+      setPipWindow(null);
+      return;
+    }
+    const pip = await openDocumentPip({ width: 320, height: 480 });
+    if (!pip) {
+      toast.error("Couldn't pop out", "Try Chrome, Edge, or Brave — this isn't supported in every browser.");
+      return;
+    }
+    pip.addEventListener("pagehide", () => setPipWindow(null), { once: true });
+    setPipWindow(pip);
+  }
+
+  // Closes the pop-out if it's still open when Notes unmounts (e.g.
+  // navigating away) — it's a companion to this page, not a standalone window.
+  useEffect(() => {
+    return () => {
+      pipWindow?.close();
+    };
+  }, [pipWindow]);
+
   // Restoring from localStorage only once (per meId resolving) — and only
   // persisting afterward — avoids overwriting a just-restored state with the
   // empty default before it has a chance to load.
@@ -311,6 +346,28 @@ export function NotesView() {
             <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input value={rawQuery} onChange={(e) => setRawQuery(e.target.value)} placeholder="Search notes…" className="pl-8" />
           </div>
+          <Tooltip
+            label={
+              !pipSupported
+                ? "Needs Chrome, Edge, or Brave"
+                : pipWindow
+                  ? "Return pinned notes to this window"
+                  : "Pop pinned notes out to a floating desktop window"
+            }
+          >
+            <span>
+              <Button
+                type="button"
+                variant={pipWindow ? "default" : "outline"}
+                size="icon"
+                aria-label={pipWindow ? "Return pinned notes to this window" : "Pop pinned notes out to a floating desktop window"}
+                onClick={toggleDesktopPanel}
+                disabled={!pipSupported}
+              >
+                <IconPictureInPicture className="h-4 w-4" />
+              </Button>
+            </span>
+          </Tooltip>
           <Tooltip label="New note">
             <Button type="button" size="icon" aria-label="New note" onClick={openCreate}>
               <IconPlus className="h-4 w-4" />
@@ -381,19 +438,31 @@ export function NotesView() {
         </div>
       )}
 
-      {floatingNotes.map((note) => (
-        <FloatingNote
-          key={note.id}
-          note={note}
-          state={floating[note.id]}
-          onMove={(x, y) => setFloating((prev) => ({ ...prev, [note.id]: { ...prev[note.id], x, y } }))}
-          onToggleMinimize={() =>
-            setFloating((prev) => ({ ...prev, [note.id]: { ...prev[note.id], minimized: !prev[note.id].minimized } }))
-          }
-          onClose={() => toggleFloat(note)}
-          onEdit={() => openEdit(note)}
-        />
-      ))}
+      {pipWindow
+        ? createPortal(
+            <DesktopNotesPanel
+              notes={floatingNotes}
+              onEdit={(note) => {
+                openEdit(note);
+                window.focus();
+              }}
+              onUnpin={(note) => togglePin(note)}
+            />,
+            pipWindow.document.body
+          )
+        : floatingNotes.map((note) => (
+            <FloatingNote
+              key={note.id}
+              note={note}
+              state={floating[note.id]}
+              onMove={(x, y) => setFloating((prev) => ({ ...prev, [note.id]: { ...prev[note.id], x, y } }))}
+              onToggleMinimize={() =>
+                setFloating((prev) => ({ ...prev, [note.id]: { ...prev[note.id], minimized: !prev[note.id].minimized } }))
+              }
+              onClose={() => toggleFloat(note)}
+              onEdit={() => openEdit(note)}
+            />
+          ))}
 
       <NoteEditorDialog
         note={editingNote}
