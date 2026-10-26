@@ -91,21 +91,21 @@ model Note {
 /// Admin/Super Admin already has every action on every module regardless
 /// of what's granted here.
 model UserModulePermission {
-  id        String        @id @default(cuid())
-  userId    String
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  module    ManagedModule
-  canCreate Boolean       @default(false)
-  canRead   Boolean       @default(false)
-  canUpdate Boolean       @default(false)
-  canDelete Boolean       @default(false)
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module         ManagedModule
+  canCreate      Boolean       @default(false)
+  canRead        Boolean       @default(false)
+  canUpdate      Boolean       @default(false)
+  canDelete      Boolean       @default(false)
   /// An explicit per-person override that hides this module's nav link for
   /// them entirely, regardless of their usual baseline own-record access —
   /// distinct from simply holding no CRUD grant (which only withholds the
   /// department-wide widening those four flags give; baseline access to
   /// one's own records stays either way). Defaults false so every existing
   /// row, and anyone never touched here at all, is unaffected.
-  blocked   Boolean       @default(false)
+  blocked        Boolean       @default(false)
   /// Widens this grant's scope from "the grant holder's own department" to
   /// company-wide — the same breadth a real Admin gets for this module.
   /// Only a company Admin may set this (see the PUT handler for this
@@ -115,8 +115,8 @@ model UserModulePermission {
   /// have. Meaningless without at least one of the CRUD flags above also
   /// being true — moduleAccessScope only consults it once an action is
   /// otherwise granted.
-  allDepartments Boolean  @default(false)
-  createdAt DateTime      @default(now())
+  allDepartments Boolean       @default(false)
+  createdAt      DateTime      @default(now())
 
   @@unique([userId, module])
   @@index([userId])
@@ -152,6 +152,12 @@ model User {
   // a company Admin/Super Admin only, via Admin > Users.
   isDepartmentAdmin     Boolean     @default(false)
   isActive              Boolean     @default(true)
+  // A snapshot of departmentId (plain string, no relation — it's a memory
+  // of the past, not a live link) taken when blocking removes someone from
+  // their department, so unblocking can restore it. Department-admin status
+  // is never restored this way, even if it's still set when this is read —
+  // that has to be re-granted deliberately. Cleared once consumed.
+  previousDepartmentId  String?
   resetCode             String? // bcrypt hash of the email login/reset code
   resetCodeExpiresAt    DateTime?
   // Alternate sign-in: mobile number + 6-digit PIN, alongside email+password.
@@ -208,20 +214,20 @@ model User {
   invoicesCreated  Invoice[] @relation("InvoiceCreatedBy")
   paymentsRecorded Payment[]
 
-  leaves             UserLeave[]        @relation("UserLeaves")
-  leaveRequests      LeaveRequest[]     @relation("LeaveRequestUser")
-  leaveDecisions     LeaveRequest[]     @relation("LeaveRequestDecider")
-  expenses           Expense[]          @relation("ExpenseUser")
-  expenseDecisions   Expense[]          @relation("ExpenseDecider")
-  clientsCreated     Client[]           @relation("ClientCreatedBy")
-  formsCreated       Form[]             @relation("FormCreatedBy")
-  clientTeamRoles    ClientTeamMember[] @relation("ClientTeamMemberUser")
-  birthdayGifts      BirthdayGift[]     @relation("BirthdayGiftFor")
+  leaves                UserLeave[]            @relation("UserLeaves")
+  leaveRequests         LeaveRequest[]         @relation("LeaveRequestUser")
+  leaveDecisions        LeaveRequest[]         @relation("LeaveRequestDecider")
+  expenses              Expense[]              @relation("ExpenseUser")
+  expenseDecisions      Expense[]              @relation("ExpenseDecider")
+  clientsCreated        Client[]               @relation("ClientCreatedBy")
+  formsCreated          Form[]                 @relation("FormCreatedBy")
+  clientTeamRoles       ClientTeamMember[]     @relation("ClientTeamMemberUser")
+  birthdayGifts         BirthdayGift[]         @relation("BirthdayGiftFor")
   birthdayGiftReminders BirthdayGiftReminder[]
   birthdayWishesSent    BirthdayWishSent[]
-  attendance         Attendance[]       @relation("AttendanceUser")
-  attendanceApproved Attendance[]       @relation("AttendanceApprover")
-  attendanceAudits   AttendanceAudit[]  @relation("AttendanceAuditActor")
+  attendance            Attendance[]           @relation("AttendanceUser")
+  attendanceApproved    Attendance[]           @relation("AttendanceApprover")
+  attendanceAudits      AttendanceAudit[]      @relation("AttendanceAuditActor")
 
   meetingsOrganized Meeting[] @relation("MeetingOrganizer")
   meetingsAttending Meeting[] @relation("MeetingAttendees")
@@ -289,43 +295,43 @@ model PushSubscription {
 }
 
 model Invite {
-  id                String      @id @default(cuid())
-  email             String
-  role              Role
-  departmentId      String?
-  department        Department? @relation(fields: [departmentId], references: [id])
+  id                       String      @id @default(cuid())
+  email                    String
+  role                     Role
+  departmentId             String?
+  department               Department? @relation(fields: [departmentId], references: [id])
   /// "Social Media Lead" in the invite Role picker isn't a real company
   /// Role — the account is still created as DEPARTMENT_USER, this just tells
   /// acceptance to also provision a Social Media TeamMember(isLead: true) row,
   /// so full social-media access is granted the moment they accept rather
   /// than needing a separate admin step afterward.
-  socialMediaAdmin  Boolean     @default(false)
+  socialMediaAdmin         Boolean     @default(false)
   /// Same idea as socialMediaAdmin, but for a regular (non-lead) team member —
   /// provisions a Social Media TeamMember(isLead: false) on acceptance instead.
   /// Mutually exclusive with socialMediaAdmin in practice, not enforced here.
-  socialMediaMember Boolean     @default(false)
+  socialMediaMember        Boolean     @default(false)
   /// Same idea as socialMediaAdmin/socialMediaMember, but provisions a CRM
   /// TeamMember row on acceptance instead — the CRM Team's equivalent.
-  crmAdmin          Boolean     @default(false)
-  crmMember         Boolean     @default(false)
+  crmAdmin                 Boolean     @default(false)
+  crmMember                Boolean     @default(false)
   /// Same idea as socialMediaAdmin/socialMediaMember/crmAdmin/crmMember, but
   /// for any other (non-system) team — provisions a TeamMember row on this
   /// team on acceptance, isLead per `teamIsLead`. Null for every invite not
   /// created from a custom team's own console.
-  teamId            String?
-  team              Team?       @relation(fields: [teamId], references: [id])
-  teamIsLead        Boolean     @default(false)
+  teamId                   String?
+  team                     Team?       @relation(fields: [teamId], references: [id])
+  teamIsLead               Boolean     @default(false)
   /// Grants Department Admin (see User.isDepartmentAdmin) for `departmentId`
   /// the moment this invite is accepted. Only a company Admin/Super Admin
   /// can set this when creating the invite — a Department Admin inviting
   /// into their own department can't mint another one.
-  inviteeIsDepartmentAdmin Boolean @default(false)
-  token             String      @unique
-  invitedById       String
-  invitedBy         User        @relation("InvitedBy", fields: [invitedById], references: [id])
-  expiresAt         DateTime
-  acceptedAt        DateTime?
-  createdAt         DateTime    @default(now())
+  inviteeIsDepartmentAdmin Boolean     @default(false)
+  token                    String      @unique
+  invitedById              String
+  invitedBy                User        @relation("InvitedBy", fields: [invitedById], references: [id])
+  expiresAt                DateTime
+  acceptedAt               DateTime?
+  createdAt                DateTime    @default(now())
 
   @@index([email])
   @@index([teamId])
@@ -1915,31 +1921,31 @@ enum ExpenseStatus {
 /// legitimate claim"; marking paid says "the money has actually moved"),
 /// so the two are tracked independently rather than collapsed into one.
 model Expense {
-  id          String          @id @default(cuid())
-  userId      String
-  user        User            @relation("ExpenseUser", fields: [userId], references: [id], onDelete: Cascade)
-  category    ExpenseCategory @default(OTHER)
+  id              String          @id @default(cuid())
+  userId          String
+  user            User            @relation("ExpenseUser", fields: [userId], references: [id], onDelete: Cascade)
+  category        ExpenseCategory @default(OTHER)
   /// Required only when category is OTHER — what the "other" expense
   /// actually was, so an admin reviewing claims doesn't have to rely on the
   /// free-form description alone to tell what kind of spend this was.
-  categoryOther String?       @db.VarChar(200)
-  amount      Decimal         @db.Decimal(10, 2)
-  expenseDate DateTime        @db.Date
-  description String          @db.Text
-  status      ExpenseStatus   @default(PENDING)
-  decidedById String?
-  decidedBy   User?           @relation("ExpenseDecider", fields: [decidedById], references: [id])
+  categoryOther   String?         @db.VarChar(200)
+  amount          Decimal         @db.Decimal(10, 2)
+  expenseDate     DateTime        @db.Date
+  description     String          @db.Text
+  status          ExpenseStatus   @default(PENDING)
+  decidedById     String?
+  decidedBy       User?           @relation("ExpenseDecider", fields: [decidedById], references: [id])
   /// The "Action Date": when an admin approved/rejected, or the user cancelled.
-  decidedAt   DateTime?
-  adminNote   String?         @db.Text
+  decidedAt       DateTime?
+  adminNote       String?         @db.Text
   /// Set only once the reimbursement has actually been paid out — independent
   /// of decidedAt, since approval and payment often happen on different days.
-  paidAt      DateTime?
+  paidAt          DateTime?
   receiptFileName String?
   receiptFilePath String?
   /// Base64, same MySQL-column storage as TaskAttachment/ProjectDocument —
   /// no filesystem/S3 involved. Null when no receipt was attached.
-  receiptData     String?     @db.LongText
+  receiptData     String?         @db.LongText
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2065,7 +2071,7 @@ model OnboardingSubmission {
   aboutCompany String @db.Text
 
   arnNo           String
-  arnRegistration String @db.Text
+  arnRegistration String  @db.Text
   euinNo          String
   cinNo           String?
   panNo           String?
@@ -2105,12 +2111,12 @@ model OnboardingSubmission {
 }
 
 model OnboardingAttachment {
-  id           String               @id @default(cuid())
+  id           String                   @id @default(cuid())
   submissionId String
-  submission   OnboardingSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  submission   OnboardingSubmission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   kind         OnboardingAttachmentKind
   fileName     String
-  data         String               @db.LongText
+  data         String                   @db.LongText
 
   createdAt DateTime @default(now())
 
@@ -2143,17 +2149,17 @@ enum FormFieldType {
 /// Lives at the public, unauthenticated /f/[slug] — anyone with the link can submit
 /// it, same as the Website Onboarding Form. `slug` is the public URL segment.
 model Form {
-  id          String   @id @default(cuid())
-  title       String
-  description String?  @db.Text
-  slug        String   @unique
-  isActive    Boolean  @default(true)
+  id           String      @id @default(cuid())
+  title        String
+  description  String?     @db.Text
+  slug         String      @unique
+  isActive     Boolean     @default(true)
   /// When false (the default), copying the link rotates it to a fresh
   /// random slug first — the old link stops working. Set true for a form
   /// whose link needs to stay stable, e.g. one embedded on a website.
-  lockSlug    Boolean  @default(false)
-  createdById String
-  createdBy   User     @relation("FormCreatedBy", fields: [createdById], references: [id])
+  lockSlug     Boolean     @default(false)
+  createdById  String
+  createdBy    User        @relation("FormCreatedBy", fields: [createdById], references: [id])
   /// Which department this form was built for — distinct from
   /// viewerDepartments (who may see submissions). Nullable: forms created
   /// before this field existed have none until an admin sets one.
@@ -2166,8 +2172,8 @@ model Form {
   /// this form converting," not meant to dedupe repeat visits.
   viewCount Int @default(0)
 
-  fields          FormField[]
-  submissions     FormSubmission[]
+  fields            FormField[]
+  submissions       FormSubmission[]
   viewerDepartments FormViewerDepartment[]
 
   createdAt DateTime @default(now())
@@ -2216,10 +2222,10 @@ model FormField {
   /// deleted should just stop gating anything, not take its dependents down
   /// with it. The builder only ever offers an earlier field (lower `order`)
   /// as the target, so evaluation in display order never has to look ahead.
-  conditionFieldId String?
+  conditionFieldId  String?
   /// "equals" | "not_equals" | "contains" | "is_filled" | "is_empty"
   conditionOperator String?
-  conditionValue    String?       @db.Text
+  conditionValue    String? @db.Text
 
   answers     FormAnswer[]
   attachments FormAttachment[]
@@ -2285,35 +2291,35 @@ model FormAttachment {
 
 /// Leads
 model CcLead {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String? @map("mfd_org_id")
-  leadNumber String @db.VarChar(32) @map("lead_number")
-  businessName String @db.VarChar(200) @map("business_name")
-  leadContactName String @db.VarChar(150) @map("lead_contact_name")
-  mobileE164 String? @db.VarChar(20) @map("mobile_e164")
-  email String? @db.VarChar(254)
-  city String? @db.VarChar(100)
-  state String? @db.VarChar(100)
-  leadSource String @db.VarChar(40) @map("lead_source")
-  sourceDetail String? @db.Text @map("source_detail")
-  status String @db.VarChar(40)
-  priority String @db.VarChar(20)
-  assignedMemberId String? @map("assigned_member_id")
-  firstContactAt DateTime? @map("first_contact_at")
-  nextFollowUpAt DateTime? @map("next_follow_up_at")
-  lastContactAt DateTime? @map("last_contact_at")
-  qualificationNotes String? @db.Text @map("qualification_notes")
-  unqualifiedReason String? @db.Text @map("unqualified_reason")
-  convertedOrgId String? @map("converted_org_id")
-  convertedAt DateTime? @map("converted_at")
+  id                 String    @id @default(uuid())
+  workspaceId        String    @map("workspace_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  createdByUserId    String    @map("created_by_user_id")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  updatedByUserId    String    @map("updated_by_user_id")
+  rowVersion         Int       @default(1) @map("row_version")
+  archivedAt         DateTime? @map("archived_at")
+  archivedByUserId   String?   @map("archived_by_user_id")
+  mfdOrgId           String?   @map("mfd_org_id")
+  leadNumber         String    @map("lead_number") @db.VarChar(32)
+  businessName       String    @map("business_name") @db.VarChar(200)
+  leadContactName    String    @map("lead_contact_name") @db.VarChar(150)
+  mobileE164         String?   @map("mobile_e164") @db.VarChar(20)
+  email              String?   @db.VarChar(254)
+  city               String?   @db.VarChar(100)
+  state              String?   @db.VarChar(100)
+  leadSource         String    @map("lead_source") @db.VarChar(40)
+  sourceDetail       String?   @map("source_detail") @db.Text
+  status             String    @db.VarChar(40)
+  priority           String    @db.VarChar(20)
+  assignedMemberId   String?   @map("assigned_member_id")
+  firstContactAt     DateTime? @map("first_contact_at")
+  nextFollowUpAt     DateTime? @map("next_follow_up_at")
+  lastContactAt      DateTime? @map("last_contact_at")
+  qualificationNotes String?   @map("qualification_notes") @db.Text
+  unqualifiedReason  String?   @map("unqualified_reason") @db.Text
+  convertedOrgId     String?   @map("converted_org_id")
+  convertedAt        DateTime? @map("converted_at")
 
   @@unique([workspaceId, leadNumber])
   @@index([archivedAt])
@@ -2333,36 +2339,36 @@ model CcLead {
 
 /// MFD Organizations
 model CcMfdOrganization {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  orgCode String @db.VarChar(30) @map("org_code")
-  legalName String @db.VarChar(220) @map("legal_name")
-  brandName String? @db.VarChar(220) @map("brand_name")
-  legalEntityType String? @db.VarChar(40) @map("legal_entity_type")
-  primaryArn String? @db.VarChar(40) @map("primary_arn")
-  arnVerifiedAt DateTime? @map("arn_verified_at")
-  websiteUrl String? @db.VarChar(500) @map("website_url")
-  primaryEmail String? @db.VarChar(254) @map("primary_email")
-  primaryPhone String? @db.VarChar(20) @map("primary_phone")
-  city String? @db.VarChar(100)
-  state String? @db.VarChar(100)
-  countryIso2 String @db.Char(2) @map("country_iso2")
-  registeredAddress String? @db.Text @map("registered_address")
-  orgStatus String @db.VarChar(40) @map("org_status")
-  onboardedAt DateTime? @db.Date @map("onboarded_at")
-  sourceLeadId String? @map("source_lead_id")
-  accountOwnerId String? @map("account_owner_id")
-  clientDataContactId String? @map("client_data_contact_id")
-  confidentialityTier String @db.VarChar(40) @map("confidentiality_tier")
-  recordingAllowed Boolean @default(false) @map("recording_allowed")
-  notes String? @db.Text
+  id                  String    @id @default(uuid())
+  workspaceId         String    @map("workspace_id")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  createdByUserId     String    @map("created_by_user_id")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  updatedByUserId     String    @map("updated_by_user_id")
+  rowVersion          Int       @default(1) @map("row_version")
+  archivedAt          DateTime? @map("archived_at")
+  archivedByUserId    String?   @map("archived_by_user_id")
+  orgCode             String    @map("org_code") @db.VarChar(30)
+  legalName           String    @map("legal_name") @db.VarChar(220)
+  brandName           String?   @map("brand_name") @db.VarChar(220)
+  legalEntityType     String?   @map("legal_entity_type") @db.VarChar(40)
+  primaryArn          String?   @map("primary_arn") @db.VarChar(40)
+  arnVerifiedAt       DateTime? @map("arn_verified_at")
+  websiteUrl          String?   @map("website_url") @db.VarChar(500)
+  primaryEmail        String?   @map("primary_email") @db.VarChar(254)
+  primaryPhone        String?   @map("primary_phone") @db.VarChar(20)
+  city                String?   @db.VarChar(100)
+  state               String?   @db.VarChar(100)
+  countryIso2         String    @map("country_iso2") @db.Char(2)
+  registeredAddress   String?   @map("registered_address") @db.Text
+  orgStatus           String    @map("org_status") @db.VarChar(40)
+  onboardedAt         DateTime? @map("onboarded_at") @db.Date
+  sourceLeadId        String?   @map("source_lead_id")
+  accountOwnerId      String?   @map("account_owner_id")
+  clientDataContactId String?   @map("client_data_contact_id")
+  confidentialityTier String    @map("confidentiality_tier") @db.VarChar(40)
+  recordingAllowed    Boolean   @default(false) @map("recording_allowed")
+  notes               String?   @db.Text
 
   @@unique([workspaceId, orgCode])
   @@index([archivedAt])
@@ -2379,34 +2385,34 @@ model CcMfdOrganization {
 
 /// MFD Contacts
 model CcMfdContact {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  fullName String @db.VarChar(180) @map("full_name")
-  email String? @db.VarChar(254)
-  mobileE164 String? @db.VarChar(20) @map("mobile_e164")
-  jobTitle String? @db.VarChar(150) @map("job_title")
-  contactType String @db.VarChar(50) @map("contact_type")
-  portalUserId String? @map("portal_user_id")
-  department String? @db.VarChar(100)
-  branchId String? @map("branch_id")
-  isDecisionMaker Boolean @default(false) @map("is_decision_maker")
-  isApprover Boolean @default(false) @map("is_approver")
-  preferredChannel String? @db.VarChar(20) @map("preferred_channel")
-  isPrimaryContact Boolean @default(false) @map("is_primary_contact")
-  consentToContact Boolean? @map("consent_to_contact")
-  consentRecordId String? @map("consent_record_id")
-  statusActive Boolean @default(true) @map("status_active")
-  joinedAt DateTime? @db.Date @map("joined_at")
-  leftAt DateTime? @db.Date @map("left_at")
-  relationshipNotes String? @db.Text @map("relationship_notes")
+  id                String    @id @default(uuid())
+  workspaceId       String    @map("workspace_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  createdByUserId   String    @map("created_by_user_id")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  updatedByUserId   String    @map("updated_by_user_id")
+  rowVersion        Int       @default(1) @map("row_version")
+  archivedAt        DateTime? @map("archived_at")
+  archivedByUserId  String?   @map("archived_by_user_id")
+  mfdOrgId          String    @map("mfd_org_id")
+  fullName          String    @map("full_name") @db.VarChar(180)
+  email             String?   @db.VarChar(254)
+  mobileE164        String?   @map("mobile_e164") @db.VarChar(20)
+  jobTitle          String?   @map("job_title") @db.VarChar(150)
+  contactType       String    @map("contact_type") @db.VarChar(50)
+  portalUserId      String?   @map("portal_user_id")
+  department        String?   @db.VarChar(100)
+  branchId          String?   @map("branch_id")
+  isDecisionMaker   Boolean   @default(false) @map("is_decision_maker")
+  isApprover        Boolean   @default(false) @map("is_approver")
+  preferredChannel  String?   @map("preferred_channel") @db.VarChar(20)
+  isPrimaryContact  Boolean   @default(false) @map("is_primary_contact")
+  consentToContact  Boolean?  @map("consent_to_contact")
+  consentRecordId   String?   @map("consent_record_id")
+  statusActive      Boolean   @default(true) @map("status_active")
+  joinedAt          DateTime? @map("joined_at") @db.Date
+  leftAt            DateTime? @map("left_at") @db.Date
+  relationshipNotes String?   @map("relationship_notes") @db.Text
 
   @@index([workspaceId])
   @@index([archivedAt])
@@ -2423,34 +2429,34 @@ model CcMfdContact {
 
 /// Proposals & Deals
 model CcSalesOpportunity {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String? @map("mfd_org_id")
-  opportunityNo String @db.VarChar(32) @map("opportunity_no")
-  leadId String? @map("lead_id")
-  opportunityName String @db.VarChar(220) @map("opportunity_name")
-  serviceType String @db.VarChar(50) @map("service_type")
-  stage String @db.VarChar(50)
-  probabilityPct Decimal? @db.Decimal(5, 2) @map("probability_pct")
-  ownerMemberId String @map("owner_member_id")
-  proposalVersionNo Int? @map("proposal_version_no")
-  proposalDocumentId String? @map("proposal_document_id")
-  expectedValue Decimal? @db.Decimal(18, 2) @map("expected_value")
-  currency String @db.VarChar(8)
-  estimatedCloseDate DateTime? @db.Date @map("estimated_close_date")
-  proposedStartDate DateTime? @db.Date @map("proposed_start_date")
-  proposalSentAt DateTime? @map("proposal_sent_at")
-  closedAt DateTime? @map("closed_at")
-  lossReason String? @db.Text @map("loss_reason")
-  nextStep String? @db.Text @map("next_step")
-  nextStepDue DateTime? @db.Date @map("next_step_due")
+  id                 String    @id @default(uuid())
+  workspaceId        String    @map("workspace_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  createdByUserId    String    @map("created_by_user_id")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  updatedByUserId    String    @map("updated_by_user_id")
+  rowVersion         Int       @default(1) @map("row_version")
+  archivedAt         DateTime? @map("archived_at")
+  archivedByUserId   String?   @map("archived_by_user_id")
+  mfdOrgId           String?   @map("mfd_org_id")
+  opportunityNo      String    @map("opportunity_no") @db.VarChar(32)
+  leadId             String?   @map("lead_id")
+  opportunityName    String    @map("opportunity_name") @db.VarChar(220)
+  serviceType        String    @map("service_type") @db.VarChar(50)
+  stage              String    @db.VarChar(50)
+  probabilityPct     Decimal?  @map("probability_pct") @db.Decimal(5, 2)
+  ownerMemberId      String    @map("owner_member_id")
+  proposalVersionNo  Int?      @map("proposal_version_no")
+  proposalDocumentId String?   @map("proposal_document_id")
+  expectedValue      Decimal?  @map("expected_value") @db.Decimal(18, 2)
+  currency           String    @db.VarChar(8)
+  estimatedCloseDate DateTime? @map("estimated_close_date") @db.Date
+  proposedStartDate  DateTime? @map("proposed_start_date") @db.Date
+  proposalSentAt     DateTime? @map("proposal_sent_at")
+  closedAt           DateTime? @map("closed_at")
+  lossReason         String?   @map("loss_reason") @db.Text
+  nextStep           String?   @map("next_step") @db.Text
+  nextStepDue        DateTime? @map("next_step_due") @db.Date
 
   @@unique([workspaceId, opportunityNo])
   @@index([archivedAt])
@@ -2468,37 +2474,37 @@ model CcSalesOpportunity {
 
 /// Consulting Engagements
 model CcConsultingEngagement {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  engagementCode String @db.VarChar(32) @map("engagement_code")
-  engagementName String @db.VarChar(220) @map("engagement_name")
-  opportunityId String? @map("opportunity_id")
-  serviceType String @db.VarChar(50) @map("service_type")
-  contractStatus String @db.VarChar(40) @map("contract_status")
-  startDate DateTime? @db.Date @map("start_date")
-  endDate DateTime? @db.Date @map("end_date")
-  billingFrequency String? @db.VarChar(40) @map("billing_frequency")
-  contractValue Decimal? @db.Decimal(18, 2) @map("contract_value")
-  currency String @db.VarChar(8)
-  contractDocumentId String? @map("contract_document_id")
-  ndaDocumentId String? @map("nda_document_id")
-  leadConsultantId String @map("lead_consultant_id")
-  clientSponsorContactId String? @map("client_sponsor_contact_id")
-  objectives String @db.Text
-  inScope String @db.Text @map("in_scope")
-  outOfScope String? @db.Text @map("out_of_scope")
-  meetingCadence String? @db.VarChar(100) @map("meeting_cadence")
-  renewalNoticeDays Int? @map("renewal_notice_days")
-  nextReviewDate DateTime? @db.Date @map("next_review_date")
-  signOffAt DateTime? @map("sign_off_at")
+  id                     String    @id @default(uuid())
+  workspaceId            String    @map("workspace_id")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  createdByUserId        String    @map("created_by_user_id")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+  updatedByUserId        String    @map("updated_by_user_id")
+  rowVersion             Int       @default(1) @map("row_version")
+  archivedAt             DateTime? @map("archived_at")
+  archivedByUserId       String?   @map("archived_by_user_id")
+  mfdOrgId               String    @map("mfd_org_id")
+  engagementCode         String    @map("engagement_code") @db.VarChar(32)
+  engagementName         String    @map("engagement_name") @db.VarChar(220)
+  opportunityId          String?   @map("opportunity_id")
+  serviceType            String    @map("service_type") @db.VarChar(50)
+  contractStatus         String    @map("contract_status") @db.VarChar(40)
+  startDate              DateTime? @map("start_date") @db.Date
+  endDate                DateTime? @map("end_date") @db.Date
+  billingFrequency       String?   @map("billing_frequency") @db.VarChar(40)
+  contractValue          Decimal?  @map("contract_value") @db.Decimal(18, 2)
+  currency               String    @db.VarChar(8)
+  contractDocumentId     String?   @map("contract_document_id")
+  ndaDocumentId          String?   @map("nda_document_id")
+  leadConsultantId       String    @map("lead_consultant_id")
+  clientSponsorContactId String?   @map("client_sponsor_contact_id")
+  objectives             String    @db.Text
+  inScope                String    @map("in_scope") @db.Text
+  outOfScope             String?   @map("out_of_scope") @db.Text
+  meetingCadence         String?   @map("meeting_cadence") @db.VarChar(100)
+  renewalNoticeDays      Int?      @map("renewal_notice_days")
+  nextReviewDate         DateTime? @map("next_review_date") @db.Date
+  signOffAt              DateTime? @map("sign_off_at")
 
   @@unique([workspaceId, engagementCode])
   @@index([archivedAt])
@@ -2516,36 +2522,36 @@ model CcConsultingEngagement {
 
 /// Business Profiles & Baselines
 model CcBusinessProfile {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  asOfDate DateTime @db.Date @map("as_of_date")
-  profileVersion Int @map("profile_version")
-  source String @db.VarChar(40)
-  verificationStatus String @db.VarChar(40) @map("verification_status")
-  verifiedBy String? @map("verified_by")
-  verifiedAt DateTime? @map("verified_at")
-  aumInr Decimal? @db.Decimal(20, 2) @map("aum_inr")
-  monthlySipBookInr Decimal? @db.Decimal(20, 2) @map("monthly_sip_book_inr")
-  activeClientFamilies Int? @map("active_client_families")
-  folioCount Int? @map("folio_count")
-  teamHeadcount Int? @map("team_headcount")
-  branchCount Int? @map("branch_count")
-  revenueTtmInr Decimal? @db.Decimal(20, 2) @map("revenue_ttm_inr")
-  netFlowsMonthInr Decimal? @db.Decimal(20, 2) @map("net_flows_month_inr")
-  currentCrm String? @db.VarChar(150) @map("current_crm")
-  transactionPlatform String? @db.VarChar(150) @map("transaction_platform")
-  ownerDependencyNotes String? @db.Text @map("owner_dependency_notes")
-  topChallenges Json? @map("top_challenges")
-  shortTermGoals String? @db.Text @map("short_term_goals")
-  sourceDocumentId String? @map("source_document_id")
+  id                   String    @id @default(uuid())
+  workspaceId          String    @map("workspace_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  createdByUserId      String    @map("created_by_user_id")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  updatedByUserId      String    @map("updated_by_user_id")
+  rowVersion           Int       @default(1) @map("row_version")
+  archivedAt           DateTime? @map("archived_at")
+  archivedByUserId     String?   @map("archived_by_user_id")
+  mfdOrgId             String    @map("mfd_org_id")
+  asOfDate             DateTime  @map("as_of_date") @db.Date
+  profileVersion       Int       @map("profile_version")
+  source               String    @db.VarChar(40)
+  verificationStatus   String    @map("verification_status") @db.VarChar(40)
+  verifiedBy           String?   @map("verified_by")
+  verifiedAt           DateTime? @map("verified_at")
+  aumInr               Decimal?  @map("aum_inr") @db.Decimal(20, 2)
+  monthlySipBookInr    Decimal?  @map("monthly_sip_book_inr") @db.Decimal(20, 2)
+  activeClientFamilies Int?      @map("active_client_families")
+  folioCount           Int?      @map("folio_count")
+  teamHeadcount        Int?      @map("team_headcount")
+  branchCount          Int?      @map("branch_count")
+  revenueTtmInr        Decimal?  @map("revenue_ttm_inr") @db.Decimal(20, 2)
+  netFlowsMonthInr     Decimal?  @map("net_flows_month_inr") @db.Decimal(20, 2)
+  currentCrm           String?   @map("current_crm") @db.VarChar(150)
+  transactionPlatform  String?   @map("transaction_platform") @db.VarChar(150)
+  ownerDependencyNotes String?   @map("owner_dependency_notes") @db.Text
+  topChallenges        Json?     @map("top_challenges")
+  shortTermGoals       String?   @map("short_term_goals") @db.Text
+  sourceDocumentId     String?   @map("source_document_id")
 
   @@unique([workspaceId, mfdOrgId, asOfDate, profileVersion])
   @@index([mfdOrgId, asOfDate, profileVersion])
@@ -2558,28 +2564,28 @@ model CcBusinessProfile {
 
 /// Assessment Templates
 model CcAssessmentTemplate {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String? @map("mfd_org_id")
-  templateCode String @db.VarChar(40) @map("template_code")
-  templateName String @db.VarChar(220) @map("template_name")
-  templateVersion Int @map("template_version")
-  assessmentType String @db.VarChar(40) @map("assessment_type")
-  description String? @db.Text
-  status String @db.VarChar(40)
-  scoringSchemeCode String? @db.VarChar(50) @map("scoring_scheme_code")
-  scoringSchemeVersion Int? @map("scoring_scheme_version")
-  publishedAt DateTime? @map("published_at")
-  publishedBy String? @map("published_by")
-  ownerMemberId String @map("owner_member_id")
-  isClientSpecific Boolean @default(false) @map("is_client_specific")
+  id                   String    @id @default(uuid())
+  workspaceId          String    @map("workspace_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  createdByUserId      String    @map("created_by_user_id")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  updatedByUserId      String    @map("updated_by_user_id")
+  rowVersion           Int       @default(1) @map("row_version")
+  archivedAt           DateTime? @map("archived_at")
+  archivedByUserId     String?   @map("archived_by_user_id")
+  mfdOrgId             String?   @map("mfd_org_id")
+  templateCode         String    @map("template_code") @db.VarChar(40)
+  templateName         String    @map("template_name") @db.VarChar(220)
+  templateVersion      Int       @map("template_version")
+  assessmentType       String    @map("assessment_type") @db.VarChar(40)
+  description          String?   @db.Text
+  status               String    @db.VarChar(40)
+  scoringSchemeCode    String?   @map("scoring_scheme_code") @db.VarChar(50)
+  scoringSchemeVersion Int?      @map("scoring_scheme_version")
+  publishedAt          DateTime? @map("published_at")
+  publishedBy          String?   @map("published_by")
+  ownerMemberId        String    @map("owner_member_id")
+  isClientSpecific     Boolean   @default(false) @map("is_client_specific")
 
   @@unique([workspaceId, templateCode, templateVersion])
   @@index([archivedAt])
@@ -2594,33 +2600,33 @@ model CcAssessmentTemplate {
 
 /// Assessments & Responses
 model CcAssessment {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  assessmentNumber String @db.VarChar(40) @map("assessment_number")
-  templateId String @map("template_id")
-  engagementId String? @map("engagement_id")
-  assessmentType String @db.VarChar(40) @map("assessment_type")
-  assessmentMode String @db.VarChar(40) @map("assessment_mode")
-  status String @db.VarChar(40)
-  assignedContactId String? @map("assigned_contact_id")
-  assignedConsultantId String @map("assigned_consultant_id")
-  issuedAt DateTime? @map("issued_at")
-  dueAt DateTime? @map("due_at")
-  submittedAt DateTime? @map("submitted_at")
-  reviewerMemberId String? @map("reviewer_member_id")
-  approvedAt DateTime? @map("approved_at")
-  responseCount Int @default(0) @map("response_count")
-  completionPct Decimal @db.Decimal(5, 2) @map("completion_pct")
-  versionSnapshotHash String? @db.Char(64) @map("version_snapshot_hash")
-  reviewNotes String? @db.Text @map("review_notes")
+  id                   String    @id @default(uuid())
+  workspaceId          String    @map("workspace_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  createdByUserId      String    @map("created_by_user_id")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  updatedByUserId      String    @map("updated_by_user_id")
+  rowVersion           Int       @default(1) @map("row_version")
+  archivedAt           DateTime? @map("archived_at")
+  archivedByUserId     String?   @map("archived_by_user_id")
+  mfdOrgId             String    @map("mfd_org_id")
+  assessmentNumber     String    @map("assessment_number") @db.VarChar(40)
+  templateId           String    @map("template_id")
+  engagementId         String?   @map("engagement_id")
+  assessmentType       String    @map("assessment_type") @db.VarChar(40)
+  assessmentMode       String    @map("assessment_mode") @db.VarChar(40)
+  status               String    @db.VarChar(40)
+  assignedContactId    String?   @map("assigned_contact_id")
+  assignedConsultantId String    @map("assigned_consultant_id")
+  issuedAt             DateTime? @map("issued_at")
+  dueAt                DateTime? @map("due_at")
+  submittedAt          DateTime? @map("submitted_at")
+  reviewerMemberId     String?   @map("reviewer_member_id")
+  approvedAt           DateTime? @map("approved_at")
+  responseCount        Int       @default(0) @map("response_count")
+  completionPct        Decimal   @map("completion_pct") @db.Decimal(5, 2)
+  versionSnapshotHash  String?   @map("version_snapshot_hash") @db.Char(64)
+  reviewNotes          String?   @map("review_notes") @db.Text
 
   @@unique([workspaceId, assessmentNumber])
   @@index([mfdOrgId, status, dueAt])
@@ -2636,35 +2642,35 @@ model CcAssessment {
 
 /// Findings & Gaps
 model CcFinding {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  findingNumber String @db.VarChar(40) @map("finding_number")
-  engagementId String? @map("engagement_id")
-  assessmentId String? @map("assessment_id")
-  sessionId String? @map("session_id")
-  dimension String @db.VarChar(50)
-  category String @db.VarChar(50)
-  title String @db.VarChar(250)
-  description String @db.Text
-  rootCause String? @db.Text @map("root_cause")
-  severity String @db.VarChar(30)
-  status String @db.VarChar(40)
-  ownerMemberId String @map("owner_member_id")
-  clientOwnerContactId String? @map("client_owner_contact_id")
-  recommendation String? @db.Text
-  impactStatement String? @db.Text @map("impact_statement")
-  sourceDescription String? @db.Text @map("source_description")
-  evidenceVerified Boolean @default(false) @map("evidence_verified")
-  acceptedAt DateTime? @map("accepted_at")
-  resolvedAt DateTime? @map("resolved_at")
+  id                   String    @id @default(uuid())
+  workspaceId          String    @map("workspace_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  createdByUserId      String    @map("created_by_user_id")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  updatedByUserId      String    @map("updated_by_user_id")
+  rowVersion           Int       @default(1) @map("row_version")
+  archivedAt           DateTime? @map("archived_at")
+  archivedByUserId     String?   @map("archived_by_user_id")
+  mfdOrgId             String    @map("mfd_org_id")
+  findingNumber        String    @map("finding_number") @db.VarChar(40)
+  engagementId         String?   @map("engagement_id")
+  assessmentId         String?   @map("assessment_id")
+  sessionId            String?   @map("session_id")
+  dimension            String    @db.VarChar(50)
+  category             String    @db.VarChar(50)
+  title                String    @db.VarChar(250)
+  description          String    @db.Text
+  rootCause            String?   @map("root_cause") @db.Text
+  severity             String    @db.VarChar(30)
+  status               String    @db.VarChar(40)
+  ownerMemberId        String    @map("owner_member_id")
+  clientOwnerContactId String?   @map("client_owner_contact_id")
+  recommendation       String?   @db.Text
+  impactStatement      String?   @map("impact_statement") @db.Text
+  sourceDescription    String?   @map("source_description") @db.Text
+  evidenceVerified     Boolean   @default(false) @map("evidence_verified")
+  acceptedAt           DateTime? @map("accepted_at")
+  resolvedAt           DateTime? @map("resolved_at")
 
   @@unique([workspaceId, findingNumber])
   @@index([archivedAt])
@@ -2682,31 +2688,31 @@ model CcFinding {
 
 /// Business Maturity Scorecards
 model CcMaturityScorecard {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  scorecardNumber String @db.VarChar(40) @map("scorecard_number")
-  engagementId String? @map("engagement_id")
-  assessmentId String? @map("assessment_id")
-  scorecardType String @db.VarChar(50) @map("scorecard_type")
-  scorecardDate DateTime @db.Date @map("scorecard_date")
-  scoringSchemeCode String @db.VarChar(50) @map("scoring_scheme_code")
-  scoringSchemeVersion Int @map("scoring_scheme_version")
-  scoreValue Decimal? @db.Decimal(10, 4) @map("score_value")
-  maturityLevel String? @db.VarChar(5) @map("maturity_level")
-  status String @db.VarChar(40)
-  coveragePct Decimal? @db.Decimal(5, 2) @map("coverage_pct")
-  evidenceCoveragePct Decimal? @db.Decimal(5, 2) @map("evidence_coverage_pct")
-  calculatedAt DateTime? @map("calculated_at")
-  approvedBy String? @map("approved_by")
-  notes String? @db.Text
+  id                   String    @id @default(uuid())
+  workspaceId          String    @map("workspace_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  createdByUserId      String    @map("created_by_user_id")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  updatedByUserId      String    @map("updated_by_user_id")
+  rowVersion           Int       @default(1) @map("row_version")
+  archivedAt           DateTime? @map("archived_at")
+  archivedByUserId     String?   @map("archived_by_user_id")
+  mfdOrgId             String    @map("mfd_org_id")
+  scorecardNumber      String    @map("scorecard_number") @db.VarChar(40)
+  engagementId         String?   @map("engagement_id")
+  assessmentId         String?   @map("assessment_id")
+  scorecardType        String    @map("scorecard_type") @db.VarChar(50)
+  scorecardDate        DateTime  @map("scorecard_date") @db.Date
+  scoringSchemeCode    String    @map("scoring_scheme_code") @db.VarChar(50)
+  scoringSchemeVersion Int       @map("scoring_scheme_version")
+  scoreValue           Decimal?  @map("score_value") @db.Decimal(10, 4)
+  maturityLevel        String?   @map("maturity_level") @db.VarChar(5)
+  status               String    @db.VarChar(40)
+  coveragePct          Decimal?  @map("coverage_pct") @db.Decimal(5, 2)
+  evidenceCoveragePct  Decimal?  @map("evidence_coverage_pct") @db.Decimal(5, 2)
+  calculatedAt         DateTime? @map("calculated_at")
+  approvedBy           String?   @map("approved_by")
+  notes                String?   @db.Text
 
   @@unique([workspaceId, scorecardNumber])
   @@index([archivedAt])
@@ -2722,33 +2728,33 @@ model CcMaturityScorecard {
 
 /// Consulting Sessions
 model CcConsultingSession {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  sessionNumber String @db.VarChar(40) @map("session_number")
-  engagementId String? @map("engagement_id")
-  sessionType String @db.VarChar(50) @map("session_type")
-  status String @db.VarChar(40)
-  title String @db.VarChar(250)
-  meetingMode String @db.VarChar(30) @map("meeting_mode")
-  startsAt DateTime @map("starts_at")
-  endsAt DateTime? @map("ends_at")
-  organizerMemberId String @map("organizer_member_id")
-  agenda String? @db.Text
-  minutesDraft String? @db.MediumText @map("minutes_draft")
-  clientApprovedMinutes String? @db.MediumText @map("client_approved_minutes")
-  minutesApprovedAt DateTime? @map("minutes_approved_at")
-  meetingLink String? @db.VarChar(700) @map("meeting_link")
-  nextSessionAt DateTime? @map("next_session_at")
-  consentRecordId String? @map("consent_record_id")
-  recordingExpected Boolean @default(false) @map("recording_expected")
+  id                    String    @id @default(uuid())
+  workspaceId           String    @map("workspace_id")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  createdByUserId       String    @map("created_by_user_id")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  updatedByUserId       String    @map("updated_by_user_id")
+  rowVersion            Int       @default(1) @map("row_version")
+  archivedAt            DateTime? @map("archived_at")
+  archivedByUserId      String?   @map("archived_by_user_id")
+  mfdOrgId              String    @map("mfd_org_id")
+  sessionNumber         String    @map("session_number") @db.VarChar(40)
+  engagementId          String?   @map("engagement_id")
+  sessionType           String    @map("session_type") @db.VarChar(50)
+  status                String    @db.VarChar(40)
+  title                 String    @db.VarChar(250)
+  meetingMode           String    @map("meeting_mode") @db.VarChar(30)
+  startsAt              DateTime  @map("starts_at")
+  endsAt                DateTime? @map("ends_at")
+  organizerMemberId     String    @map("organizer_member_id")
+  agenda                String?   @db.Text
+  minutesDraft          String?   @map("minutes_draft") @db.MediumText
+  clientApprovedMinutes String?   @map("client_approved_minutes") @db.MediumText
+  minutesApprovedAt     DateTime? @map("minutes_approved_at")
+  meetingLink           String?   @map("meeting_link") @db.VarChar(700)
+  nextSessionAt         DateTime? @map("next_session_at")
+  consentRecordId       String?   @map("consent_record_id")
+  recordingExpected     Boolean   @default(false) @map("recording_expected")
 
   @@unique([workspaceId, sessionNumber])
   @@index([mfdOrgId, startsAt])
@@ -2765,37 +2771,37 @@ model CcConsultingSession {
 
 /// Action & Task Management
 model CcActionTask {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  taskNumber String @db.VarChar(40) @map("task_number")
-  engagementId String? @map("engagement_id")
-  projectId String? @map("project_id")
-  findingId String? @map("finding_id")
-  sessionId String? @map("session_id")
-  title String @db.VarChar(250)
-  description String? @db.Text
-  status String @db.VarChar(50)
-  priority String @db.VarChar(20)
-  ownerParty String @db.VarChar(20) @map("owner_party")
-  assignedMemberId String? @map("assigned_member_id")
-  assignedContactId String? @map("assigned_contact_id")
-  createdFrom String? @db.VarChar(60) @map("created_from")
-  dueAt DateTime? @map("due_at")
-  startedAt DateTime? @map("started_at")
-  submittedAt DateTime? @map("submitted_at")
-  verifiedAt DateTime? @map("verified_at")
-  verifiedBy String? @map("verified_by")
-  acceptanceCriteria String? @db.Text @map("acceptance_criteria")
-  blockReason String? @db.Text @map("block_reason")
-  completionNotes String? @db.Text @map("completion_notes")
+  id                 String    @id @default(uuid())
+  workspaceId        String    @map("workspace_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  createdByUserId    String    @map("created_by_user_id")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  updatedByUserId    String    @map("updated_by_user_id")
+  rowVersion         Int       @default(1) @map("row_version")
+  archivedAt         DateTime? @map("archived_at")
+  archivedByUserId   String?   @map("archived_by_user_id")
+  mfdOrgId           String    @map("mfd_org_id")
+  taskNumber         String    @map("task_number") @db.VarChar(40)
+  engagementId       String?   @map("engagement_id")
+  projectId          String?   @map("project_id")
+  findingId          String?   @map("finding_id")
+  sessionId          String?   @map("session_id")
+  title              String    @db.VarChar(250)
+  description        String?   @db.Text
+  status             String    @db.VarChar(50)
+  priority           String    @db.VarChar(20)
+  ownerParty         String    @map("owner_party") @db.VarChar(20)
+  assignedMemberId   String?   @map("assigned_member_id")
+  assignedContactId  String?   @map("assigned_contact_id")
+  createdFrom        String?   @map("created_from") @db.VarChar(60)
+  dueAt              DateTime? @map("due_at")
+  startedAt          DateTime? @map("started_at")
+  submittedAt        DateTime? @map("submitted_at")
+  verifiedAt         DateTime? @map("verified_at")
+  verifiedBy         String?   @map("verified_by")
+  acceptanceCriteria String?   @map("acceptance_criteria") @db.Text
+  blockReason        String?   @map("block_reason") @db.Text
+  completionNotes    String?   @map("completion_notes") @db.Text
 
   @@unique([workspaceId, taskNumber])
   @@index([mfdOrgId, status, dueAt])
@@ -2814,33 +2820,33 @@ model CcActionTask {
 
 /// Projects & Milestones
 model CcDeliveryProject {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  projectNumber String @db.VarChar(40) @map("project_number")
-  engagementId String @map("engagement_id")
-  projectName String @db.VarChar(250) @map("project_name")
-  serviceType String @db.VarChar(50) @map("service_type")
-  status String @db.VarChar(40)
-  leadMemberId String @map("lead_member_id")
-  clientSponsorContactId String? @map("client_sponsor_contact_id")
-  startPlan DateTime? @db.Date @map("start_plan")
-  endPlan DateTime? @db.Date @map("end_plan")
-  startActual DateTime? @db.Date @map("start_actual")
-  endActual DateTime? @db.Date @map("end_actual")
-  objective String @db.Text
-  inScope String @db.Text @map("in_scope")
-  outOfScope String? @db.Text @map("out_of_scope")
-  completionPct Decimal @db.Decimal(5, 2) @map("completion_pct")
-  acceptanceCriteria String? @db.Text @map("acceptance_criteria")
-  clientAcceptanceAt DateTime? @map("client_acceptance_at")
+  id                     String    @id @default(uuid())
+  workspaceId            String    @map("workspace_id")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  createdByUserId        String    @map("created_by_user_id")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+  updatedByUserId        String    @map("updated_by_user_id")
+  rowVersion             Int       @default(1) @map("row_version")
+  archivedAt             DateTime? @map("archived_at")
+  archivedByUserId       String?   @map("archived_by_user_id")
+  mfdOrgId               String    @map("mfd_org_id")
+  projectNumber          String    @map("project_number") @db.VarChar(40)
+  engagementId           String    @map("engagement_id")
+  projectName            String    @map("project_name") @db.VarChar(250)
+  serviceType            String    @map("service_type") @db.VarChar(50)
+  status                 String    @db.VarChar(40)
+  leadMemberId           String    @map("lead_member_id")
+  clientSponsorContactId String?   @map("client_sponsor_contact_id")
+  startPlan              DateTime? @map("start_plan") @db.Date
+  endPlan                DateTime? @map("end_plan") @db.Date
+  startActual            DateTime? @map("start_actual") @db.Date
+  endActual              DateTime? @map("end_actual") @db.Date
+  objective              String    @db.Text
+  inScope                String    @map("in_scope") @db.Text
+  outOfScope             String?   @map("out_of_scope") @db.Text
+  completionPct          Decimal   @map("completion_pct") @db.Decimal(5, 2)
+  acceptanceCriteria     String?   @map("acceptance_criteria") @db.Text
+  clientAcceptanceAt     DateTime? @map("client_acceptance_at")
 
   @@unique([workspaceId, projectNumber])
   @@index([archivedAt])
@@ -2855,33 +2861,33 @@ model CcDeliveryProject {
 
 /// Process & SOP Register
 model CcProcessSopRegister {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  processCode String @db.VarChar(50) @map("process_code")
-  processName String @db.VarChar(250) @map("process_name")
-  dimension String @db.VarChar(50)
-  processOwnerContactId String? @map("process_owner_contact_id")
-  ainaOwnerMemberId String @map("aina_owner_member_id")
-  currentStateSummary String? @db.Text @map("current_state_summary")
-  futureStateSummary String? @db.Text @map("future_state_summary")
-  triggerDescription String? @db.Text @map("trigger_description")
-  slaHours Decimal? @db.Decimal(10, 2) @map("sla_hours")
-  status String @db.VarChar(40)
-  sopVersion Int @map("sop_version")
-  currentDocumentId String? @map("current_document_id")
-  approvedByContactId String? @map("approved_by_contact_id")
-  approvedAt DateTime? @map("approved_at")
-  adoptionStatus String @db.VarChar(40) @map("adoption_status")
-  effectiveDate DateTime? @db.Date @map("effective_date")
-  nextReviewDate DateTime? @db.Date @map("next_review_date")
+  id                    String    @id @default(uuid())
+  workspaceId           String    @map("workspace_id")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  createdByUserId       String    @map("created_by_user_id")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  updatedByUserId       String    @map("updated_by_user_id")
+  rowVersion            Int       @default(1) @map("row_version")
+  archivedAt            DateTime? @map("archived_at")
+  archivedByUserId      String?   @map("archived_by_user_id")
+  mfdOrgId              String    @map("mfd_org_id")
+  processCode           String    @map("process_code") @db.VarChar(50)
+  processName           String    @map("process_name") @db.VarChar(250)
+  dimension             String    @db.VarChar(50)
+  processOwnerContactId String?   @map("process_owner_contact_id")
+  ainaOwnerMemberId     String    @map("aina_owner_member_id")
+  currentStateSummary   String?   @map("current_state_summary") @db.Text
+  futureStateSummary    String?   @map("future_state_summary") @db.Text
+  triggerDescription    String?   @map("trigger_description") @db.Text
+  slaHours              Decimal?  @map("sla_hours") @db.Decimal(10, 2)
+  status                String    @db.VarChar(40)
+  sopVersion            Int       @map("sop_version")
+  currentDocumentId     String?   @map("current_document_id")
+  approvedByContactId   String?   @map("approved_by_contact_id")
+  approvedAt            DateTime? @map("approved_at")
+  adoptionStatus        String    @map("adoption_status") @db.VarChar(40)
+  effectiveDate         DateTime? @map("effective_date") @db.Date
+  nextReviewDate        DateTime? @map("next_review_date") @db.Date
 
   @@index([workspaceId])
   @@index([archivedAt])
@@ -2898,33 +2904,33 @@ model CcProcessSopRegister {
 
 /// Training & Adoption
 model CcTrainingEvent {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  trainingNumber String @db.VarChar(40) @map("training_number")
-  engagementId String? @map("engagement_id")
-  projectId String? @map("project_id")
-  trainingTitle String @db.VarChar(250) @map("training_title")
-  dimension String @db.VarChar(50)
-  mode String @db.VarChar(30)
-  status String @db.VarChar(40)
-  trainerMemberId String @map("trainer_member_id")
-  startsAt DateTime @map("starts_at")
-  endsAt DateTime? @map("ends_at")
-  agenda String? @db.Text
-  materialDocumentId String? @map("material_document_id")
-  recordingId String? @map("recording_id")
-  attendanceTotal Int @default(0) @map("attendance_total")
-  trainingFeedbackScore Decimal? @db.Decimal(5, 2) @map("training_feedback_score")
-  followUpCheckDate DateTime? @db.Date @map("follow_up_check_date")
-  adoptionVerifiedAt DateTime? @map("adoption_verified_at")
+  id                    String    @id @default(uuid())
+  workspaceId           String    @map("workspace_id")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  createdByUserId       String    @map("created_by_user_id")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  updatedByUserId       String    @map("updated_by_user_id")
+  rowVersion            Int       @default(1) @map("row_version")
+  archivedAt            DateTime? @map("archived_at")
+  archivedByUserId      String?   @map("archived_by_user_id")
+  mfdOrgId              String    @map("mfd_org_id")
+  trainingNumber        String    @map("training_number") @db.VarChar(40)
+  engagementId          String?   @map("engagement_id")
+  projectId             String?   @map("project_id")
+  trainingTitle         String    @map("training_title") @db.VarChar(250)
+  dimension             String    @db.VarChar(50)
+  mode                  String    @db.VarChar(30)
+  status                String    @db.VarChar(40)
+  trainerMemberId       String    @map("trainer_member_id")
+  startsAt              DateTime  @map("starts_at")
+  endsAt                DateTime? @map("ends_at")
+  agenda                String?   @db.Text
+  materialDocumentId    String?   @map("material_document_id")
+  recordingId           String?   @map("recording_id")
+  attendanceTotal       Int       @default(0) @map("attendance_total")
+  trainingFeedbackScore Decimal?  @map("training_feedback_score") @db.Decimal(5, 2)
+  followUpCheckDate     DateTime? @map("follow_up_check_date") @db.Date
+  adoptionVerifiedAt    DateTime? @map("adoption_verified_at")
 
   @@unique([workspaceId, trainingNumber])
   @@index([archivedAt])
@@ -2942,32 +2948,32 @@ model CcTrainingEvent {
 
 /// Decisions & Approvals
 model CcDecision {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  decisionNumber String @db.VarChar(40) @map("decision_number")
-  engagementId String? @map("engagement_id")
-  sessionId String? @map("session_id")
-  projectId String? @map("project_id")
-  kind String @db.VarChar(40)
-  subject String @db.VarChar(250)
-  context String @db.Text
-  optionsConsidered String? @db.Text @map("options_considered")
-  proposedResolution String? @db.Text @map("proposed_resolution")
-  status String @db.VarChar(40)
-  requestedByMemberId String @map("requested_by_member_id")
-  decisionOwnerContactId String? @map("decision_owner_contact_id")
-  requiredBy DateTime? @db.Date @map("required_by")
-  finalResolution String? @db.Text @map("final_resolution")
-  decidedAt DateTime? @map("decided_at")
-  evidenceDocumentId String? @map("evidence_document_id")
+  id                     String    @id @default(uuid())
+  workspaceId            String    @map("workspace_id")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  createdByUserId        String    @map("created_by_user_id")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+  updatedByUserId        String    @map("updated_by_user_id")
+  rowVersion             Int       @default(1) @map("row_version")
+  archivedAt             DateTime? @map("archived_at")
+  archivedByUserId       String?   @map("archived_by_user_id")
+  mfdOrgId               String    @map("mfd_org_id")
+  decisionNumber         String    @map("decision_number") @db.VarChar(40)
+  engagementId           String?   @map("engagement_id")
+  sessionId              String?   @map("session_id")
+  projectId              String?   @map("project_id")
+  kind                   String    @db.VarChar(40)
+  subject                String    @db.VarChar(250)
+  context                String    @db.Text
+  optionsConsidered      String?   @map("options_considered") @db.Text
+  proposedResolution     String?   @map("proposed_resolution") @db.Text
+  status                 String    @db.VarChar(40)
+  requestedByMemberId    String    @map("requested_by_member_id")
+  decisionOwnerContactId String?   @map("decision_owner_contact_id")
+  requiredBy             DateTime? @map("required_by") @db.Date
+  finalResolution        String?   @map("final_resolution") @db.Text
+  decidedAt              DateTime? @map("decided_at")
+  evidenceDocumentId     String?   @map("evidence_document_id")
 
   @@unique([workspaceId, decisionNumber])
   @@index([archivedAt])
@@ -2982,31 +2988,31 @@ model CcDecision {
 
 /// Recordings & Transcripts
 model CcMediaRecord {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  mediaNumber String @db.VarChar(40) @map("media_number")
-  sessionId String? @map("session_id")
-  mediaType String @db.VarChar(40) @map("media_type")
-  status String @db.VarChar(40)
-  fileObjectId String? @map("file_object_id")
-  transcriptDocumentId String? @map("transcript_document_id")
-  consentRecordId String? @map("consent_record_id")
-  consentStatus String @db.VarChar(40) @map("consent_status")
-  recordedAt DateTime? @map("recorded_at")
-  durationSeconds Int? @map("duration_seconds")
-  transcriptLanguage String? @db.VarChar(16) @map("transcript_language")
-  transcriptQualityReviewed Boolean @default(false) @map("transcript_quality_reviewed")
-  aiProcessingAllowed Boolean @default(false) @map("ai_processing_allowed")
-  retentionUntil DateTime? @db.Date @map("retention_until")
-  redactionCompleted Boolean @default(false) @map("redaction_completed")
+  id                        String    @id @default(uuid())
+  workspaceId               String    @map("workspace_id")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  createdByUserId           String    @map("created_by_user_id")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+  updatedByUserId           String    @map("updated_by_user_id")
+  rowVersion                Int       @default(1) @map("row_version")
+  archivedAt                DateTime? @map("archived_at")
+  archivedByUserId          String?   @map("archived_by_user_id")
+  mfdOrgId                  String    @map("mfd_org_id")
+  mediaNumber               String    @map("media_number") @db.VarChar(40)
+  sessionId                 String?   @map("session_id")
+  mediaType                 String    @map("media_type") @db.VarChar(40)
+  status                    String    @db.VarChar(40)
+  fileObjectId              String?   @map("file_object_id")
+  transcriptDocumentId      String?   @map("transcript_document_id")
+  consentRecordId           String?   @map("consent_record_id")
+  consentStatus             String    @map("consent_status") @db.VarChar(40)
+  recordedAt                DateTime? @map("recorded_at")
+  durationSeconds           Int?      @map("duration_seconds")
+  transcriptLanguage        String?   @map("transcript_language") @db.VarChar(16)
+  transcriptQualityReviewed Boolean   @default(false) @map("transcript_quality_reviewed")
+  aiProcessingAllowed       Boolean   @default(false) @map("ai_processing_allowed")
+  retentionUntil            DateTime? @map("retention_until") @db.Date
+  redactionCompleted        Boolean   @default(false) @map("redaction_completed")
 
   @@unique([workspaceId, mediaNumber])
   @@index([archivedAt])
@@ -3020,32 +3026,32 @@ model CcMediaRecord {
 
 /// Document Register
 model CcDocumentRecord {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  documentNumber String @db.VarChar(40) @map("document_number")
-  documentTitle String @db.VarChar(250) @map("document_title")
-  documentCategory String @db.VarChar(50) @map("document_category")
-  status String @db.VarChar(40)
-  classification String @db.VarChar(40)
-  fileObjectId String? @map("file_object_id")
-  currentVersion Int @map("current_version")
-  requestedFromContactId String? @map("requested_from_contact_id")
-  requestedAt DateTime? @map("requested_at")
-  requestDueAt DateTime? @map("request_due_at")
-  receivedAt DateTime? @map("received_at")
-  reviewedBy String? @map("reviewed_by")
-  reviewedAt DateTime? @map("reviewed_at")
-  rejectionReason String? @db.Text @map("rejection_reason")
-  confidentialNotes String? @db.Text @map("confidential_notes")
-  retentionUntil DateTime? @db.Date @map("retention_until")
+  id                     String    @id @default(uuid())
+  workspaceId            String    @map("workspace_id")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  createdByUserId        String    @map("created_by_user_id")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+  updatedByUserId        String    @map("updated_by_user_id")
+  rowVersion             Int       @default(1) @map("row_version")
+  archivedAt             DateTime? @map("archived_at")
+  archivedByUserId       String?   @map("archived_by_user_id")
+  mfdOrgId               String    @map("mfd_org_id")
+  documentNumber         String    @map("document_number") @db.VarChar(40)
+  documentTitle          String    @map("document_title") @db.VarChar(250)
+  documentCategory       String    @map("document_category") @db.VarChar(50)
+  status                 String    @db.VarChar(40)
+  classification         String    @db.VarChar(40)
+  fileObjectId           String?   @map("file_object_id")
+  currentVersion         Int       @map("current_version")
+  requestedFromContactId String?   @map("requested_from_contact_id")
+  requestedAt            DateTime? @map("requested_at")
+  requestDueAt           DateTime? @map("request_due_at")
+  receivedAt             DateTime? @map("received_at")
+  reviewedBy             String?   @map("reviewed_by")
+  reviewedAt             DateTime? @map("reviewed_at")
+  rejectionReason        String?   @map("rejection_reason") @db.Text
+  confidentialNotes      String?   @map("confidential_notes") @db.Text
+  retentionUntil         DateTime? @map("retention_until") @db.Date
 
   @@unique([workspaceId, documentNumber])
   @@index([archivedAt])
@@ -3061,32 +3067,32 @@ model CcDocumentRecord {
 
 /// Communication History
 model CcCommunication {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  communicationNumber String @db.VarChar(40) @map("communication_number")
-  engagementId String? @map("engagement_id")
-  contactId String? @map("contact_id")
-  channel String @db.VarChar(40)
-  direction String @db.VarChar(40)
-  status String @db.VarChar(40)
-  subject String? @db.VarChar(300)
-  summary String @db.Text
-  bodyText String? @db.MediumText @map("body_text")
-  externalMessageId String? @db.VarChar(250) @map("external_message_id")
-  providerName String? @db.VarChar(80) @map("provider_name")
-  communicatedAt DateTime @map("communicated_at")
-  followUpDueAt DateTime? @map("follow_up_due_at")
-  actionRequired Boolean @default(false) @map("action_required")
-  recordedByMemberId String @map("recorded_by_member_id")
-  linkedSessionId String? @map("linked_session_id")
+  id                  String    @id @default(uuid())
+  workspaceId         String    @map("workspace_id")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  createdByUserId     String    @map("created_by_user_id")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  updatedByUserId     String    @map("updated_by_user_id")
+  rowVersion          Int       @default(1) @map("row_version")
+  archivedAt          DateTime? @map("archived_at")
+  archivedByUserId    String?   @map("archived_by_user_id")
+  mfdOrgId            String    @map("mfd_org_id")
+  communicationNumber String    @map("communication_number") @db.VarChar(40)
+  engagementId        String?   @map("engagement_id")
+  contactId           String?   @map("contact_id")
+  channel             String    @db.VarChar(40)
+  direction           String    @db.VarChar(40)
+  status              String    @db.VarChar(40)
+  subject             String?   @db.VarChar(300)
+  summary             String    @db.Text
+  bodyText            String?   @map("body_text") @db.MediumText
+  externalMessageId   String?   @map("external_message_id") @db.VarChar(250)
+  providerName        String?   @map("provider_name") @db.VarChar(80)
+  communicatedAt      DateTime  @map("communicated_at")
+  followUpDueAt       DateTime? @map("follow_up_due_at")
+  actionRequired      Boolean   @default(false) @map("action_required")
+  recordedByMemberId  String    @map("recorded_by_member_id")
+  linkedSessionId     String?   @map("linked_session_id")
 
   @@unique([workspaceId, providerName, externalMessageId])
   @@unique([workspaceId, communicationNumber])
@@ -3106,32 +3112,32 @@ model CcCommunication {
 
 /// KPI & Business Tracking
 model CcKpiObservation {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  kpiDefinitionId String @map("kpi_definition_id")
-  periodType String @db.VarChar(20) @map("period_type")
-  periodStart DateTime @db.Date @map("period_start")
-  periodEnd DateTime @db.Date @map("period_end")
-  valueNumeric Decimal @db.Decimal(24, 6) @map("value_numeric")
-  unit String @db.VarChar(20)
-  branchId String? @map("branch_id")
-  source String @db.VarChar(40)
-  sourceDocumentId String? @map("source_document_id")
-  dataQuality String @db.VarChar(30) @map("data_quality")
-  enteredBy String @map("entered_by")
-  verifiedBy String? @map("verified_by")
-  verifiedAt DateTime? @map("verified_at")
-  revisionNumber Int @map("revision_number")
-  supersedesObservationId String? @map("supersedes_observation_id")
-  notes String? @db.Text
+  id                      String    @id @default(uuid())
+  workspaceId             String    @map("workspace_id")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  createdByUserId         String    @map("created_by_user_id")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  updatedByUserId         String    @map("updated_by_user_id")
+  rowVersion              Int       @default(1) @map("row_version")
+  archivedAt              DateTime? @map("archived_at")
+  archivedByUserId        String?   @map("archived_by_user_id")
+  mfdOrgId                String    @map("mfd_org_id")
+  kpiDefinitionId         String    @map("kpi_definition_id")
+  periodType              String    @map("period_type") @db.VarChar(20)
+  periodStart             DateTime  @map("period_start") @db.Date
+  periodEnd               DateTime  @map("period_end") @db.Date
+  valueNumeric            Decimal   @map("value_numeric") @db.Decimal(24, 6)
+  unit                    String    @db.VarChar(20)
+  branchId                String?   @map("branch_id")
+  source                  String    @db.VarChar(40)
+  sourceDocumentId        String?   @map("source_document_id")
+  dataQuality             String    @map("data_quality") @db.VarChar(30)
+  enteredBy               String    @map("entered_by")
+  verifiedBy              String?   @map("verified_by")
+  verifiedAt              DateTime? @map("verified_at")
+  revisionNumber          Int       @map("revision_number")
+  supersedesObservationId String?   @map("supersedes_observation_id")
+  notes                   String?   @db.Text
 
   @@index([mfdOrgId, kpiDefinitionId, periodStart, revisionNumber])
   @@index([workspaceId])
@@ -3146,32 +3152,32 @@ model CcKpiObservation {
 
 /// Review Reports
 model CcReviewReport {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  reviewNumber String @db.VarChar(40) @map("review_number")
-  engagementId String @map("engagement_id")
-  reviewType String @db.VarChar(30) @map("review_type")
-  periodStart DateTime @db.Date @map("period_start")
-  periodEnd DateTime @db.Date @map("period_end")
-  status String @db.VarChar(40)
-  preparedByMemberId String @map("prepared_by_member_id")
-  reviewedByMemberId String? @map("reviewed_by_member_id")
-  executiveSummary String? @db.Text @map("executive_summary")
-  progressHighlights String? @db.Text @map("progress_highlights")
-  blockers String? @db.Text
-  nextPeriodPriorities String? @db.Text @map("next_period_priorities")
-  reportDocumentId String? @map("report_document_id")
-  sharedAt DateTime? @map("shared_at")
-  clientAcknowledgedAt DateTime? @map("client_acknowledged_at")
-  clientApproverContactId String? @map("client_approver_contact_id")
+  id                      String    @id @default(uuid())
+  workspaceId             String    @map("workspace_id")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  createdByUserId         String    @map("created_by_user_id")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  updatedByUserId         String    @map("updated_by_user_id")
+  rowVersion              Int       @default(1) @map("row_version")
+  archivedAt              DateTime? @map("archived_at")
+  archivedByUserId        String?   @map("archived_by_user_id")
+  mfdOrgId                String    @map("mfd_org_id")
+  reviewNumber            String    @map("review_number") @db.VarChar(40)
+  engagementId            String    @map("engagement_id")
+  reviewType              String    @map("review_type") @db.VarChar(30)
+  periodStart             DateTime  @map("period_start") @db.Date
+  periodEnd               DateTime  @map("period_end") @db.Date
+  status                  String    @db.VarChar(40)
+  preparedByMemberId      String    @map("prepared_by_member_id")
+  reviewedByMemberId      String?   @map("reviewed_by_member_id")
+  executiveSummary        String?   @map("executive_summary") @db.Text
+  progressHighlights      String?   @map("progress_highlights") @db.Text
+  blockers                String?   @db.Text
+  nextPeriodPriorities    String?   @map("next_period_priorities") @db.Text
+  reportDocumentId        String?   @map("report_document_id")
+  sharedAt                DateTime? @map("shared_at")
+  clientAcknowledgedAt    DateTime? @map("client_acknowledged_at")
+  clientApproverContactId String?   @map("client_approver_contact_id")
 
   @@unique([workspaceId, reviewNumber])
   @@index([archivedAt])
@@ -3188,31 +3194,31 @@ model CcReviewReport {
 
 /// Improvements & Benefits
 model CcImprovement {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  improvementNumber String @db.VarChar(40) @map("improvement_number")
-  engagementId String? @map("engagement_id")
-  findingId String? @map("finding_id")
-  projectId String? @map("project_id")
-  title String @db.VarChar(250)
-  description String @db.Text
-  benefitType String @db.VarChar(40) @map("benefit_type")
-  status String @db.VarChar(40)
-  baselineKpiObservationId String? @map("baseline_kpi_observation_id")
-  resultKpiObservationId String? @map("result_kpi_observation_id")
-  validatedAt DateTime? @map("validated_at")
-  validatedBy String? @map("validated_by")
-  attributionConfidence String @db.VarChar(40) @map("attribution_confidence")
-  benefitNarrative String? @db.Text @map("benefit_narrative")
-  evidenceDocumentId String? @map("evidence_document_id")
+  id                       String    @id @default(uuid())
+  workspaceId              String    @map("workspace_id")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  createdByUserId          String    @map("created_by_user_id")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+  updatedByUserId          String    @map("updated_by_user_id")
+  rowVersion               Int       @default(1) @map("row_version")
+  archivedAt               DateTime? @map("archived_at")
+  archivedByUserId         String?   @map("archived_by_user_id")
+  mfdOrgId                 String    @map("mfd_org_id")
+  improvementNumber        String    @map("improvement_number") @db.VarChar(40)
+  engagementId             String?   @map("engagement_id")
+  findingId                String?   @map("finding_id")
+  projectId                String?   @map("project_id")
+  title                    String    @db.VarChar(250)
+  description              String    @db.Text
+  benefitType              String    @map("benefit_type") @db.VarChar(40)
+  status                   String    @db.VarChar(40)
+  baselineKpiObservationId String?   @map("baseline_kpi_observation_id")
+  resultKpiObservationId   String?   @map("result_kpi_observation_id")
+  validatedAt              DateTime? @map("validated_at")
+  validatedBy              String?   @map("validated_by")
+  attributionConfidence    String    @map("attribution_confidence") @db.VarChar(40)
+  benefitNarrative         String?   @map("benefit_narrative") @db.Text
+  evidenceDocumentId       String?   @map("evidence_document_id")
 
   @@unique([workspaceId, improvementNumber])
   @@index([archivedAt])
@@ -3228,28 +3234,28 @@ model CcImprovement {
 
 /// Internal Consulting Team
 model CcTeamMember {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  authUserId String @map("auth_user_id")
-  employeeCode String @db.VarChar(40) @map("employee_code")
-  fullName String @db.VarChar(180) @map("full_name")
-  workEmail String @db.VarChar(254) @map("work_email")
-  mobileE164 String? @db.VarChar(20) @map("mobile_e164")
-  jobTitle String? @db.VarChar(150) @map("job_title")
-  managerMemberId String? @map("manager_member_id")
-  status String @db.VarChar(40)
-  joinedAt DateTime? @db.Date @map("joined_at")
-  separatedAt DateTime? @db.Date @map("separated_at")
-  weeklyCapacityHours Decimal? @db.Decimal(5, 2) @map("weekly_capacity_hours")
-  skills Json?
-  isAvailableForAssignment Boolean @default(true) @map("is_available_for_assignment")
+  id                       String    @id @default(uuid())
+  workspaceId              String    @map("workspace_id")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  createdByUserId          String    @map("created_by_user_id")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+  updatedByUserId          String    @map("updated_by_user_id")
+  rowVersion               Int       @default(1) @map("row_version")
+  archivedAt               DateTime? @map("archived_at")
+  archivedByUserId         String?   @map("archived_by_user_id")
+  authUserId               String    @map("auth_user_id")
+  employeeCode             String    @map("employee_code") @db.VarChar(40)
+  fullName                 String    @map("full_name") @db.VarChar(180)
+  workEmail                String    @map("work_email") @db.VarChar(254)
+  mobileE164               String?   @map("mobile_e164") @db.VarChar(20)
+  jobTitle                 String?   @map("job_title") @db.VarChar(150)
+  managerMemberId          String?   @map("manager_member_id")
+  status                   String    @db.VarChar(40)
+  joinedAt                 DateTime? @map("joined_at") @db.Date
+  separatedAt              DateTime? @map("separated_at") @db.Date
+  weeklyCapacityHours      Decimal?  @map("weekly_capacity_hours") @db.Decimal(5, 2)
+  skills                   Json?
+  isAvailableForAssignment Boolean   @default(true) @map("is_available_for_assignment")
 
   @@unique([workspaceId, workEmail])
   @@unique([workspaceId, authUserId])
@@ -3266,30 +3272,30 @@ model CcTeamMember {
 
 /// Risks & Dependencies
 model CcRiskDependency {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  riskNumber String @db.VarChar(40) @map("risk_number")
-  engagementId String? @map("engagement_id")
-  projectId String? @map("project_id")
-  riskType String @db.VarChar(40) @map("risk_type")
-  title String @db.VarChar(250)
-  description String @db.Text
-  severity String @db.VarChar(30)
-  probabilityPct Decimal? @db.Decimal(5, 2) @map("probability_pct")
-  status String @db.VarChar(40)
-  assignedMemberId String @map("assigned_member_id")
-  clientOwnerContactId String? @map("client_owner_contact_id")
-  mitigationPlan String? @db.Text @map("mitigation_plan")
-  escalationDueAt DateTime? @map("escalation_due_at")
-  resolvedAt DateTime? @map("resolved_at")
+  id                   String    @id @default(uuid())
+  workspaceId          String    @map("workspace_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  createdByUserId      String    @map("created_by_user_id")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  updatedByUserId      String    @map("updated_by_user_id")
+  rowVersion           Int       @default(1) @map("row_version")
+  archivedAt           DateTime? @map("archived_at")
+  archivedByUserId     String?   @map("archived_by_user_id")
+  mfdOrgId             String    @map("mfd_org_id")
+  riskNumber           String    @map("risk_number") @db.VarChar(40)
+  engagementId         String?   @map("engagement_id")
+  projectId            String?   @map("project_id")
+  riskType             String    @map("risk_type") @db.VarChar(40)
+  title                String    @db.VarChar(250)
+  description          String    @db.Text
+  severity             String    @db.VarChar(30)
+  probabilityPct       Decimal?  @map("probability_pct") @db.Decimal(5, 2)
+  status               String    @db.VarChar(40)
+  assignedMemberId     String    @map("assigned_member_id")
+  clientOwnerContactId String?   @map("client_owner_contact_id")
+  mitigationPlan       String?   @map("mitigation_plan") @db.Text
+  escalationDueAt      DateTime? @map("escalation_due_at")
+  resolvedAt           DateTime? @map("resolved_at")
 
   @@unique([workspaceId, riskNumber])
   @@index([archivedAt])
@@ -3308,33 +3314,33 @@ model CcRiskDependency {
 
 /// Billing & Renewals
 model CcBillingRecord {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  financeNumber String @db.VarChar(40) @map("finance_number")
-  engagementId String @map("engagement_id")
-  recordType String @db.VarChar(40) @map("record_type")
-  status String @db.VarChar(40)
-  externalInvoiceRef String? @db.VarChar(100) @map("external_invoice_ref")
-  issuedDate DateTime? @db.Date @map("issued_date")
-  dueDate DateTime? @db.Date @map("due_date")
-  amountSubtotal Decimal @db.Decimal(18, 2) @map("amount_subtotal")
-  taxAmount Decimal @db.Decimal(18, 2) @map("tax_amount")
-  amountTotal Decimal @db.Decimal(18, 2) @map("amount_total")
-  amountReceived Decimal @db.Decimal(18, 2) @map("amount_received")
-  currency String @db.VarChar(8)
-  paymentMode String? @db.VarChar(30) @map("payment_mode")
-  receivedAt DateTime? @db.Date @map("received_at")
-  renewalDueDate DateTime? @db.Date @map("renewal_due_date")
-  invoiceDocumentId String? @map("invoice_document_id")
-  notes String? @db.Text
+  id                 String    @id @default(uuid())
+  workspaceId        String    @map("workspace_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  createdByUserId    String    @map("created_by_user_id")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  updatedByUserId    String    @map("updated_by_user_id")
+  rowVersion         Int       @default(1) @map("row_version")
+  archivedAt         DateTime? @map("archived_at")
+  archivedByUserId   String?   @map("archived_by_user_id")
+  mfdOrgId           String    @map("mfd_org_id")
+  financeNumber      String    @map("finance_number") @db.VarChar(40)
+  engagementId       String    @map("engagement_id")
+  recordType         String    @map("record_type") @db.VarChar(40)
+  status             String    @db.VarChar(40)
+  externalInvoiceRef String?   @map("external_invoice_ref") @db.VarChar(100)
+  issuedDate         DateTime? @map("issued_date") @db.Date
+  dueDate            DateTime? @map("due_date") @db.Date
+  amountSubtotal     Decimal   @map("amount_subtotal") @db.Decimal(18, 2)
+  taxAmount          Decimal   @map("tax_amount") @db.Decimal(18, 2)
+  amountTotal        Decimal   @map("amount_total") @db.Decimal(18, 2)
+  amountReceived     Decimal   @map("amount_received") @db.Decimal(18, 2)
+  currency           String    @db.VarChar(8)
+  paymentMode        String?   @map("payment_mode") @db.VarChar(30)
+  receivedAt         DateTime? @map("received_at") @db.Date
+  renewalDueDate     DateTime? @map("renewal_due_date") @db.Date
+  invoiceDocumentId  String?   @map("invoice_document_id")
+  notes              String?   @db.Text
 
   @@unique([workspaceId, financeNumber])
   @@index([archivedAt])
@@ -3351,33 +3357,33 @@ model CcBillingRecord {
 
 /// Support & Change Requests
 model CcSupportRequest {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  createdByUserId String @map("created_by_user_id")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  updatedByUserId String @map("updated_by_user_id")
-  rowVersion Int @default(1) @map("row_version")
-  archivedAt DateTime? @map("archived_at")
-  archivedByUserId String? @map("archived_by_user_id")
-  mfdOrgId String @map("mfd_org_id")
-  ticketNumber String @db.VarChar(40) @map("ticket_number")
-  engagementId String? @map("engagement_id")
-  contactId String? @map("contact_id")
-  subject String @db.VarChar(250)
-  description String @db.Text
-  category String @db.VarChar(40)
-  status String @db.VarChar(40)
-  priority String @db.VarChar(20)
-  channel String @db.VarChar(40)
-  assignedMemberId String? @map("assigned_member_id")
-  openedAt DateTime @map("opened_at")
-  firstResponseAt DateTime? @map("first_response_at")
-  resolutionDueAt DateTime? @map("resolution_due_at")
-  resolvedAt DateTime? @map("resolved_at")
-  resolutionSummary String? @db.Text @map("resolution_summary")
-  changeValueEstimateInr Decimal? @db.Decimal(18, 2) @map("change_value_estimate_inr")
-  changeApprovalDecisionId String? @map("change_approval_decision_id")
+  id                       String    @id @default(uuid())
+  workspaceId              String    @map("workspace_id")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  createdByUserId          String    @map("created_by_user_id")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+  updatedByUserId          String    @map("updated_by_user_id")
+  rowVersion               Int       @default(1) @map("row_version")
+  archivedAt               DateTime? @map("archived_at")
+  archivedByUserId         String?   @map("archived_by_user_id")
+  mfdOrgId                 String    @map("mfd_org_id")
+  ticketNumber             String    @map("ticket_number") @db.VarChar(40)
+  engagementId             String?   @map("engagement_id")
+  contactId                String?   @map("contact_id")
+  subject                  String    @db.VarChar(250)
+  description              String    @db.Text
+  category                 String    @db.VarChar(40)
+  status                   String    @db.VarChar(40)
+  priority                 String    @db.VarChar(20)
+  channel                  String    @db.VarChar(40)
+  assignedMemberId         String?   @map("assigned_member_id")
+  openedAt                 DateTime  @map("opened_at")
+  firstResponseAt          DateTime? @map("first_response_at")
+  resolutionDueAt          DateTime? @map("resolution_due_at")
+  resolvedAt               DateTime? @map("resolved_at")
+  resolutionSummary        String?   @map("resolution_summary") @db.Text
+  changeValueEstimateInr   Decimal?  @map("change_value_estimate_inr") @db.Decimal(18, 2)
+  changeApprovalDecisionId String?   @map("change_approval_decision_id")
 
   @@unique([workspaceId, ticketNumber])
   @@index([archivedAt])
@@ -3396,11 +3402,11 @@ model CcSupportRequest {
 
 /// Tenant boundary. One internal Aina workspace; extensible.
 model CcWorkspace {
-  id String @id @default(uuid())
+  id        String   @id @default(uuid())
   createdAt DateTime @default(now()) @map("created_at")
-  slug String @db.VarChar(80)
-  name String @db.VarChar(180)
-  status String @db.VarChar(30)
+  slug      String   @db.VarChar(80)
+  name      String   @db.VarChar(180)
+  status    String   @db.VarChar(30)
 
   @@unique([slug])
   @@map("cc_workspaces")
@@ -3408,14 +3414,14 @@ model CcWorkspace {
 
 /// Grant/revoke roles with audit.
 model CcRoleAssignment {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  userId String @map("user_id")
-  role String @db.VarChar(40)
-  validFrom DateTime @map("valid_from")
-  validTo DateTime? @map("valid_to")
-  assignedByUserId String @map("assigned_by_user_id")
+  id               String    @id @default(uuid())
+  workspaceId      String    @map("workspace_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  userId           String    @map("user_id")
+  role             String    @db.VarChar(40)
+  validFrom        DateTime  @map("valid_from")
+  validTo          DateTime? @map("valid_to")
+  assignedByUserId String    @map("assigned_by_user_id")
 
   @@index([workspaceId])
   @@index([userId])
@@ -3425,16 +3431,16 @@ model CcRoleAssignment {
 
 /// Row-level scoped access for staff and portal members.
 model CcClientAccessGrant {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  mfdOrgId String @map("mfd_org_id")
-  userId String @map("user_id")
-  accessRole String @db.VarChar(40) @map("access_role")
-  isActive Boolean @default(true) @map("is_active")
-  reason String? @db.VarChar(250)
-  expiresAt DateTime? @map("expires_at")
-  approvedByUserId String @map("approved_by_user_id")
+  id               String    @id @default(uuid())
+  workspaceId      String    @map("workspace_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  mfdOrgId         String    @map("mfd_org_id")
+  userId           String    @map("user_id")
+  accessRole       String    @map("access_role") @db.VarChar(40)
+  isActive         Boolean   @default(true) @map("is_active")
+  reason           String?   @db.VarChar(250)
+  expiresAt        DateTime? @map("expires_at")
+  approvedByUserId String    @map("approved_by_user_id")
 
   @@index([workspaceId, mfdOrgId, userId])
   @@index([mfdOrgId])
@@ -3445,16 +3451,16 @@ model CcClientAccessGrant {
 
 /// Multiple branches with explicit FK to MFD.
 model CcMfdBranch {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  mfdOrgId String @map("mfd_org_id")
-  branchCode String @db.VarChar(40) @map("branch_code")
-  name String @db.VarChar(160)
-  city String @db.VarChar(100)
-  state String? @db.VarChar(100)
-  postalCode String? @db.VarChar(16) @map("postal_code")
-  active Boolean @default(true)
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  mfdOrgId    String   @map("mfd_org_id")
+  branchCode  String   @map("branch_code") @db.VarChar(40)
+  name        String   @db.VarChar(160)
+  city        String   @db.VarChar(100)
+  state       String?  @db.VarChar(100)
+  postalCode  String?  @map("postal_code") @db.VarChar(16)
+  active      Boolean  @default(true)
 
   @@index([workspaceId])
   @@index([mfdOrgId])
@@ -3463,16 +3469,16 @@ model CcMfdBranch {
 
 /// Support multiple ARNs and other registrations without overwrites.
 model CcMfdRegistration {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  mfdOrgId String @map("mfd_org_id")
-  registrationType String @db.VarChar(30) @map("registration_type")
-  registrationNo String @db.VarChar(80) @map("registration_no")
-  verifiedAt DateTime? @map("verified_at")
-  verifiedByUserId String? @map("verified_by_user_id")
-  validFrom DateTime? @db.Date @map("valid_from")
-  validTo DateTime? @db.Date @map("valid_to")
+  id               String    @id @default(uuid())
+  workspaceId      String    @map("workspace_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  mfdOrgId         String    @map("mfd_org_id")
+  registrationType String    @map("registration_type") @db.VarChar(30)
+  registrationNo   String    @map("registration_no") @db.VarChar(80)
+  verifiedAt       DateTime? @map("verified_at")
+  verifiedByUserId String?   @map("verified_by_user_id")
+  validFrom        DateTime? @map("valid_from") @db.Date
+  validTo          DateTime? @map("valid_to") @db.Date
 
   @@index([workspaceId])
   @@index([mfdOrgId])
@@ -3482,19 +3488,19 @@ model CcMfdRegistration {
 
 /// Purpose-specific processing / recording permission.
 model CcConsentRecord {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  mfdOrgId String @map("mfd_org_id")
-  personId String? @map("person_id")
-  purpose String @db.VarChar(120)
-  noticeVersion String @db.VarChar(32) @map("notice_version")
-  consentBasis String @db.VarChar(40) @map("consent_basis")
-  isGranted Boolean @default(false) @map("is_granted")
-  recordedAt DateTime @map("recorded_at")
-  grantedAt DateTime? @map("granted_at")
-  withdrawnAt DateTime? @map("withdrawn_at")
-  evidenceDocumentId String? @map("evidence_document_id")
+  id                 String    @id @default(uuid())
+  workspaceId        String    @map("workspace_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  mfdOrgId           String    @map("mfd_org_id")
+  personId           String?   @map("person_id")
+  purpose            String    @db.VarChar(120)
+  noticeVersion      String    @map("notice_version") @db.VarChar(32)
+  consentBasis       String    @map("consent_basis") @db.VarChar(40)
+  isGranted          Boolean   @default(false) @map("is_granted")
+  recordedAt         DateTime  @map("recorded_at")
+  grantedAt          DateTime? @map("granted_at")
+  withdrawnAt        DateTime? @map("withdrawn_at")
+  evidenceDocumentId String?   @map("evidence_document_id")
 
   @@index([workspaceId])
   @@index([mfdOrgId])
@@ -3505,22 +3511,22 @@ model CcConsentRecord {
 
 /// Immutable after template publish; eligibility rules versioned.
 model CcAssessmentQuestion {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  templateId String @map("template_id")
-  questionKey String @db.VarChar(50) @map("question_key")
-  revision Int
-  sectionName String @db.VarChar(150) @map("section_name")
-  dimension String @db.VarChar(50)
-  questionText String @db.Text @map("question_text")
-  answerType String @db.VarChar(40) @map("answer_type")
-  required Boolean @default(false)
-  optionsJson Json? @map("options_json")
-  visibilityRuleJson Json? @map("visibility_rule_json")
-  weight Decimal? @db.Decimal(8, 4)
-  orderNo Int @map("order_no")
-  status String @db.VarChar(30)
+  id                 String   @id @default(uuid())
+  workspaceId        String   @map("workspace_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  templateId         String   @map("template_id")
+  questionKey        String   @map("question_key") @db.VarChar(50)
+  revision           Int
+  sectionName        String   @map("section_name") @db.VarChar(150)
+  dimension          String   @db.VarChar(50)
+  questionText       String   @map("question_text") @db.Text
+  answerType         String   @map("answer_type") @db.VarChar(40)
+  required           Boolean  @default(false)
+  optionsJson        Json?    @map("options_json")
+  visibilityRuleJson Json?    @map("visibility_rule_json")
+  weight             Decimal? @db.Decimal(8, 4)
+  orderNo            Int      @map("order_no")
+  status             String   @db.VarChar(30)
 
   @@unique([templateId, questionKey, revision])
   @@index([workspaceId])
@@ -3529,20 +3535,20 @@ model CcAssessmentQuestion {
 
 /// Append-only response changes; validate JSON by answer_type.
 model CcAssessmentAnswer {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  mfdOrgId String @map("mfd_org_id")
-  assessmentId String @map("assessment_id")
-  questionId String @map("question_id")
-  respondentContactId String? @map("respondent_contact_id")
-  respondentUserId String? @map("respondent_user_id")
-  responseJson Json? @map("response_json")
-  responseState String @db.VarChar(30) @map("response_state")
-  originalText String? @db.MediumText @map("original_text")
-  submittedAt DateTime? @map("submitted_at")
-  supersedesAnswerId String? @map("supersedes_answer_id")
-  skipReason String? @db.Text @map("skip_reason")
+  id                  String    @id @default(uuid())
+  workspaceId         String    @map("workspace_id")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  mfdOrgId            String    @map("mfd_org_id")
+  assessmentId        String    @map("assessment_id")
+  questionId          String    @map("question_id")
+  respondentContactId String?   @map("respondent_contact_id")
+  respondentUserId    String?   @map("respondent_user_id")
+  responseJson        Json?     @map("response_json")
+  responseState       String    @map("response_state") @db.VarChar(30)
+  originalText        String?   @map("original_text") @db.MediumText
+  submittedAt         DateTime? @map("submitted_at")
+  supersedesAnswerId  String?   @map("supersedes_answer_id")
+  skipReason          String?   @map("skip_reason") @db.Text
 
   @@index([assessmentId, questionId, submittedAt])
   @@index([workspaceId])
@@ -3556,14 +3562,14 @@ model CcAssessmentAnswer {
 
 /// Response correction / review trail.
 model CcAssessmentResponseEvent {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  assessmentAnswerId String @map("assessment_answer_id")
-  actorUserId String @map("actor_user_id")
-  entityEvent String @db.VarChar(60) @map("entity_event")
-  occurredAt DateTime @map("occurred_at")
-  detailsJson Json? @map("details_json")
+  id                 String   @id @default(uuid())
+  workspaceId        String   @map("workspace_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  assessmentAnswerId String   @map("assessment_answer_id")
+  actorUserId        String   @map("actor_user_id")
+  entityEvent        String   @map("entity_event") @db.VarChar(60)
+  occurredAt         DateTime @map("occurred_at")
+  detailsJson        Json?    @map("details_json")
 
   @@index([workspaceId])
   @@index([assessmentAnswerId])
@@ -3573,16 +3579,16 @@ model CcAssessmentResponseEvent {
 
 /// Published scoring formulas immutable and testable.
 model CcScoringScheme {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  schemeCode String @db.VarChar(50) @map("scheme_code")
-  version Int
-  rubricJson Json @map("rubric_json")
-  weightsJson Json @map("weights_json")
-  status String @db.VarChar(40)
-  publishedAt DateTime? @map("published_at")
-  publishedByUserId String? @map("published_by_user_id")
+  id                String    @id @default(uuid())
+  workspaceId       String    @map("workspace_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  schemeCode        String    @map("scheme_code") @db.VarChar(50)
+  version           Int
+  rubricJson        Json      @map("rubric_json")
+  weightsJson       Json      @map("weights_json")
+  status            String    @db.VarChar(40)
+  publishedAt       DateTime? @map("published_at")
+  publishedByUserId String?   @map("published_by_user_id")
 
   @@unique([workspaceId, schemeCode, version])
   @@index([publishedByUserId])
@@ -3591,17 +3597,17 @@ model CcScoringScheme {
 
 /// Cross-functional scorecard breakdown.
 model CcScorecardDimensionScore {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  scorecardId String @map("scorecard_id")
-  dimension String @db.VarChar(50)
-  answersEligible Int @map("answers_eligible")
-  answersCount Int @map("answers_count")
-  rawScore Decimal? @db.Decimal(12, 4) @map("raw_score")
-  normalizedScore Decimal? @db.Decimal(10, 4) @map("normalized_score")
-  coveragePct Decimal? @db.Decimal(5, 2) @map("coverage_pct")
-  evidenceCount Int @default(0) @map("evidence_count")
+  id              String   @id @default(uuid())
+  workspaceId     String   @map("workspace_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  scorecardId     String   @map("scorecard_id")
+  dimension       String   @db.VarChar(50)
+  answersEligible Int      @map("answers_eligible")
+  answersCount    Int      @map("answers_count")
+  rawScore        Decimal? @map("raw_score") @db.Decimal(12, 4)
+  normalizedScore Decimal? @map("normalized_score") @db.Decimal(10, 4)
+  coveragePct     Decimal? @map("coverage_pct") @db.Decimal(5, 2)
+  evidenceCount   Int      @default(0) @map("evidence_count")
 
   @@index([workspaceId])
   @@index([scorecardId])
@@ -3610,14 +3616,14 @@ model CcScorecardDimensionScore {
 
 /// Either contact or member; not both.
 model CcMeetingAttendee {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  sessionId String @map("session_id")
-  contactId String? @map("contact_id")
-  memberId String? @map("member_id")
-  role String? @db.VarChar(80)
-  attendanceState String @db.VarChar(30) @map("attendance_state")
+  id              String   @id @default(uuid())
+  workspaceId     String   @map("workspace_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  sessionId       String   @map("session_id")
+  contactId       String?  @map("contact_id")
+  memberId        String?  @map("member_id")
+  role            String?  @db.VarChar(80)
+  attendanceState String   @map("attendance_state") @db.VarChar(30)
 
   @@index([workspaceId])
   @@index([sessionId])
@@ -3628,18 +3634,18 @@ model CcMeetingAttendee {
 
 /// Timestamp-level searchable transcript records with immutable correction trail.
 model CcTranscriptSegment {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  mediaRecordId String @map("media_record_id")
-  sequenceNo Int @map("sequence_no")
-  startMs BigInt @map("start_ms")
-  endMs BigInt @map("end_ms")
-  speakerLabel String? @db.VarChar(120) @map("speaker_label")
-  textContent String @db.MediumText @map("text_content")
-  confidenceScore Decimal? @db.Decimal(5, 4) @map("confidence_score")
+  id              String    @id @default(uuid())
+  workspaceId     String    @map("workspace_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  mediaRecordId   String    @map("media_record_id")
+  sequenceNo      Int       @map("sequence_no")
+  startMs         BigInt    @map("start_ms")
+  endMs           BigInt    @map("end_ms")
+  speakerLabel    String?   @map("speaker_label") @db.VarChar(120)
+  textContent     String    @map("text_content") @db.MediumText
+  confidenceScore Decimal?  @map("confidence_score") @db.Decimal(5, 4)
   humanReviewedAt DateTime? @map("human_reviewed_at")
-  correctedText String? @db.MediumText @map("corrected_text")
+  correctedText   String?   @map("corrected_text") @db.MediumText
 
   @@index([workspaceId])
   @@index([mediaRecordId])
@@ -3648,14 +3654,14 @@ model CcTranscriptSegment {
 
 /// Team members and responsibilities per engagement.
 model CcEngagementStaffAssignment {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  engagementId String @map("engagement_id")
-  memberId String @map("member_id")
-  responsibility String @db.VarChar(150)
-  assignedAt DateTime @map("assigned_at")
-  revokedAt DateTime? @map("revoked_at")
+  id             String    @id @default(uuid())
+  workspaceId    String    @map("workspace_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  engagementId   String    @map("engagement_id")
+  memberId       String    @map("member_id")
+  responsibility String    @db.VarChar(150)
+  assignedAt     DateTime  @map("assigned_at")
+  revokedAt      DateTime? @map("revoked_at")
 
   @@index([workspaceId])
   @@index([engagementId])
@@ -3665,16 +3671,16 @@ model CcEngagementStaffAssignment {
 
 /// Client organization structure and department ownership.
 model CcMfdDepartment {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  mfdOrgId String @map("mfd_org_id")
-  branchId String? @map("branch_id")
-  parentDepartmentId String? @map("parent_department_id")
-  departmentName String @db.VarChar(160) @map("department_name")
-  headContactId String? @map("head_contact_id")
-  headcount Int?
-  active Boolean @default(true)
+  id                 String   @id @default(uuid())
+  workspaceId        String   @map("workspace_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  mfdOrgId           String   @map("mfd_org_id")
+  branchId           String?  @map("branch_id")
+  parentDepartmentId String?  @map("parent_department_id")
+  departmentName     String   @map("department_name") @db.VarChar(160)
+  headContactId      String?  @map("head_contact_id")
+  headcount          Int?
+  active             Boolean  @default(true)
 
   @@index([workspaceId])
   @@index([mfdOrgId])
@@ -3686,12 +3692,12 @@ model CcMfdDepartment {
 
 /// Block loops with DAG validation.
 model CcTaskDependency {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  taskId String @map("task_id")
-  dependsOnTaskId String @map("depends_on_task_id")
-  dependencyType String @db.VarChar(40) @map("dependency_type")
+  id              String   @id @default(uuid())
+  workspaceId     String   @map("workspace_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  taskId          String   @map("task_id")
+  dependsOnTaskId String   @map("depends_on_task_id")
+  dependencyType  String   @map("dependency_type") @db.VarChar(40)
 
   @@unique([taskId, dependsOnTaskId])
   @@index([workspaceId])
@@ -3701,17 +3707,17 @@ model CcTaskDependency {
 
 /// Milestone history and project completion rollup.
 model CcProjectMilestone {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  projectId String @map("project_id")
-  title String @db.VarChar(250)
-  status String @db.VarChar(30)
-  plannedDueAt DateTime? @map("planned_due_at")
-  actualDoneAt DateTime? @map("actual_done_at")
-  acceptanceCriteria String @db.Text @map("acceptance_criteria")
-  verifiedByMemberId String? @map("verified_by_member_id")
-  verifiedAt DateTime? @map("verified_at")
+  id                 String    @id @default(uuid())
+  workspaceId        String    @map("workspace_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  projectId          String    @map("project_id")
+  title              String    @db.VarChar(250)
+  status             String    @db.VarChar(30)
+  plannedDueAt       DateTime? @map("planned_due_at")
+  actualDoneAt       DateTime? @map("actual_done_at")
+  acceptanceCriteria String    @map("acceptance_criteria") @db.Text
+  verifiedByMemberId String?   @map("verified_by_member_id")
+  verifiedAt         DateTime? @map("verified_at")
 
   @@index([workspaceId])
   @@index([projectId])
@@ -3721,16 +3727,16 @@ model CcProjectMilestone {
 
 /// Immutable published SOP version.
 model CcSopVersion {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  sopId String @map("sop_id")
-  versionNo Int @map("version_no")
-  documentId String @map("document_id")
-  changeSummary String? @db.Text @map("change_summary")
-  status String @db.VarChar(40)
-  approvedByContactId String? @map("approved_by_contact_id")
-  approvedAt DateTime? @map("approved_at")
+  id                  String    @id @default(uuid())
+  workspaceId         String    @map("workspace_id")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  sopId               String    @map("sop_id")
+  versionNo           Int       @map("version_no")
+  documentId          String    @map("document_id")
+  changeSummary       String?   @map("change_summary") @db.Text
+  status              String    @db.VarChar(40)
+  approvedByContactId String?   @map("approved_by_contact_id")
+  approvedAt          DateTime? @map("approved_at")
 
   @@unique([sopId, versionNo])
   @@index([workspaceId])
@@ -3741,14 +3747,14 @@ model CcSopVersion {
 
 /// Actual attendance, not only a count.
 model CcTrainingAttendance {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  trainingId String @map("training_id")
-  contactId String @map("contact_id")
-  attendanceState String @db.VarChar(30) @map("attendance_state")
-  feedbackScore Decimal? @db.Decimal(5, 2) @map("feedback_score")
-  quizScore Decimal? @db.Decimal(5, 2) @map("quiz_score")
+  id              String    @id @default(uuid())
+  workspaceId     String    @map("workspace_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  trainingId      String    @map("training_id")
+  contactId       String    @map("contact_id")
+  attendanceState String    @map("attendance_state") @db.VarChar(30)
+  feedbackScore   Decimal?  @map("feedback_score") @db.Decimal(5, 2)
+  quizScore       Decimal?  @map("quiz_score") @db.Decimal(5, 2)
   adoptionCheckAt DateTime? @map("adoption_check_at")
 
   @@index([workspaceId])
@@ -3759,17 +3765,17 @@ model CcTrainingAttendance {
 
 /// Approver authorization and event-level audit.
 model CcDecisionApproval {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  decisionId String @map("decision_id")
-  approverContactId String? @map("approver_contact_id")
-  approverMemberId String? @map("approver_member_id")
-  actorType String @db.VarChar(30) @map("actor_type")
-  status String @db.VarChar(30)
-  comment String? @db.Text
-  actionedAt DateTime? @map("actioned_at")
-  evidenceDocumentId String? @map("evidence_document_id")
+  id                 String    @id @default(uuid())
+  workspaceId        String    @map("workspace_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  decisionId         String    @map("decision_id")
+  approverContactId  String?   @map("approver_contact_id")
+  approverMemberId   String?   @map("approver_member_id")
+  actorType          String    @map("actor_type") @db.VarChar(30)
+  status             String    @db.VarChar(30)
+  comment            String?   @db.Text
+  actionedAt         DateTime? @map("actioned_at")
+  evidenceDocumentId String?   @map("evidence_document_id")
 
   @@index([workspaceId])
   @@index([decisionId])
@@ -3781,18 +3787,18 @@ model CcDecisionApproval {
 
 /// Object storage key only; never persist public URL.
 model CcFileObject {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  mfdOrgId String? @map("mfd_org_id")
-  storageKey String @db.VarChar(800) @map("storage_key")
-  originalFilename String @db.VarChar(255) @map("original_filename")
-  sha256 String @db.Char(64)
-  mimeType String @db.VarChar(100) @map("mime_type")
-  sizeBytes BigInt @map("size_bytes")
-  scanStatus String @db.VarChar(30) @map("scan_status")
-  encryptionKeyRef String? @db.VarChar(255) @map("encryption_key_ref")
-  uploadedByUserId String @map("uploaded_by_user_id")
+  id               String   @id @default(uuid())
+  workspaceId      String   @map("workspace_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  mfdOrgId         String?  @map("mfd_org_id")
+  storageKey       String   @map("storage_key") @db.VarChar(800)
+  originalFilename String   @map("original_filename") @db.VarChar(255)
+  sha256           String   @db.Char(64)
+  mimeType         String   @map("mime_type") @db.VarChar(100)
+  sizeBytes        BigInt   @map("size_bytes")
+  scanStatus       String   @map("scan_status") @db.VarChar(30)
+  encryptionKeyRef String?  @map("encryption_key_ref") @db.VarChar(255)
+  uploadedByUserId String   @map("uploaded_by_user_id")
 
   @@index([workspaceId, sha256])
   @@index([mfdOrgId])
@@ -3802,15 +3808,15 @@ model CcFileObject {
 
 /// Immutable binary version references.
 model CcDocumentVersion {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  documentId String @map("document_id")
-  versionNo Int @map("version_no")
-  fileObjectId String @map("file_object_id")
-  uploadedAt DateTime @map("uploaded_at")
-  uploadedByUserId String @map("uploaded_by_user_id")
-  changeNote String? @db.Text @map("change_note")
+  id               String   @id @default(uuid())
+  workspaceId      String   @map("workspace_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  documentId       String   @map("document_id")
+  versionNo        Int      @map("version_no")
+  fileObjectId     String   @map("file_object_id")
+  uploadedAt       DateTime @map("uploaded_at")
+  uploadedByUserId String   @map("uploaded_by_user_id")
+  changeNote       String?  @map("change_note") @db.Text
 
   @@unique([documentId, versionNo])
   @@index([workspaceId])
@@ -3821,14 +3827,14 @@ model CcDocumentVersion {
 
 /// Typed targets checked in service; guard same tenant / org.
 model CcDocumentLink {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  documentId String @map("document_id")
-  entityType String @db.VarChar(50) @map("entity_type")
-  entityId String @map("entity_id")
-  linkedAt DateTime @map("linked_at")
-  linkedByUserId String @map("linked_by_user_id")
+  id             String   @id @default(uuid())
+  workspaceId    String   @map("workspace_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  documentId     String   @map("document_id")
+  entityType     String   @map("entity_type") @db.VarChar(50)
+  entityId       String   @map("entity_id")
+  linkedAt       DateTime @map("linked_at")
+  linkedByUserId String   @map("linked_by_user_id")
 
   @@index([workspaceId])
   @@index([documentId])
@@ -3838,13 +3844,13 @@ model CcDocumentLink {
 
 /// Recipient/copy and sender parties.
 model CcCommunicationParticipant {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  communicationId String @map("communication_id")
-  contactId String? @map("contact_id")
-  memberId String? @map("member_id")
-  participantRole String @db.VarChar(40) @map("participant_role")
+  id              String   @id @default(uuid())
+  workspaceId     String   @map("workspace_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  communicationId String   @map("communication_id")
+  contactId       String?  @map("contact_id")
+  memberId        String?  @map("member_id")
+  participantRole String   @map("participant_role") @db.VarChar(40)
 
   @@index([workspaceId])
   @@index([communicationId])
@@ -3855,18 +3861,18 @@ model CcCommunicationParticipant {
 
 /// Versioned KPI semantics and comparable time-series.
 model CcKpiDefinition {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  metricCode String @db.VarChar(80) @map("metric_code")
-  version Int
-  name String @db.VarChar(220)
-  unit String @db.VarChar(20)
-  formula String? @db.Text
-  aggregationRule String @db.VarChar(120) @map("aggregation_rule")
-  signRule String @db.VarChar(120) @map("sign_rule")
-  evidencePolicy String? @db.Text @map("evidence_policy")
-  activeFrom DateTime @db.Date @map("active_from")
+  id              String   @id @default(uuid())
+  workspaceId     String   @map("workspace_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  metricCode      String   @map("metric_code") @db.VarChar(80)
+  version         Int
+  name            String   @db.VarChar(220)
+  unit            String   @db.VarChar(20)
+  formula         String?  @db.Text
+  aggregationRule String   @map("aggregation_rule") @db.VarChar(120)
+  signRule        String   @map("sign_rule") @db.VarChar(120)
+  evidencePolicy  String?  @map("evidence_policy") @db.Text
+  activeFrom      DateTime @map("active_from") @db.Date
 
   @@unique([workspaceId, metricCode, version])
   @@map("cc_kpi_definitions")
@@ -3874,14 +3880,14 @@ model CcKpiDefinition {
 
 /// Support partial / multiple payments; never fake allocation.
 model CcPaymentAllocation {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  billingRecordId String @map("billing_record_id")
-  paymentReference String @db.VarChar(150) @map("payment_reference")
-  amount Decimal @db.Decimal(18, 2)
-  receivedAt DateTime @map("received_at")
-  sourceSystem String? @db.VarChar(80) @map("source_system")
+  id               String   @id @default(uuid())
+  workspaceId      String   @map("workspace_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  billingRecordId  String   @map("billing_record_id")
+  paymentReference String   @map("payment_reference") @db.VarChar(150)
+  amount           Decimal  @db.Decimal(18, 2)
+  receivedAt       DateTime @map("received_at")
+  sourceSystem     String?  @map("source_system") @db.VarChar(80)
 
   @@index([workspaceId])
   @@index([billingRecordId])
@@ -3890,16 +3896,16 @@ model CcPaymentAllocation {
 
 /// Append-only approvals and state transitions.
 model CcApprovalAuditEvent {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  entityType String @db.VarChar(60) @map("entity_type")
-  entityId String @map("entity_id")
-  actorUserId String @map("actor_user_id")
-  oldState String? @db.VarChar(50) @map("old_state")
-  newState String @db.VarChar(50) @map("new_state")
-  eventAt DateTime @map("event_at")
-  evidenceDocumentId String? @map("evidence_document_id")
+  id                 String   @id @default(uuid())
+  workspaceId        String   @map("workspace_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  entityType         String   @map("entity_type") @db.VarChar(60)
+  entityId           String   @map("entity_id")
+  actorUserId        String   @map("actor_user_id")
+  oldState           String?  @map("old_state") @db.VarChar(50)
+  newState           String   @map("new_state") @db.VarChar(50)
+  eventAt            DateTime @map("event_at")
+  evidenceDocumentId String?  @map("evidence_document_id")
 
   @@index([entityType, entityId])
   @@index([workspaceId])
@@ -3910,16 +3916,16 @@ model CcApprovalAuditEvent {
 
 /// Append-only immutable system change trail.
 model CcAuditEvent {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  userId String? @map("user_id")
-  entityTable String @db.VarChar(100) @map("entity_table")
-  entityId String @map("entity_id")
-  action String @db.VarChar(60)
-  changedColumns Json? @map("changed_columns")
-  recordedAt DateTime @map("recorded_at")
-  ipClass String? @db.VarChar(80) @map("ip_class")
+  id             String   @id @default(uuid())
+  workspaceId    String   @map("workspace_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  userId         String?  @map("user_id")
+  entityTable    String   @map("entity_table") @db.VarChar(100)
+  entityId       String   @map("entity_id")
+  action         String   @db.VarChar(60)
+  changedColumns Json?    @map("changed_columns")
+  recordedAt     DateTime @map("recorded_at")
+  ipClass        String?  @map("ip_class") @db.VarChar(80)
 
   @@index([workspaceId, recordedAt])
   @@index([entityTable, entityId])
@@ -3929,16 +3935,16 @@ model CcAuditEvent {
 
 /// Transactional outbox for reliable async jobs.
 model CcOutboxEvent {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  eventType String @db.VarChar(100) @map("event_type")
-  aggregateId String @map("aggregate_id")
-  payloadJson Json @map("payload_json")
-  state String @db.VarChar(30)
-  publishedAt DateTime? @map("published_at")
-  retryCount Int @default(0) @map("retry_count")
-  idempotencyKey String @db.VarChar(128) @map("idempotency_key")
+  id             String    @id @default(uuid())
+  workspaceId    String    @map("workspace_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  eventType      String    @map("event_type") @db.VarChar(100)
+  aggregateId    String    @map("aggregate_id")
+  payloadJson    Json      @map("payload_json")
+  state          String    @db.VarChar(30)
+  publishedAt    DateTime? @map("published_at")
+  retryCount     Int       @default(0) @map("retry_count")
+  idempotencyKey String    @map("idempotency_key") @db.VarChar(128)
 
   @@unique([workspaceId, idempotencyKey])
   @@index([state, createdAt])
@@ -3947,15 +3953,15 @@ model CcOutboxEvent {
 
 /// Delivery and retry tracking.
 model CcNotificationDelivery {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  recipientUserId String @map("recipient_user_id")
-  templateCode String @db.VarChar(100) @map("template_code")
-  channel String @db.VarChar(40)
-  state String @db.VarChar(30)
-  attemptedAt DateTime? @map("attempted_at")
-  providerMessageId String? @db.VarChar(180) @map("provider_message_id")
+  id                String    @id @default(uuid())
+  workspaceId       String    @map("workspace_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  recipientUserId   String    @map("recipient_user_id")
+  templateCode      String    @map("template_code") @db.VarChar(100)
+  channel           String    @db.VarChar(40)
+  state             String    @db.VarChar(30)
+  attemptedAt       DateTime? @map("attempted_at")
+  providerMessageId String?   @map("provider_message_id") @db.VarChar(180)
 
   @@index([workspaceId])
   @@index([recipientUserId])
@@ -3964,17 +3970,17 @@ model CcNotificationDelivery {
 
 /// Prevent purge when preservation is authorized/required.
 model CcRetentionHold {
-  id String @id @default(uuid())
-  workspaceId String @map("workspace_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  mfdOrgId String? @map("mfd_org_id")
-  entityType String @db.VarChar(80) @map("entity_type")
-  entityId String @map("entity_id")
-  reason String @db.Text
-  status String @db.VarChar(30)
-  placedAt DateTime @map("placed_at")
-  placedByUserId String @map("placed_by_user_id")
-  releasedAt DateTime? @map("released_at")
+  id             String    @id @default(uuid())
+  workspaceId    String    @map("workspace_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  mfdOrgId       String?   @map("mfd_org_id")
+  entityType     String    @map("entity_type") @db.VarChar(80)
+  entityId       String    @map("entity_id")
+  reason         String    @db.Text
+  status         String    @db.VarChar(30)
+  placedAt       DateTime  @map("placed_at")
+  placedByUserId String    @map("placed_by_user_id")
+  releasedAt     DateTime? @map("released_at")
 
   @@index([workspaceId])
   @@index([mfdOrgId])
@@ -3996,7 +4002,7 @@ model CcSequence {
 /// Private object store behind file_objects.storage_key — swap for S3 by
 /// replacing src/lib/mfd/storage.ts; nothing else reads this table.
 model CcFileBlob {
-  storageKey String   @id @db.VarChar(191) @map("storage_key")
+  storageKey String   @id @map("storage_key") @db.VarChar(191)
   data       Bytes    @db.LongBlob
   createdAt  DateTime @default(now()) @map("created_at")
 
