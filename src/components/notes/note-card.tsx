@@ -15,7 +15,7 @@ export interface NoteRow {
   color: string | null;
   isPinned: boolean;
   authorId: string;
-  author: { id: string; name: string; surname: string | null; avatarDataUrl: string | null };
+  author: { id: string; name: string; surname: string | null };
   departmentId: string | null;
   department: { id: string; name: string } | null;
   createdAt: string;

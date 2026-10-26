@@ -29,6 +29,10 @@ export async function GET() {
       createdBy: { select: { id: true, name: true } },
       _count: { select: { items: true, invoices: true } },
     },
+    // The list view never renders these — only the single-document view
+    // does — but they're base64 images that can each run tens of KB, so
+    // every list load was shipping that dead weight per row for nothing.
+    omit: { sellerLogoDataUrl: true, sellerSignatureDataUrl: true },
     orderBy: { createdAt: "desc" },
   });
 
