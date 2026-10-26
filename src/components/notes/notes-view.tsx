@@ -18,6 +18,7 @@ import { NoteEditorDialog } from "@/components/notes/note-editor-dialog";
 import { FloatingNote, type FloatingState } from "@/components/notes/floating-note";
 import { DesktopNotesPanel } from "@/components/notes/desktop-notes-panel";
 import { isDocumentPipSupported, openDocumentPip } from "@/lib/document-pip";
+import { safeAreaInset } from "@/lib/safe-area";
 
 type QuickFilter = "all" | "pinned" | "mine";
 
@@ -113,12 +114,14 @@ export function NotesView() {
       if (!parsed || typeof parsed !== "object") return;
       const w = window.innerWidth;
       const h = window.innerHeight;
+      const minX = safeAreaInset("--safe-left");
+      const minY = safeAreaInset("--safe-top");
       const restored: Record<string, FloatingState> = {};
       for (const [id, v] of Object.entries(parsed)) {
         if (!v || typeof v.x !== "number" || typeof v.y !== "number") continue;
         restored[id] = {
-          x: Math.min(Math.max(0, v.x), Math.max(0, w - 260)),
-          y: Math.min(Math.max(0, v.y), Math.max(0, h - 40)),
+          x: Math.min(Math.max(minX, v.x), Math.max(minX, w - 260)),
+          y: Math.min(Math.max(minY, v.y), Math.max(minY, h - 40)),
           minimized: !!v.minimized,
         };
       }
@@ -271,7 +274,12 @@ export function NotesView() {
     setFloating((prev) => {
       if (id in prev) return prev;
       const openCount = Object.keys(prev).length;
-      return { ...prev, [id]: { x: 24 + openCount * 24, y: 24 + openCount * 24, minimized: false } };
+      // Clears the app's own sticky topbar (h-14 + the device's safe-area
+      // inset) so a freshly-opened panel doesn't spawn already overlapping
+      // it — it's still freely draggable from there afterward.
+      const x = 24 + safeAreaInset("--safe-left") + openCount * 24;
+      const y = 72 + safeAreaInset("--safe-top") + openCount * 24;
+      return { ...prev, [id]: { x, y, minimized: false } };
     });
   }
 
