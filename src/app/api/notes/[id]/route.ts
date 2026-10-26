@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const existing = await db.note.findUnique({ where: { id }, select: { authorId: true, departmentId: true } });
+  const existing = await db.note.findUnique({ where: { id }, select: { authorId: true, departmentId: true, updatedAt: true } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!canManageNote(user, existing)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -44,6 +44,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Give the note a title or some content" }, { status: 400 });
   }
 
+  // Pinning/unpinning alone shouldn't disturb anything else about the note —
+  // not its "last updated" sort position, not its "updated Xm ago" label —
+  // so a pin-only PATCH keeps the existing updatedAt instead of letting
+  // Prisma's @updatedAt bump it.
+  const isPinOnlyToggle = d.isPinned !== undefined && d.title === undefined && d.content === undefined && d.color === undefined;
+
   const note = await db.note.update({
     where: { id },
     data: {
@@ -51,6 +57,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(d.content !== undefined && { content: d.content }),
       ...(d.color !== undefined && { color: d.color }),
       ...(d.isPinned !== undefined && { isPinned: d.isPinned }),
+      ...(isPinOnlyToggle && { updatedAt: existing.updatedAt }),
     },
     include: noteInclude,
   });
