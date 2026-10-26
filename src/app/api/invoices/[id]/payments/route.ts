@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isRestrictedFromModule } from "@/lib/social-media";
+import { isUngrantedModuleHidden } from "@/lib/module-permissions-store";
 import { canAccessBillingRecord } from "@/lib/billing";
 import { broadcastInvoiceChange, recomputeInvoiceStatus } from "@/lib/invoices";
 
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (await isUngrantedModuleHidden(user, "invoices")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const invoice = await db.invoice.findUnique({ where: { id } });
@@ -48,6 +50,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (await isUngrantedModuleHidden(user, "invoices")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const invoice = await db.invoice.findUnique({ where: { id } });

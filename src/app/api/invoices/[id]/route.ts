@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isRestrictedFromModule } from "@/lib/social-media";
+import { isUngrantedModuleHidden } from "@/lib/module-permissions-store";
 import { canAccessBillingRecord, canDeleteBillingRecord, computeTotals, pickSellerData, sellerSchemaFields, toNumber } from "@/lib/billing";
 import { broadcastInvoiceChange, recomputeInvoiceStatus } from "@/lib/invoices";
 
@@ -43,6 +44,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (await isUngrantedModuleHidden(user, "invoices")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const invoice = await loadInvoice(id);
@@ -83,6 +85,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (await isUngrantedModuleHidden(user, "invoices")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const existing = await db.invoice.findUnique({ where: { id } });
@@ -143,6 +146,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (await isUngrantedModuleHidden(user, "invoices")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const existing = await db.invoice.findUnique({ where: { id } });

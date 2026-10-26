@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getPasswordEntryForUser, canManagePasswordEntry, logPasswordActivity } from "@/lib/passwords";
+import { isUngrantedModuleHidden } from "@/lib/module-permissions-store";
 import { notifyAndPush } from "@/lib/notify";
 
 const bodySchema = z.object({ userIds: z.array(z.string().min(1)).min(1).max(50) });
@@ -11,6 +12,7 @@ const bodySchema = z.object({ userIds: z.array(z.string().min(1)).min(1).max(50)
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isUngrantedModuleHidden(user, "passwords")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const access = await getPasswordEntryForUser(user, id);

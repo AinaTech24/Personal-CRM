@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getAttendancePolicy, getHolidayKeys } from "@/lib/attendance-settings";
+import { isModuleBlocked } from "@/lib/module-permissions-store";
 import { istDateKey, dateFromKey, istMinutesOfDay, isWorkingDay, shiftsOpenForCheckIn, type AttendanceShift } from "@/lib/attendance";
 
 /**
@@ -19,6 +20,7 @@ import { istDateKey, dateFromKey, istMinutesOfDay, isWorkingDay, shiftsOpenForCh
 export async function POST() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "ATTENDANCE")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const key = istDateKey();
   const date = dateFromKey(key);

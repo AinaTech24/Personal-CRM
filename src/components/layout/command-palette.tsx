@@ -31,6 +31,7 @@ import {
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { ManagedModule } from "@/lib/module-permissions";
+import { MODULE_KEYS } from "@/lib/modules";
 
 interface SearchResult {
   type:
@@ -187,26 +188,37 @@ export function CommandPalette() {
   const [recentPages, setRecentPages] = useState<SearchResult[]>([]);
   const [recentModulesRaw, setRecentModulesRaw] = useState<ModuleDef[]>([]);
   const [blockedModules, setBlockedModules] = useState<string[]>([]);
-  // Filtered at render time, not baked into state when loaded — so a blocked-modules
+  const [hiddenModules, setHiddenModules] = useState<string[]>([]);
+  // Filtered at render time, not baked into state when loaded — so a blocked/hidden
   // fetch that resolves after the palette is already open still takes effect, without
-  // re-running (and resetting) the open-triggered load effect below.
+  // re-running (and resetting) the open-triggered load effect below. Hidden modules
+  // (Admin > Settings) are now a real access restriction, not just a nav convenience
+  // (see isModuleBlocked/isUngrantedModuleHidden), so a previously-visited one that's
+  // since been hidden would otherwise send the person to a page that just redirects
+  // them away — same reasoning as the blocked-module case.
   const recentModules = useMemo(
     () =>
       recentModulesRaw.filter((m) => {
         const blockKey = RECENT_MODULE_BLOCK_KEY[m.href];
-        return !blockKey || !blockedModules.includes(blockKey);
+        if (blockKey && blockedModules.includes(blockKey)) return false;
+        const toggleKey = m.href.replace(/^\//, "");
+        if (MODULE_KEYS.includes(toggleKey) && hiddenModules.includes(toggleKey)) return false;
+        return true;
       }),
-    [recentModulesRaw, blockedModules]
+    [recentModulesRaw, blockedModules, hiddenModules]
   );
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // A blocked module (Permission Manager) shouldn't surface here even if the
-  // person visited it before being blocked — admins are never blocked, so
-  // this is skipped for them (mirrors sidebar.tsx's own isAdmin bypass).
+  // A blocked or hidden module shouldn't surface here even if the person
+  // visited it before — admins are never blocked or restricted by a hide,
+  // so both are skipped for them (mirrors sidebar.tsx's own isAdmin bypass).
   useEffect(() => {
     fetch("/api/module-visibility")
       .then((r) => r.json())
-      .then((d) => setBlockedModules(d.isAdmin ? [] : Array.isArray(d.blockedModules) ? d.blockedModules : []))
+      .then((d) => {
+        setBlockedModules(d.isAdmin ? [] : Array.isArray(d.blockedModules) ? d.blockedModules : []);
+        setHiddenModules(d.isAdmin ? [] : Array.isArray(d.hiddenModules) ? d.hiddenModules : []);
+      })
       .catch(() => {});
   }, []);
 

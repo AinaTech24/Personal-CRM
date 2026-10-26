@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { canManageModule } from "@/lib/module-permissions-store";
+import { canManageModule, isModuleBlocked } from "@/lib/module-permissions-store";
 import { istDateKey, keyFromDate } from "@/lib/attendance";
 import { birthdayInfo, birthdayWish } from "@/lib/birthdays";
 
@@ -16,6 +16,7 @@ import { birthdayInfo, birthdayWish } from "@/lib/birthdays";
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "BIRTHDAYS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const admin = isAdmin(user) || (await canManageModule(user, "BIRTHDAYS", "READ"));
   const todayKey = istDateKey();

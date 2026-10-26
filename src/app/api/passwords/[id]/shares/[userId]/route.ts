@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getPasswordEntryForUser, canManagePasswordEntry, logPasswordActivity } from "@/lib/passwords";
+import { isUngrantedModuleHidden } from "@/lib/module-permissions-store";
 import { notifyAndPush } from "@/lib/notify";
 
 /** Revokes one user's shared access. Anyone who can manage the entry can remove any share; a shared-to user may also remove their own (self-service "leave"), which doesn't notify anyone since they did it themselves. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string; userId: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isUngrantedModuleHidden(user, "passwords")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id, userId } = await params;
   const access = await getPasswordEntryForUser(user, id);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getPasswordEntryForUser, logPasswordActivity } from "@/lib/passwords";
+import { isUngrantedModuleHidden } from "@/lib/module-permissions-store";
 import { decryptSecret } from "@/lib/crypto";
 
 /**
@@ -13,6 +14,7 @@ import { decryptSecret } from "@/lib/crypto";
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isUngrantedModuleHidden(user, "passwords")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const access = await getPasswordEntryForUser(user, id);

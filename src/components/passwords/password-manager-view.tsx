@@ -503,6 +503,29 @@ function PasswordEntryDialog({
   const cachedFavicon = linkUnchanged ? entry.faviconDataUrl : null;
   const linkPreviewHost = cachedFavicon ? null : hostnameOf(link);
 
+  // Live preview for an in-progress (unsaved) link — proxied through the
+  // server rather than calling Google's favicon service directly from the
+  // browser, so this host is never sent from the viewer's own IP. Debounced
+  // so it fires once typing settles, not once per keystroke.
+  const [livePreviewFavicon, setLivePreviewFavicon] = useState<string | null>(null);
+  useEffect(() => {
+    if (!linkPreviewHost) {
+      setLivePreviewFavicon(null);
+      return;
+    }
+    const controller = new AbortController();
+    const id = setTimeout(() => {
+      fetch(`/api/passwords/favicon?host=${encodeURIComponent(linkPreviewHost)}`, { signal: controller.signal })
+        .then((r) => r.json())
+        .then((d) => setLivePreviewFavicon(d.faviconDataUrl ?? null))
+        .catch(() => {});
+    }, 400);
+    return () => {
+      clearTimeout(id);
+      controller.abort();
+    };
+  }, [linkPreviewHost]);
+
   async function save() {
     if (!label.trim()) return toast.error("Label is required");
     if (!editingId && !password) return toast.error("A password is required");
@@ -568,14 +591,10 @@ function PasswordEntryDialog({
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="pw-link">Link</Label>
               <div className="flex items-center gap-2">
-                {(cachedFavicon || linkPreviewHost) && (
+                {(cachedFavicon ?? livePreviewFavicon) && (
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-input bg-muted">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={cachedFavicon ?? `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(linkPreviewHost!)}`}
-                      alt=""
-                      className="h-5 w-5 object-contain"
-                    />
+                    <img src={(cachedFavicon ?? livePreviewFavicon)!} alt="" className="h-5 w-5 object-contain" />
                   </span>
                 )}
                 <Input

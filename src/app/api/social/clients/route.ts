@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, hasSocialMediaAccess, crmClientsScopeFor, logSocialClientActivity, broadcastSocialChange } from "@/lib/social-media";
 import { socialClientListWhere } from "@/lib/social-media-permissions";
-import { canManageModule, moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
+import { canManageModule, moduleAccessScope, isModuleBlocked, getHiddenModules } from "@/lib/module-permissions-store";
+import { isAdmin } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 
 export async function GET() {
@@ -13,7 +14,11 @@ export async function GET() {
   if (await isModuleBlocked(user, "CLIENTS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const membership = await getSocialMembership(user.id);
-  const clientsScope = (await moduleAccessScope(user, "CLIENTS", "READ")) ?? (await crmClientsScopeFor(user));
+  // The company-wide "Sidebar modules" hide (Admin > Settings) only ever
+  // suppresses the grant- and CRM-Team-based scope below — a genuine Social
+  // Media team member's own `membership` access is never subject to it.
+  const hidden = !isAdmin(user) && (await getHiddenModules()).includes("clients");
+  const clientsScope = hidden ? null : (await moduleAccessScope(user, "CLIENTS", "READ")) ?? (await crmClientsScopeFor(user));
   if (!hasSocialMediaAccess(user, membership) && clientsScope === null) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -47,7 +52,8 @@ export async function POST(req: NextRequest) {
   if (await isModuleBlocked(user, "CLIENTS")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const membership = await getSocialMembership(user.id);
-  if (!hasSocialMediaAccess(user, membership) && !(await canManageModule(user, "CLIENTS", "CREATE"))) {
+  const hiddenForCreate = !isAdmin(user) && (await getHiddenModules()).includes("clients");
+  if (!hasSocialMediaAccess(user, membership) && (hiddenForCreate || !(await canManageModule(user, "CLIENTS", "CREATE")))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

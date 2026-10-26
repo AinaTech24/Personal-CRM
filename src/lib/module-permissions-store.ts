@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
 import { isAdmin } from "@/lib/permissions";
+import { MODULE_KEYS } from "@/lib/modules";
 import {
   MANAGED_MODULES,
   hasModuleAction,
@@ -9,6 +10,63 @@ import {
   type ModuleAction,
   type ModulePermissionFlags,
 } from "@/lib/module-permissions";
+
+/** Company-wide "Sidebar modules" hide list (Admin > Settings) — the same column /api/module-visibility reads. */
+export async function getHiddenModules(): Promise<string[]> {
+  const s = await db.appSettings.findUnique({ where: { id: "default" }, select: { hiddenModules: true } });
+  const raw = s?.hiddenModules;
+  return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string" && MODULE_KEYS.includes(v)) : [];
+}
+
+/**
+ * For the three toggleable modules with no Permission Manager grant at all
+ * (Quotations, Invoices, Passwords — not in MANAGED_MODULES, so
+ * isModuleBlocked doesn't apply to them) — whether the company-wide hide
+ * list covers `toggleKey` for this person. Always false for an admin;
+ * nothing can override it for anyone else, since there's no grant to widen
+ * past it in the first place.
+ */
+export async function isUngrantedModuleHidden(user: PermissionUser, toggleKey: string): Promise<boolean> {
+  if (isAdmin(user)) return false;
+  return (await getHiddenModules()).includes(toggleKey);
+}
+
+/**
+ * The nav href key (TOGGLEABLE_MODULES, modules.ts) a Permission Manager
+ * module maps to, for modules the company-wide hide list can also reach —
+ * same pairing sidebar.tsx's MAIN_NAV_HREF_MODULE uses, kept here instead
+ * since this file (unlike that one) is already server-only.
+ */
+// CLIENTS is deliberately excluded: isModuleBlocked's single boolean answer
+// is shared by three different access paths to the same page (a CLIENTS
+// grant, CRM Team membership, and Social Media's own team access), and the
+// hide list's documented rule only ever suppresses the first two — Social
+// Media keeps its own Clients view regardless (see the "Sidebar modules"
+// help text and sidebar.tsx's crmExtras/restrictToSocialMedia split). That
+// needs the caller's own context, so it's handled directly in
+// clients/page.tsx and the clients API routes instead of in here.
+const MANAGED_MODULE_TOGGLE_KEY: Partial<Record<ManagedModule, string>> = {
+  LEADS: "leads",
+  TASKS: "tasks",
+  PROJECTS: "projects",
+  MEETINGS: "meetings",
+  ATTENDANCE: "attendance",
+  NOTES: "notes",
+  MESSAGES: "messages",
+  BIRTHDAYS: "birthdays",
+  LEAVE: "leave",
+  EXPENSES: "expenses",
+};
+
+/**
+ * Modules where holding an individual grant still gets you in even though
+ * the module is hidden company-wide — mirrors sidebar.tsx's
+ * MAIN_NAV_HREF_MODULE (a grant widening past the default also widens past a
+ * hide, since both are "something made this person's access wider than the
+ * company default"). Clients is the deliberate exception even among these:
+ * hiding it always wins over a grant there, same as the sidebar's nav filter.
+ */
+const HIDE_OVERRIDABLE_BY_GRANT = new Set<ManagedModule>(["LEADS", "TASKS", "PROJECTS", "MEETINGS", "ATTENDANCE", "NOTES"]);
 
 /** This user's full grant matrix — every module, defaulting to no access where no row exists. For the Permission Manager UI. */
 export async function getUserModuleMatrix(userId: string): Promise<Record<ManagedModule, ModulePermissionFlags>> {
@@ -99,19 +157,36 @@ export async function moduleAccessScope(
 }
 
 /**
- * Whether an admin has explicitly blocked `module` for this person (see
- * ModulePermissionFlags.blocked) — a real access denial, not just a nav
- * hide: callers short-circuit to "forbidden"/empty on true, before even
- * their own baseline own-record access would otherwise apply. Always false
- * for an admin.
+ * Whether this person is denied `module` outright — a real access denial,
+ * not just a nav hide: callers short-circuit to "forbidden"/empty on true,
+ * before even their own baseline own-record access would otherwise apply.
+ * Always false for an admin. True for either of two independent reasons:
+ *
+ * - An admin explicitly blocked this one person in Permission Manager
+ *   (ModulePermissionFlags.blocked).
+ * - The company-wide "Sidebar modules" hide list (Admin > Settings) covers
+ *   this module and this person has nothing that widens past the default —
+ *   same rule sidebar.tsx's nav filter already uses to decide visibility,
+ *   applied here so hiding a module is a real restriction and not just a
+ *   cosmetic one the nav and the data disagree about.
  */
 export async function isModuleBlocked(user: PermissionUser, module: ManagedModule): Promise<boolean> {
   if (isAdmin(user)) return false;
   const row = await db.userModulePermission.findUnique({
     where: { userId_module: { userId: user.id, module } },
-    select: { blocked: true },
+    select: { blocked: true, canCreate: true, canRead: true, canUpdate: true, canDelete: true },
   });
-  return row?.blocked ?? false;
+  if (row?.blocked) return true;
+
+  const toggleKey = MANAGED_MODULE_TOGGLE_KEY[module];
+  if (toggleKey) {
+    const hidden = await getHiddenModules();
+    if (hidden.includes(toggleKey)) {
+      const hasGrant = !!row && (row.canCreate || row.canRead || row.canUpdate || row.canDelete);
+      if (!(HIDE_OVERRIDABLE_BY_GRANT.has(module) && hasGrant)) return true;
+    }
+  }
+  return false;
 }
 
 /** Whether this user holds any module grant at all — the floor for reaching the /admin pages that a grant (not just company-admin) can unlock. */
