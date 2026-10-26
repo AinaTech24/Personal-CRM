@@ -179,4 +179,25 @@ jobs:
             pm2 restart aina-crm --update-env || pm2 start npm --name aina-crm -- start
             pm2 save
 
+            echo "=== Waiting for the app to come back up ==="
+            # pm2 restart returns as soon as the process is spawned, not once
+            # Next/Prisma have actually finished booting — without this, a
+            # startup crash (or anything else wrong with the new build) would
+            # still print "completed successfully" with a dead app behind it.
+            ready=false
+            for attempt in $(seq 1 30); do
+              if curl -sf -o /dev/null "http://127.0.0.1:3000/login"; then
+                ready=true
+                echo "App responded (attempt $attempt, ~$((attempt * 2))s after restart)."
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "$ready" != true ]; then
+              echo "=== App did not come back up within 60s after restart — failing this deploy ==="
+              pm2 logs aina-crm --lines 100 --nostream || true
+              exit 1
+            fi
+
             echo "=== Deployment completed successfully ==="
