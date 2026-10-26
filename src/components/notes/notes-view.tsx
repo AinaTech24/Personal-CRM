@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
@@ -59,6 +59,48 @@ export function NotesView() {
   const [editingNote, setEditingNote] = useState<NoteRow | null>(null);
   const [deleting, setDeleting] = useState<NoteRow | null>(null);
   const [floating, setFloating] = useState<Record<string, FloatingState>>({});
+  // Restoring from localStorage only once (per meId resolving) — and only
+  // persisting afterward — avoids overwriting a just-restored state with the
+  // empty default before it has a chance to load.
+  const floatingRestoredRef = useRef(false);
+
+  // Floating panels otherwise live only in React state, so a refresh would
+  // silently drop them even though the notes are still pinned — restore
+  // whichever ones this browser had open last, keyed per-user since the
+  // browser profile may be shared.
+  useEffect(() => {
+    if (!meId || floatingRestoredRef.current) return;
+    floatingRestoredRef.current = true;
+    try {
+      const raw = localStorage.getItem(`notes-floating:${meId}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, Partial<FloatingState>>;
+      if (!parsed || typeof parsed !== "object") return;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const restored: Record<string, FloatingState> = {};
+      for (const [id, v] of Object.entries(parsed)) {
+        if (!v || typeof v.x !== "number" || typeof v.y !== "number") continue;
+        restored[id] = {
+          x: Math.min(Math.max(0, v.x), Math.max(0, w - 260)),
+          y: Math.min(Math.max(0, v.y), Math.max(0, h - 40)),
+          minimized: !!v.minimized,
+        };
+      }
+      if (Object.keys(restored).length > 0) setFloating(restored);
+    } catch {
+      // Corrupted or inaccessible storage (e.g. private browsing) — just start empty.
+    }
+  }, [meId]);
+
+  useEffect(() => {
+    if (!meId || !floatingRestoredRef.current) return;
+    try {
+      localStorage.setItem(`notes-floating:${meId}`, JSON.stringify(floating));
+    } catch {
+      // Storage full or blocked — floating panels still work for this session, just won't survive a refresh.
+    }
+  }, [floating, meId]);
 
   // Debounce free-text search so every keystroke doesn't fire a request.
   useEffect(() => {
@@ -143,6 +185,7 @@ export function NotesView() {
       throw new Error(body.error);
     }
     toast.success("Note created");
+    if (data.isPinned && body.note?.id) openFloat(body.note.id);
     load();
   }
 
@@ -189,23 +232,35 @@ export function NotesView() {
     setEditorOpen(true);
   }
 
-  // Unpinning also closes its floating panel, if open — a floating note only
-  // ever exists because it's pinned, so the two states must move together.
-  // Reloads afterward (rather than just splicing the local list) so an
-  // active filter — e.g. the "Pinned" quick filter — drops a note the
-  // instant it no longer matches, instead of leaving a stale row in place
-  // until the next unrelated refresh.
+  function openFloat(id: string) {
+    setFloating((prev) => {
+      if (id in prev) return prev;
+      const openCount = Object.keys(prev).length;
+      return { ...prev, [id]: { x: 24 + openCount * 24, y: 24 + openCount * 24, minimized: false } };
+    });
+  }
+
+  function closeFloat(id: string) {
+    setFloating((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  // Pinning and unpinning always move the floating panel with them — a
+  // floating note only ever exists because it's pinned, so there's no
+  // separate "pin but don't show it" state to end up in. Reloads afterward
+  // (rather than just splicing the local list) so an active filter — e.g.
+  // the "Pinned" quick filter — drops a note the instant it no longer
+  // matches, instead of leaving a stale row in place until the next
+  // unrelated refresh.
   async function togglePin(note: NoteRow) {
     const nextPinned = !note.isPinned;
     await updateNote(note.id, { isPinned: nextPinned }).catch(() => {});
-    if (!nextPinned) {
-      setFloating((prev) => {
-        if (!(note.id in prev)) return prev;
-        const next = { ...prev };
-        delete next[note.id];
-        return next;
-      });
-    }
+    if (nextPinned) openFloat(note.id);
+    else closeFloat(note.id);
     load();
   }
 
@@ -225,15 +280,8 @@ export function NotesView() {
   }
 
   function toggleFloat(note: NoteRow) {
-    setFloating((prev) => {
-      if (note.id in prev) {
-        const next = { ...prev };
-        delete next[note.id];
-        return next;
-      }
-      const openCount = Object.keys(prev).length;
-      return { ...prev, [note.id]: { x: 24 + openCount * 24, y: 24 + openCount * 24, minimized: false } };
-    });
+    if (note.id in floating) closeFloat(note.id);
+    else openFloat(note.id);
   }
 
   const floatingNotes = notes?.filter((n) => n.id in floating) ?? [];
@@ -354,14 +402,8 @@ export function NotesView() {
         onSave={async (data) => {
           if (editingNote) {
             await updateNote(editingNote.id, data);
-            if (!data.isPinned) {
-              setFloating((prev) => {
-                if (!(editingNote.id in prev)) return prev;
-                const next = { ...prev };
-                delete next[editingNote.id];
-                return next;
-              });
-            }
+            if (data.isPinned) openFloat(editingNote.id);
+            else closeFloat(editingNote.id);
           } else {
             await createNote(data);
           }
