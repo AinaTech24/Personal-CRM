@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { istDateKey, dateFromKey, keyFromDate } from "@/lib/attendance";
+import { attendanceAccessScope } from "@/lib/attendance-query";
 
-/** Admin (company-wide) or an Attendance module grant (their own department): per-day team attendance counts for a year, for the overview heatmap. */
+/** Admin (company-wide), a Department Admin (their own department), or an Attendance module grant: per-day team attendance counts for a year, for the overview heatmap. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const scope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "ATTENDANCE", "READ");
+  const scope = await attendanceAccessScope(user, "READ");
   if (scope === null) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const yearParam = Number(req.nextUrl.searchParams.get("year"));
