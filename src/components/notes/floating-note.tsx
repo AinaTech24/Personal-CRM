@@ -6,6 +6,7 @@ import { IconChevronDown, IconChevronUp, IconCopy, IconX } from "@/components/ic
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { contrastTextColor, rotationFor, shade, tapeColorFor } from "@/lib/note-colors";
+import { safeAreaInset } from "@/lib/safe-area";
 import { cn } from "@/lib/utils";
 import type { NoteRow } from "@/components/notes/note-card";
 
@@ -61,10 +62,14 @@ export function FloatingNote({
   const contentBg = shade(base, note.color ? -0.08 : -0.04, 0.08);
   const tapeRotation = rotationFor(`${note.id}-tape`) * 1.6;
 
+  // Keeps the panel from being dragged under the device's notch/status bar
+  // (iOS standalone PWA) or past the edge of the screen on any device.
   function clamp(x: number, y: number) {
-    const maxX = Math.max(0, window.innerWidth - width);
-    const maxY = Math.max(0, window.innerHeight - 40);
-    return { x: Math.min(Math.max(0, x), maxX), y: Math.min(Math.max(0, y), maxY) };
+    const minX = safeAreaInset("--safe-left");
+    const minY = safeAreaInset("--safe-top");
+    const maxX = Math.max(minX, window.innerWidth - safeAreaInset("--safe-right") - width);
+    const maxY = Math.max(minY, window.innerHeight - 40);
+    return { x: Math.min(Math.max(minX, x), maxX), y: Math.min(Math.max(minY, y), maxY) };
   }
 
   function onPointerDown(e: React.PointerEvent) {
@@ -151,7 +156,10 @@ export function FloatingNote({
           role="toolbar"
           aria-label={`${note.title || "Untitled note"} — click or press Enter to edit, drag or use arrow keys to move`}
           className={cn(
-            "flex shrink-0 cursor-grab items-start justify-between gap-1 px-4 pb-2 pt-5 text-sm font-semibold leading-snug active:cursor-grabbing",
+            // touch-none is the fix for Safari/mobile: without it, a vertical
+            // drag on this header is interpreted as a page scroll before our
+            // own pointermove handler ever gets a chance to see it move.
+            "flex shrink-0 cursor-grab touch-none items-start justify-between gap-1 px-4 pb-2 pt-5 text-sm font-semibold leading-snug active:cursor-grabbing",
             dragging && "cursor-grabbing"
           )}
         >
