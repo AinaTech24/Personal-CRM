@@ -125,8 +125,12 @@ const clientsNavItem: NavItem = { href: "/clients", label: "Clients", icon: Icon
  * A non-admin lead's own way into the same Team console an Admin/Super Admin
  * reaches via adminNav's "Social Media Team" entry above — a regular
  * (non-lead) team member doesn't manage the team, so they don't get this.
+ * Grouped with its sibling clientsNavItem (both "workspace"), not "admin" —
+ * team-lead status isn't an Administration-level permission (not an Admin,
+ * Department Admin, or a Permission Manager grant), so it shouldn't render
+ * under that heading for someone who is none of those.
  */
-const teamNavItem: NavItem = { href: "/social-media/team", label: "Social Media Team", icon: IconUsers, group: "admin" };
+const teamNavItem: NavItem = { href: "/social-media/team", label: "Social Media Team", icon: IconUsers, group: "workspace" };
 
 /** Modules a Social Media team member (regular or lead) never sees, even if an admin hasn't globally hidden them. */
 const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
@@ -138,14 +142,19 @@ const SOCIAL_MEDIA_EXCLUDED_HREFS = ["/quotations"];
  */
 const callsNavItem: NavItem = { href: "/calls", label: "Calls", icon: IconPhone, group: "workspace" };
 
-/** A non-admin CRM lead's own way into the CRM Team console — mirrors teamNavItem above. */
-const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: IconUsers, group: "admin" };
+/** A non-admin CRM lead's own way into the CRM Team console — mirrors teamNavItem above, "workspace" for the same reason. */
+const crmTeamNavItem: NavItem = { href: "/crm/team", label: "CRM Team", icon: IconUsers, group: "workspace" };
 
 /** The MFD Command Centre — company admins, plus anyone holding a Command Centre role assignment. */
 const commandCentreNavItem: NavItem = { href: "/consulting", label: "MFD Command Centre", icon: IconBuildingCog, group: "workspace" };
 
-/** A non-admin user whose department was shared on at least one form — mirrors adminNav's own entry at the same href. */
-const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: IconLayoutGrid, group: "admin" };
+/**
+ * A non-admin user whose department was shared on at least one form —
+ * mirrors adminNav's own entry at the same href, but "workspace": having a
+ * form shared with your department isn't an Administration-level
+ * permission, so it shouldn't render under that heading.
+ */
+const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: IconLayoutGrid, group: "workspace" };
 
 /**
  * Which adminNav entries an individually-granted module permission (not
