@@ -162,6 +162,15 @@ export default function AdminSettingsPage() {
               Clients link either way — same as Quotes staying hidden from them, and Calls staying shown
               to CRM, regardless of this list.
             </p>
+            <p className="mt-2 font-medium text-foreground/80">
+              This only removes the sidebar link and command palette entry — it doesn&apos;t restrict access.
+              Anyone who still knows or bookmarks the page&apos;s URL can open it. To actually block a module,
+              use{" "}
+              <Link href="/admin/permissions" className="text-primary hover:underline">
+                Permissions
+              </Link>{" "}
+              instead.
+            </p>
           </div>
           {loading ? (
             <div className="w-full">

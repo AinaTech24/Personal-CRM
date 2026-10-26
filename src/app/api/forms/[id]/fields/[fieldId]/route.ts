@@ -12,7 +12,9 @@ const patchSchema = z.object({
   placeholder: z.string().trim().max(200).nullable().optional(),
   helpText: z.string().trim().max(1000).nullable().optional(),
   required: z.boolean().optional(),
-  options: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
+  // No "|" — options are packed into one pipe-separated column (serializeFieldOptions), and an
+  // option containing one would silently split into two, or merge with a checkbox answer's own delimiter.
+  options: z.array(z.string().trim().min(1).max(200).regex(/^[^|]+$/, 'Options can\'t contain "|"')).max(50).optional(),
   minLength: z.number().int().min(0).max(5000).nullable().optional(),
   maxLength: z.number().int().min(0).max(5000).nullable().optional(),
   minValue: z.number().int().nullable().optional(),

@@ -234,7 +234,11 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
 
   async function deleteProjectTask(taskId: string) {
     const res = await fetch(`/api/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" });
-    if (res.ok) await load();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return toast.error("Couldn't delete task", data.error);
+    }
+    await load();
   }
 
   async function uploadDocument() {

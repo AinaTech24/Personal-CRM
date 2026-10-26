@@ -215,6 +215,7 @@ export function ChatView() {
   const [groupInfoOpen, setGroupInfoOpen] = useState(false);
   const [unpinTarget, setUnpinTarget] = useState<Message | null>(null);
   const [deleteChat, setDeleteChat] = useState<Conversation | null>(null);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [reactPickerFor, setReactPickerFor] = useState<Message | null>(null);
   const [infoUser, setInfoUser] = useState<ChatUser | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1228,7 +1229,7 @@ export function ChatView() {
                     >
                       <IconForward className="h-4 w-4" />
                     </IconButton>
-                    <IconButton label="Delete selected" onClick={deleteSelected}>
+                    <IconButton label="Delete selected" onClick={() => setBulkDeleteConfirm(true)}>
                       <IconTrash className="h-4 w-4 text-destructive" />
                     </IconButton>
                     <IconButton label="Cancel selection" onClick={exitSelect}>
@@ -1534,6 +1535,18 @@ export function ChatView() {
           const target = deleteChat;
           setDeleteChat(null);
           if (target) await deleteConversation(target);
+        }}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteConfirm}
+        onOpenChange={setBulkDeleteConfirm}
+        title={`Delete ${selectedIds.size} message${selectedIds.size === 1 ? "" : "s"}?`}
+        description="This removes the selected messages for you only. It can't be undone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          setBulkDeleteConfirm(false);
+          await deleteSelected();
         }}
       />
 

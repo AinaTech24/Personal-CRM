@@ -86,13 +86,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     select: {
       id: true,
       // Every relation, not just users: a department also owns leads, projects,
-      // quotations, invoices, open invites, and Password Manager entries
-      // (that one's required, not nullable — leaving it out would fail deep
-      // in the database instead of here), and any one of them left behind
-      // would fail in the database rather than here. formViewerDepartments
-      // is the one relation that *would* actually cascade-delete cleanly,
-      // but silently dropping a department's form-sharing config without
-      // saying so is still worth surfacing rather than doing quietly.
+      // quotations, invoices, open invites, Password Manager entries, notes,
+      // and forms (those last two are optional FKs, so leaving them out
+      // wouldn't fail in the database at all — it'd silently null them out
+      // instead, dropping a Department Admin's automatic visibility into
+      // those notes and a form's department association with no warning).
+      // formViewerDepartments is the one relation that *would* actually
+      // cascade-delete cleanly, but silently dropping a department's
+      // form-sharing config without saying so is still worth surfacing
+      // rather than doing quietly.
       _count: {
         select: {
           users: true,
@@ -103,6 +105,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
           invites: true,
           passwordEntries: true,
           formViewers: true,
+          notes: true,
+          forms: true,
         },
       },
     },

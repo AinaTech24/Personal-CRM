@@ -349,10 +349,13 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids: Array.from(selectedIds) }),
     });
-    if (res.ok) {
-      exitSelectionMode();
-      await refreshLeads();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error("Couldn't delete", data.error);
+      return;
     }
+    exitSelectionMode();
+    await refreshLeads();
   }
 
   async function handleBulkReassign() {
@@ -426,7 +429,12 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
 
   async function deleteLead(id: string) {
     const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
-    if (res.ok) await refreshLeads();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error("Couldn't delete lead", data.error);
+      return;
+    }
+    await refreshLeads();
   }
 
   // "Select all" covers whatever's currently loaded, not necessarily every

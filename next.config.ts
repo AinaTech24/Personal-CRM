@@ -24,14 +24,22 @@ const nextConfig: NextConfig = {
           // so a hardening default — or a reverse proxy that sets
           // `Permissions-Policy: microphone=()` — can't silently disable recording.
           { key: "Permissions-Policy", value: "microphone=(self), camera=(), geolocation=()" },
+          // Baseline hardening for everything except the Forms embed path below
+          // (which overrides frame-ancestors for its own, narrower allowlist —
+          // header overriding is per-key, so these other keys still apply there
+          // too). Nothing here was set anywhere before, so the whole app was
+          // framable by any site and shipped no sniffing/referrer protection.
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self';" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "origin-when-cross-origin" },
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
         ],
       },
       {
         // The public Forms pages are meant to be embedded on other AinaTech
         // sites and their Vercel previews — explicitly allow framing them
-        // there. No X-Frame-Options is set anywhere (for this path or any
-        // other), so there's nothing that would otherwise block it; this
-        // just states the policy rather than leaving it implicit.
+        // there, overriding the stricter frame-ancestors above for just this
+        // path (header overriding: the last matching rule for a given key wins).
         source: "/f/:path*",
         headers: [
           {
