@@ -17,6 +17,13 @@ const ROLE_LABEL: Record<string, string> = {
   DEPARTMENT_USER: "Department User",
 };
 
+/** Department Admin is a flag on top of the DEPARTMENT_USER role (see User.isDepartmentAdmin), not its own role value — label it distinctly, same precedence everywhere else in the app checks it: Super Admin, then Admin, then Department Admin, then plain Department User. */
+function roleLabel(role: string | null, isDepartmentAdmin: boolean): string | null {
+  if (!role) return null;
+  if (role === "DEPARTMENT_USER" && isDepartmentAdmin) return "Department Admin";
+  return ROLE_LABEL[role] ?? role;
+}
+
 export function UserMenu({ name, email, isAdmin }: { name: string; email: string; isAdmin: boolean }) {
   const router = useRouter();
   const toast = useToast();
@@ -24,6 +31,7 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [isDepartmentAdmin, setIsDepartmentAdmin] = useState(false);
   const [departmentName, setDepartmentName] = useState<string | null>(null);
   const [designation, setDesignation] = useState<string | null>(null);
 
@@ -34,6 +42,7 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
       .then((d) => {
         setAvatar(d.user?.avatarDataUrl ?? null);
         setRole(d.user?.role ?? null);
+        setIsDepartmentAdmin(!!d.user?.isDepartmentAdmin);
         setDepartmentName(d.user?.department?.name ?? null);
         setDesignation(d.user?.designation ?? null);
       })
@@ -60,6 +69,7 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
       .then((d) => {
         setAvatar(d.user?.avatarDataUrl ?? null);
         setRole(d.user?.role ?? null);
+        setIsDepartmentAdmin(!!d.user?.isDepartmentAdmin);
         setDepartmentName(d.user?.department?.name ?? null);
         setDesignation(d.user?.designation ?? null);
       })
@@ -119,7 +129,7 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
               <div className="flex flex-col gap-1 px-3.5 pb-3.5">
                 {role && (
                   <Badge className="w-fit px-1.5 py-0 text-[10px] uppercase tracking-wide">
-                    {ROLE_LABEL[role] ?? role}
+                    {roleLabel(role, isDepartmentAdmin)}
                   </Badge>
                 )}
                 {(designation || departmentName) && (
