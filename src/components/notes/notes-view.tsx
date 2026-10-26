@@ -301,9 +301,20 @@ export function NotesView() {
   // unrelated refresh.
   async function togglePin(note: NoteRow) {
     const nextPinned = !note.isPinned;
-    await updateNote(note.id, { isPinned: nextPinned }).catch(() => {});
+    // Optimistic: flip the card and open/close its floating panel right on
+    // click, instead of waiting on the PATCH round trip to even start —
+    // that's what made pinning feel laggy. Reverted below if the save fails.
+    setNotes((prev) => (prev ? prev.map((n) => (n.id === note.id ? { ...n, isPinned: nextPinned } : n)) : prev));
     if (nextPinned) openFloat(note.id);
     else closeFloat(note.id);
+
+    const saved = await updateNote(note.id, { isPinned: nextPinned }).catch(() => null);
+    if (!saved) {
+      setNotes((prev) => (prev ? prev.map((n) => (n.id === note.id ? { ...n, isPinned: !nextPinned } : n)) : prev));
+      if (nextPinned) closeFloat(note.id);
+      else openFloat(note.id);
+      return;
+    }
     load();
   }
 
