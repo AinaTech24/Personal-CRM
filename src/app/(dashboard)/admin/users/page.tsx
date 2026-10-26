@@ -386,7 +386,7 @@ export default function UsersPage() {
           </div>
         </div>
         <CardContent className="p-0">
-          <div className="max-h-[26rem] overflow-y-auto focus:outline-none">
+          <div className="max-h-[70vh] overflow-y-auto focus:outline-none">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-card">
                 <tr className="border-t border-border text-left text-xs text-muted-foreground">
