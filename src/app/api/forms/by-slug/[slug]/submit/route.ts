@@ -10,7 +10,7 @@ import {
 import { notifyAndPush } from "@/lib/notify";
 import { requestDevice } from "@/lib/request-info";
 import { rateLimit } from "@/lib/rate-limit";
-import { isFieldVisible, validateFieldValue } from "@/lib/form-fields";
+import { isFieldVisible, parseFieldOptions, validateFieldValue } from "@/lib/form-fields";
 
 interface PickedFile {
   fileName: string;
@@ -96,7 +96,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     }
 
     if (field.type === "CHECKBOX") {
-      const selected = Array.isArray(raw) ? raw.filter((s): s is string => typeof s === "string" && s.trim().length > 0) : [];
+      // Constrained to the field's own defined choices — an arbitrary client-sent string
+      // (one containing "|", say) would otherwise get stored and split back apart as if it
+      // were several selections, since a CHECKBOX answer is itself packed pipe-separated.
+      const validOptions = new Set(parseFieldOptions(field.options));
+      const selected = Array.isArray(raw)
+        ? raw.filter((s): s is string => typeof s === "string" && validOptions.has(s.trim())).map((s) => s.trim())
+        : [];
       if (field.required && selected.length === 0) {
         return NextResponse.json({ error: `"${field.label}" is required` }, { status: 400 });
       }

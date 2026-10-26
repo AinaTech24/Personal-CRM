@@ -112,7 +112,10 @@ export function FormsListView() {
   // rotating the slug on every copy would break every page it's already on.
   async function copyEmbedCode(row: FormRow) {
     const src = `${window.location.origin}/f/${row.slug}?embedded=true`;
-    const snippet = `<iframe src="${src}" style="width:100%;max-width:640px;height:800px;border:0" title="${row.title.replace(/"/g, "&quot;")}"></iframe>`;
+    // Escaped beyond just the attribute quote — a title containing "<" or ">" could
+    // otherwise close the attribute/tag early and inject markup into whatever page this gets pasted onto.
+    const safeTitle = row.title.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const snippet = `<iframe src="${src}" style="width:100%;max-width:640px;height:800px;border:0" title="${safeTitle}"></iframe>`;
     try {
       await navigator.clipboard.writeText(snippet);
       toast.success("Embed code copied", "Paste it into any page's HTML.");

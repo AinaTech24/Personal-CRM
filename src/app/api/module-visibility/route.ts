@@ -27,7 +27,7 @@ export async function GET() {
     db.appSettings.findUnique({ where: { id: ID }, select: { hiddenModules: true } }),
     isAdmin(user) ? Promise.resolve([]) : getBlockedModules(user.id),
   ]);
-  return NextResponse.json({ hiddenModules: readHidden(s?.hiddenModules), blockedModules });
+  return NextResponse.json({ hiddenModules: readHidden(s?.hiddenModules), blockedModules, isAdmin: isAdmin(user) });
 }
 
 const putSchema = z.object({ hiddenModules: z.array(z.enum(MODULE_KEYS as [string, ...string[]])) });

@@ -25,7 +25,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       # Only needs the schema file to generate types — no live database
       # required, unlike the VPS's own `npm run build` (which also runs
-      # `prisma db push` against the real MySQL instance).
+      # `prisma migrate deploy` against the real MySQL instance).
       - run: npx prisma generate
       - run: npm run lint
       - run: npx tsc --noEmit
@@ -172,7 +172,7 @@ jobs:
             echo "=== Installing dependencies ==="
             npm ci --no-audit --no-fund
 
-            echo "=== Building (prisma generate + db push + next build) ==="
+            echo "=== Building (prisma generate + migrate deploy + next build) ==="
             npm run build
 
             echo "=== (Re)starting PM2 process 'aina-crm' ==="

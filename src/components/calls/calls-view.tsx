@@ -74,6 +74,7 @@ export function CallsView({ scope }: { scope?: "crm" } = {}) {
   const [openSeq, setOpenSeq] = useState(0);
   const [editing, setEditing] = useState<Call | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Call | null>(null);
+  const toast = useToast();
 
   function callsFetchUrl(take: number, skip: number) {
     const params = new URLSearchParams();
@@ -160,7 +161,11 @@ export function CallsView({ scope }: { scope?: "crm" } = {}) {
 
   async function deleteCall(id: string) {
     const res = await fetch(`/api/calls/${id}`, { method: "DELETE" });
-    if (res.ok) refreshCalls();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return toast.error("Couldn't delete the call", data.error);
+    }
+    refreshCalls();
   }
 
   return (

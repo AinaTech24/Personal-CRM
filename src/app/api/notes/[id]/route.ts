@@ -23,7 +23,11 @@ const patchSchema = z.object({
     .nullable()
     .optional(),
   isPinned: z.boolean().optional(),
-  tags: z.array(z.string().trim().min(1).max(MAX_TAG_LENGTH)).max(MAX_TAGS).optional(),
+  // No "|" — that's serializeTags' own delimiter, and a tag containing one would silently split into two.
+  tags: z
+    .array(z.string().trim().min(1).max(MAX_TAG_LENGTH).regex(/^[^|]+$/, 'Tags can\'t contain "|"'))
+    .max(MAX_TAGS)
+    .optional(),
 });
 
 /**

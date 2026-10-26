@@ -273,10 +273,12 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids: Array.from(selectedIds) }),
     });
-    if (res.ok) {
-      exitSelectionMode();
-      await loadProjects();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return toast.error("Couldn't delete", data.error);
     }
+    exitSelectionMode();
+    await loadProjects();
   }
 
   async function handleBulkReassign() {

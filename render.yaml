@@ -5,11 +5,12 @@ services:
     plan: starter
     region: singapore
     branch: main
-    # Prisma generate + db push live in the "build" script rather than here, so
-    # they run even when this file isn't what drives the service. render.yaml
-    # only applies to Blueprint-linked services; a dashboard-created service
-    # ignores it and uses its own build command. Keeping the steps in the npm
-    # script means any host that runs `npm run build` gets a synced schema.
+    # Prisma generate + migrate deploy live in the "build" script rather than
+    # here, so they run even when this file isn't what drives the service.
+    # render.yaml only applies to Blueprint-linked services; a
+    # dashboard-created service ignores it and uses its own build command.
+    # Keeping the steps in the npm script means any host that runs
+    # `npm run build` gets a synced schema.
     buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /login

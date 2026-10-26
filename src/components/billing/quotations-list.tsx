@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AnimatePresence, motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +58,13 @@ export function QuotationsList() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // Guards against a "Load more" append and a live-update refresh landing
+  // out of order — whichever request started most recently wins; a response
+  // for a now-superseded request is dropped instead of appending onto or
+  // replacing state it no longer agrees with (e.g. a refresh's full-replace
+  // clobbering rows a slower, now-finished "Load more" had already appended).
+  const requestSeq = useRef(0);
+
   // Debounced so free-text search (typed into the shared header search bar)
   // doesn't fire a request per keystroke.
   const [q, setQ] = useState("");
@@ -72,6 +79,7 @@ export function QuotationsList() {
   // for as many as were already loaded, instead of collapsing back to page one.
   const loadQuotations = useCallback(
     async (take: number = PAGE_SIZE) => {
+      const seq = ++requestSeq.current;
       setLoading(true);
       try {
         const params = new URLSearchParams();
@@ -79,19 +87,20 @@ export function QuotationsList() {
         params.set("take", String(Math.max(take, PAGE_SIZE)));
         const res = await fetch(`/api/quotations?${params.toString()}`);
         const data = await res.json().catch(() => ({}));
-        if (res.ok) {
+        if (res.ok && seq === requestSeq.current) {
           setQuotations(data.quotations ?? []);
           setTotal(data.total ?? 0);
           setHasMore(!!data.hasMore);
         }
       } finally {
-        setLoading(false);
+        if (seq === requestSeq.current) setLoading(false);
       }
     },
     [q]
   );
 
   async function loadMoreQuotations() {
+    const seq = ++requestSeq.current;
     setLoadingMore(true);
     try {
       const params = new URLSearchParams();
@@ -101,11 +110,12 @@ export function QuotationsList() {
       const res = await fetch(`/api/quotations?${params.toString()}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return toast.error("Couldn't load more quotations", data.error);
+      if (seq !== requestSeq.current) return;
       setQuotations((prev) => [...prev, ...(data.quotations ?? [])]);
       setTotal(data.total ?? 0);
       setHasMore(!!data.hasMore);
     } finally {
-      setLoadingMore(false);
+      if (seq === requestSeq.current) setLoadingMore(false);
     }
   }
 

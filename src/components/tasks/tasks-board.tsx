@@ -305,10 +305,12 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids: Array.from(selectedIds) }),
     });
-    if (res.ok) {
-      exitSelectionMode();
-      await refreshTasks();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return toast.error("Couldn't delete", data.error);
     }
+    exitSelectionMode();
+    await refreshTasks();
   }
 
   const isAdmin = currentUserRole === "SUPER_ADMIN" || currentUserRole === "ADMIN";
@@ -358,7 +360,11 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
 
   async function deleteTask(id: string) {
     const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
-    if (res.ok) await refreshTasks();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return toast.error("Couldn't delete task", data.error);
+    }
+    await refreshTasks();
   }
 
   // "Select all" covers whatever's currently loaded, not necessarily every

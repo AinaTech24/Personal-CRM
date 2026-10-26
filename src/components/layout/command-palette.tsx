@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -30,6 +30,7 @@ import {
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import type { ManagedModule } from "@/lib/module-permissions";
 
 interface SearchResult {
   type:
@@ -150,6 +151,26 @@ const RECENT_MODULES: ModuleDef[] = [
 // prefix) but keeps this correct if the list grows.
 const RECENT_MODULES_BY_LENGTH = [...RECENT_MODULES].sort((a, b) => b.href.length - a.href.length);
 
+/**
+ * The subset of RECENT_MODULES a Permission Manager "block" can hide —
+ * mirrors sidebar.tsx's BLOCKABLE_HREF_MODULE for just these hrefs. A
+ * previously-visited module that's since been blocked would otherwise stay
+ * in "Recently Visited" and send the person to a page that just redirects
+ * them away, with no explanation.
+ */
+const RECENT_MODULE_BLOCK_KEY: Partial<Record<string, ManagedModule>> = {
+  "/leads": "LEADS",
+  "/tasks": "TASKS",
+  "/projects": "PROJECTS",
+  "/meetings": "MEETINGS",
+  "/attendance": "ATTENDANCE",
+  "/leave": "LEAVE",
+  "/birthdays": "BIRTHDAYS",
+  "/messages": "MESSAGES",
+  "/clients": "CLIENTS",
+  "/expenses": "EXPENSES",
+};
+
 /** Which registered module (if any) a pathname belongs to — exact match, or a sub-route of it (e.g. "/projects/abc123" still counts as "Projects"). */
 function moduleForPathname(pathname: string): ModuleDef | null {
   return RECENT_MODULES_BY_LENGTH.find((m) => pathname === m.href || pathname.startsWith(`${m.href}/`)) ?? null;
@@ -164,8 +185,30 @@ export function CommandPalette() {
   const [loading, setLoading] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [recentPages, setRecentPages] = useState<SearchResult[]>([]);
-  const [recentModules, setRecentModules] = useState<ModuleDef[]>([]);
+  const [recentModulesRaw, setRecentModulesRaw] = useState<ModuleDef[]>([]);
+  const [blockedModules, setBlockedModules] = useState<string[]>([]);
+  // Filtered at render time, not baked into state when loaded — so a blocked-modules
+  // fetch that resolves after the palette is already open still takes effect, without
+  // re-running (and resetting) the open-triggered load effect below.
+  const recentModules = useMemo(
+    () =>
+      recentModulesRaw.filter((m) => {
+        const blockKey = RECENT_MODULE_BLOCK_KEY[m.href];
+        return !blockKey || !blockedModules.includes(blockKey);
+      }),
+    [recentModulesRaw, blockedModules]
+  );
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // A blocked module (Permission Manager) shouldn't surface here even if the
+  // person visited it before being blocked — admins are never blocked, so
+  // this is skipped for them (mirrors sidebar.tsx's own isAdmin bypass).
+  useEffect(() => {
+    fetch("/api/module-visibility")
+      .then((r) => r.json())
+      .then((d) => setBlockedModules(d.isAdmin ? [] : Array.isArray(d.blockedModules) ? d.blockedModules : []))
+      .catch(() => {});
+  }, []);
 
   // Records every top-level module actually visited (page loads, not just
   // results picked from this palette) — a reload, a sidebar click, a link
@@ -201,7 +244,7 @@ export function CommandPalette() {
       // href no longer in that list (a module removed in a later update)
       // just silently drops out instead of rendering with a missing icon.
       const storedModules = loadList<{ href: string; label: string }>(RECENT_MODULES_KEY);
-      setRecentModules(
+      setRecentModulesRaw(
         storedModules
           .map((s) => RECENT_MODULES.find((m) => m.href === s.href))
           .filter((m): m is ModuleDef => !!m)
@@ -262,7 +305,7 @@ export function CommandPalette() {
 
   function clearRecentModules() {
     localStorage.removeItem(RECENT_MODULES_KEY);
-    setRecentModules([]);
+    setRecentModulesRaw([]);
   }
 
   function goToModule(mod: ModuleDef) {

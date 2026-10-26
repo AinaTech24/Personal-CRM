@@ -22,6 +22,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AttachmentViewerDialog } from "@/components/tasks/attachment-viewer-dialog";
 import { IconDownload, IconEye, IconLink, IconPlus, IconTrash } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
+import { useToast } from "@/components/providers/toast-provider";
 import {
   TASK_STATUSES,
   PRIORITY_OPTIONS,
@@ -78,6 +79,7 @@ export function TaskDetailDialog({
     null
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   async function load() {
     if (!taskId) return;
@@ -130,14 +132,24 @@ export function TaskDetailDialog({
   async function deleteComment(commentId: string) {
     if (!taskId) return;
     const res = await fetch(`/api/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" });
-    if (res.ok) await load();
+    if (res.ok) {
+      await load();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error("Couldn't delete comment", data.error);
+    }
     setDeletingComment(null);
   }
 
   async function deleteAttachment(attachmentId: string) {
     if (!taskId) return;
     const res = await fetch(`/api/tasks/${taskId}/attachments/${attachmentId}`, { method: "DELETE" });
-    if (res.ok) await load();
+    if (res.ok) {
+      await load();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error("Couldn't delete attachment", data.error);
+    }
     setDeletingAttachment(null);
   }
 
@@ -180,7 +192,11 @@ export function TaskDetailDialog({
   async function deleteTask() {
     if (!taskId) return;
     const res = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
-    if (res.ok) onDeleted?.();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return toast.error("Couldn't delete task", data.error);
+    }
+    onDeleted?.();
   }
 
   const headerTitle = task?.title ?? initialSummary?.title;

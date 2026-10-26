@@ -494,7 +494,14 @@ function PasswordEntryDialog({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const departmentOptions = departments.map((d) => ({ value: d.id, label: d.name }));
-  const linkPreviewHost = hostnameOf(link);
+  // Reuses the already-stored, server-fetched favicon whenever the link hasn't
+  // changed from the saved entry — only an in-progress edit to a genuinely new
+  // link needs a live preview, which is the one case nothing's cached for yet.
+  // Otherwise every dialog open would re-send this host straight from the
+  // viewer's own browser to Google, for a value already fetched once, server-side.
+  const linkUnchanged = !!entry && link === (entry.link ?? "");
+  const cachedFavicon = linkUnchanged ? entry.faviconDataUrl : null;
+  const linkPreviewHost = cachedFavicon ? null : hostnameOf(link);
 
   async function save() {
     if (!label.trim()) return toast.error("Label is required");
@@ -561,11 +568,11 @@ function PasswordEntryDialog({
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="pw-link">Link</Label>
               <div className="flex items-center gap-2">
-                {linkPreviewHost && (
+                {(cachedFavicon || linkPreviewHost) && (
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-input bg-muted">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(linkPreviewHost)}`}
+                      src={cachedFavicon ?? `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(linkPreviewHost!)}`}
                       alt=""
                       className="h-5 w-5 object-contain"
                     />

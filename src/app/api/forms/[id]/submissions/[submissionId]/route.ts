@@ -66,7 +66,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const field = fieldById.get(fieldId);
     if (!field || field.type === "FILE_SINGLE" || field.type === "FILE_MULTI" || field.type === "SECTION_HEADING" || field.type === "PAGE_BREAK") continue;
 
-    const value = Array.isArray(raw) ? raw.filter((s) => s.trim().length > 0).join("|") : raw.trim();
+    // Strip "|" from each piece before joining — it's the delimiter a multi-value (CHECKBOX)
+    // answer is itself packed with, so a literal one in a value would silently split it in two.
+    const value = Array.isArray(raw)
+      ? raw.map((s) => s.replace(/\|/g, "").trim()).filter(Boolean).join("|")
+      : raw.trim();
     if (field.required && !value) {
       return NextResponse.json({ error: `"${field.label}" is required` }, { status: 400 });
     }

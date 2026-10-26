@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isRestrictedFromModule } from "@/lib/social-media";
 import { canAccessBillingRecord } from "@/lib/billing";
 import { broadcastInvoiceChange, recomputeInvoiceStatus } from "@/lib/invoices";
 
@@ -15,6 +16,7 @@ const bodySchema = z.object({
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const invoice = await db.invoice.findUnique({ where: { id } });
@@ -45,6 +47,7 @@ const deleteSchema = z.object({ paymentId: z.string() });
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const invoice = await db.invoice.findUnique({ where: { id } });

@@ -325,7 +325,11 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
 
   async function deleteMeeting(id: string) {
     const res = await fetch(`/api/meetings/${id}`, { method: "DELETE" });
-    if (res.ok) refreshMeetings();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return toast.error("Couldn't delete the meeting", data.error);
+    }
+    refreshMeetings();
   }
 
   /** Optimistic status update for a pipeline drag, rolled back if the PATCH fails — same pattern as leads-board.tsx's moveLead. */

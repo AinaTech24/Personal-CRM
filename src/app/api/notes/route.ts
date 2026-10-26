@@ -77,7 +77,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ notes: withPermissions, total, hasMore: skip + notes.length < total });
 }
 
-const tagsSchema = z.array(z.string().trim().min(1).max(MAX_TAG_LENGTH)).max(MAX_TAGS);
+// No "|" — that's serializeTags' own delimiter, and a tag containing one would silently split into two.
+const tagsSchema = z.array(z.string().trim().min(1).max(MAX_TAG_LENGTH).regex(/^[^|]+$/, 'Tags can\'t contain "|"')).max(MAX_TAGS);
 
 const bodySchema = z.object({
   title: z.string().trim().max(200).default(""),
