@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
 import { passwordEntryListWhere, canManagePasswordEntry, logPasswordActivity } from "@/lib/passwords";
+import { isUngrantedModuleHidden } from "@/lib/module-permissions-store";
 import { fetchFaviconDataUrl } from "@/lib/favicon";
 import { encryptSecret } from "@/lib/crypto";
 
@@ -31,6 +32,7 @@ const entrySelect = {
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isUngrantedModuleHidden(user, "passwords")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const entries = await db.passwordEntry.findMany({
     where: passwordEntryListWhere(user),
@@ -61,6 +63,7 @@ const bodySchema = z.object({
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isUngrantedModuleHidden(user, "passwords")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

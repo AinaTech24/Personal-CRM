@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { canAccessSocialClient, isSocialMediaLead, isSocialMediaOnlyUser, type SocialMembership } from "@/lib/social-media-permissions";
-import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
+import { moduleAccessScope, isModuleBlocked, getHiddenModules } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 import { getTeamMembershipBySlug, getTeamUserIdsBySlug, broadcastTeamChangeBySlug } from "@/lib/teams";
 import { getCrmMembership, hasCrmAccess } from "@/lib/crm-team";
@@ -138,6 +138,13 @@ export async function getSocialClientForUser(
   if (!client) return null;
   if (await isModuleBlocked(user, "CLIENTS")) return "forbidden" as const;
   if (canAccessSocialClient(user, membership, client)) return client;
+
+  // The company-wide "Sidebar modules" hide (Admin > Settings) only ever
+  // suppresses the grant- and CRM-Team-based paths below — a genuine Social
+  // Media team member's own access, just checked above, is never subject to
+  // it. isAdmin(user) isn't checked separately here: an admin's grant check
+  // (moduleAccessScope) already returns "all" regardless of the hide list.
+  if ((await getHiddenModules()).includes("clients") && !isAdmin(user)) return "forbidden" as const;
 
   const scope = await moduleAccessScope(user, "CLIENTS", action);
   if (scope === "all") return client;

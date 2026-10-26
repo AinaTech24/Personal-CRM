@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { istDateKey, dateFromKey } from "@/lib/attendance";
+import { isModuleBlocked } from "@/lib/module-permissions-store";
 
 /**
  * Employee self break-in — pauses the work clock. Its length (to the
@@ -11,6 +12,7 @@ import { istDateKey, dateFromKey } from "@/lib/attendance";
 export async function POST() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "ATTENDANCE")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const key = istDateKey();
   const date = dateFromKey(key);

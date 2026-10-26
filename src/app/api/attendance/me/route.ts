@@ -3,11 +3,13 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getAttendancePolicy, getHolidayKeys } from "@/lib/attendance-settings";
 import { istDateKey, dateFromKey, keyFromDate, summarize } from "@/lib/attendance";
+import { isModuleBlocked } from "@/lib/module-permissions-store";
 
 /** The signed-in user's own attendance for a year: records, summary, today, and the policy/holidays the calendar needs. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "ATTENDANCE")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const yearParam = Number(req.nextUrl.searchParams.get("year"));
   const year = Number.isInteger(yearParam) && yearParam > 2000 ? yearParam : Number(istDateKey().slice(0, 4));

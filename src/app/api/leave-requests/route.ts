@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/permissions";
-import { moduleAccessScope } from "@/lib/module-permissions-store";
+import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-store";
 import { allLedTeamsScopeFor } from "@/lib/teams";
 import { resolveTeamScope } from "@/lib/team-scope";
 import { dateFromKey, istDateKey } from "@/lib/attendance";
@@ -72,6 +72,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ requests: rows.map(serializeLeaveRequest) });
   }
 
+  // Only this base "my own requests" case is subject to the company-wide
+  // hide — the scope=all/teamScope branches above serve an admin's,
+  // grant-holder's, or team lead's view into OTHERS' leave, which "My Leave"
+  // being hidden from the regular nav was never meant to take away.
+  if (await isModuleBlocked(user, "LEAVE")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const year = Number(istDateKey().slice(0, 4));
   const [rows, summary] = await Promise.all([
     db.leaveRequest.findMany({ where: { userId: user.id }, include: leaveRequestInclude, orderBy: { createdAt: "desc" }, take: 200 }),
@@ -94,6 +100,7 @@ const bodySchema = z.object({
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (await isModuleBlocked(user, "LEAVE")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Please fill in every field." }, { status: 400 });

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isRestrictedFromModule } from "@/lib/social-media";
+import { isUngrantedModuleHidden } from "@/lib/module-permissions-store";
 import { asJson, BillingValidationError, canAccessBillingRecord, canDeleteBillingRecord, computeTotals, pickSellerData, sellerSchemaFields, toNumber } from "@/lib/billing";
 import { broadcastQuotationChange } from "@/lib/quotations";
 import { notifyAndPush } from "@/lib/notify";
@@ -43,6 +44,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (await isUngrantedModuleHidden(user, "quotations")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const quotation = await loadQuotation(id);
@@ -81,6 +83,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (await isUngrantedModuleHidden(user, "quotations")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const existing = await db.quotation.findUnique({ where: { id }, include: { items: true } });
@@ -206,6 +209,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (await isRestrictedFromModule(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (await isUngrantedModuleHidden(user, "quotations")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const existing = await db.quotation.findUnique({ where: { id } });

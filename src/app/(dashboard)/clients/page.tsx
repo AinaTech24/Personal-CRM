@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getSocialMembership, hasSocialMediaAccess, crmClientsScopeFor } from "@/lib/social-media";
-import { canManageModule, isModuleBlocked } from "@/lib/module-permissions-store";
+import { canManageModule, isModuleBlocked, getHiddenModules } from "@/lib/module-permissions-store";
+import { isAdmin } from "@/lib/permissions";
 import { ClientsPageClient } from "@/components/social-media/clients-page";
 
 /**
@@ -20,10 +21,15 @@ export default async function ClientsPage() {
   if (await isModuleBlocked(user, "CLIENTS")) redirect("/");
 
   const membership = await getSocialMembership(user.id);
+  const genuineSocialMediaAccess = hasSocialMediaAccess(user, membership);
+
+  // The company-wide "Sidebar modules" hide (Admin > Settings) only ever
+  // suppresses the grant- and CRM-Team-based paths below — a genuine Social
+  // Media team member keeps their own Clients view regardless of it.
+  const hidden = !isAdmin(user) && !genuineSocialMediaAccess && (await getHiddenModules()).includes("clients");
   if (
-    !hasSocialMediaAccess(user, membership) &&
-    !(await canManageModule(user, "CLIENTS", "READ")) &&
-    !(await crmClientsScopeFor(user))
+    !genuineSocialMediaAccess &&
+    (hidden || (!(await canManageModule(user, "CLIENTS", "READ")) && !(await crmClientsScopeFor(user))))
   ) {
     redirect("/");
   }
