@@ -7,6 +7,7 @@ import { noteListWhere, canManageNote, broadcastNoteChange } from "@/lib/notes";
 import { isValidHexColor } from "@/lib/note-colors";
 import { MAX_TAGS, MAX_TAG_LENGTH, parseTags, serializeTags, tagContainsFragment } from "@/lib/note-tags";
 import { isModuleBlocked, moduleAccessScope } from "@/lib/module-permissions-store";
+import { parsePageParams } from "@/lib/pagination";
 
 const noteInclude = {
   // No avatarDataUrl — the Notes UI never renders an author avatar image,
@@ -64,14 +65,16 @@ export async function GET(req: NextRequest) {
           ? [{ isPinned: "desc" as const }, { updatedAt: "desc" as const }]
           : [{ updatedAt: "desc" as const }];
 
-  const notes = await db.note.findMany({
-    where: { AND: and },
-    include: noteInclude,
-    orderBy,
-  });
+  const where = { AND: and };
+  const { take, skip } = parsePageParams(params, { defaultTake: 50, maxTake: 200 });
+
+  const [notes, total] = await Promise.all([
+    db.note.findMany({ where, include: noteInclude, orderBy, take, skip }),
+    db.note.count({ where }),
+  ]);
 
   const withPermissions = notes.map((n) => ({ ...n, tags: parseTags(n.tags), canManage: canManageNote(user, n, scope) }));
-  return NextResponse.json({ notes: withPermissions });
+  return NextResponse.json({ notes: withPermissions, total, hasMore: skip + notes.length < total });
 }
 
 const tagsSchema = z.array(z.string().trim().min(1).max(MAX_TAG_LENGTH)).max(MAX_TAGS);
