@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { AnimatePresence, motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -31,11 +32,17 @@ import {
   type InvoiceSummary,
 } from "@/components/billing/types";
 
+/** How many invoices a single fetch loads — both the initial page and each "Load more". */
+const PAGE_SIZE = 50;
+
 export function InvoicesList() {
   const toast = useToast();
   const { query } = useSearch();
   const { socket } = useSocket();
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
@@ -51,38 +58,84 @@ export function InvoicesList() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  async function loadInvoices() {
-    const res = await fetch("/api/invoices");
-    const data = await res.json();
-    if (res.ok) setInvoices(data.invoices);
-  }
+  // Debounced so free-text search (typed into the shared header search bar)
+  // doesn't fire a request per keystroke.
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQ(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  async function loadAll() {
-    setLoading(true);
-    try {
-      const [iRes, meRes, cpRes] = await Promise.all([
-        fetch("/api/invoices"),
-        fetch("/api/auth/me"),
-        fetch("/api/company-profile"),
-      ]);
-      const [iData, meData, cpData] = await Promise.all([iRes.json(), meRes.json(), cpRes.json()]);
-      if (iRes.ok) setInvoices(iData.invoices);
-      if (meRes.ok) setCurrentUser(meData.user);
-      if (cpRes.ok) setCompanyProfile(cpData.profile);
-
-      const isAdmin = meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN";
-      if (isAdmin) {
-        const deptRes = await fetch("/api/departments");
-        const deptData = await deptRes.json();
-        if (deptRes.ok) setDepartments(deptData.departments);
+  // The one reactive fetch: re-runs (resetting to the first page) whenever
+  // the search query changes — search now happens server-side, so this is
+  // also what makes "Load more" safe. `take` lets a live-update refresh ask
+  // for as many as were already loaded, instead of collapsing back to page one.
+  const loadInvoices = useCallback(
+    async (take: number = PAGE_SIZE) => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (q) params.set("q", q);
+        params.set("take", String(Math.max(take, PAGE_SIZE)));
+        const res = await fetch(`/api/invoices?${params.toString()}`);
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setInvoices(data.invoices ?? []);
+          setTotal(data.total ?? 0);
+          setHasMore(!!data.hasMore);
+        }
+      } finally {
+        setLoading(false);
       }
+    },
+    [q]
+  );
+
+  async function loadMoreInvoices() {
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams();
+      if (q) params.set("q", q);
+      params.set("take", String(PAGE_SIZE));
+      params.set("skip", String(invoices.length));
+      const res = await fetch(`/api/invoices?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't load more invoices", data.error);
+      setInvoices((prev) => [...prev, ...(data.invoices ?? [])]);
+      setTotal(data.total ?? 0);
+      setHasMore(!!data.hasMore);
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
   }
 
+  // A live update or a mutation (delete, an edit) re-fetches in place,
+  // preserving however many invoices were already loaded (via "Load
+  // more"), rather than collapsing the list back to page one.
+  function refreshInvoices() {
+    return loadInvoices(invoices.length);
+  }
+
   useEffect(() => {
-    loadAll();
+    loadInvoices();
+  }, [loadInvoices]);
+
+  // User, company profile, and (for an admin) departments don't depend on
+  // any filter — loaded once, not re-fetched every time search changes.
+  useEffect(() => {
+    (async () => {
+      const [meRes, cpRes] = await Promise.all([fetch("/api/auth/me"), fetch("/api/company-profile")]);
+      const [meData, cpData] = await Promise.all([meRes.json().catch(() => ({})), cpRes.json().catch(() => ({}))]);
+      if (meRes.ok) setCurrentUser(meData.user);
+      if (cpRes.ok) setCompanyProfile(cpData.profile);
+
+      const isAdminUser = meData.user?.role === "SUPER_ADMIN" || meData.user?.role === "ADMIN";
+      if (isAdminUser) {
+        const deptRes = await fetch("/api/departments");
+        const deptData = await deptRes.json().catch(() => ({}));
+        if (deptRes.ok) setDepartments(deptData.departments);
+      }
+    })();
   }, []);
 
   // Deep link: /invoices?invoice=<id> opens the preview.
@@ -94,7 +147,7 @@ export function InvoicesList() {
 
   useEffect(() => {
     if (!socket) return;
-    const onChange = () => loadInvoices();
+    const onChange = () => refreshInvoices();
     socket.on("invoice_created", onChange);
     socket.on("invoice_updated", onChange);
     socket.on("invoice_deleted", onChange);
@@ -103,17 +156,10 @@ export function InvoicesList() {
       socket.off("invoice_updated", onChange);
       socket.off("invoice_deleted", onChange);
     };
-  }, [socket]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, invoices.length]);
 
   const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return invoices;
-    return invoices.filter((row) =>
-      [row.invoiceNumber, row.clientName, row.clientEmail].filter(Boolean).some((f) => f!.toLowerCase().includes(q))
-    );
-  }, [invoices, query]);
 
   async function openPreview(id: string) {
     setPreviewOpen(true);
@@ -163,7 +209,7 @@ export function InvoicesList() {
     if (res.ok) {
       const { deleted } = await res.json().catch(() => ({ deleted: selectedIds.size }));
       exitSelection();
-      await loadInvoices();
+      await refreshInvoices();
       toast.success(`${deleted} invoice${deleted === 1 ? "" : "s"} deleted`);
     } else {
       toast.error("Couldn't delete invoices");
@@ -174,14 +220,17 @@ export function InvoicesList() {
     if (!deleteId) return;
     const res = await fetch(`/api/invoices/${deleteId}`, { method: "DELETE" });
     if (res.ok) {
-      await loadInvoices();
+      await refreshInvoices();
       toast.success("Invoice deleted");
     } else {
       toast.error("Couldn't delete invoice");
     }
   }
 
-  const allSelected = filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id));
+  // "Select all" covers whatever's currently loaded, not necessarily every
+  // invoice matching the search — same convention as Gmail et al: paginated
+  // lists select the loaded page, not silently everything.
+  const allSelected = invoices.length > 0 && invoices.every((r) => selectedIds.has(r.id));
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -210,7 +259,7 @@ export function InvoicesList() {
                 allSelected={allSelected}
                 onSelectAll={() =>
                   setSelectedIds((prev) => {
-                    const ids = filtered.map((r) => r.id);
+                    const ids = invoices.map((r) => r.id);
                     const all = ids.every((id) => prev.has(id));
                     const next = new Set(prev);
                     if (all) ids.forEach((id) => next.delete(id));
@@ -223,7 +272,7 @@ export function InvoicesList() {
               />
             ) : (
               <motion.div key="actions" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>
-                <NewInvoiceDialog isAdmin={!!isAdmin} departments={departments} companyProfile={companyProfile} onCreated={loadInvoices} />
+                <NewInvoiceDialog isAdmin={!!isAdmin} departments={departments} companyProfile={companyProfile} onCreated={refreshInvoices} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -248,7 +297,7 @@ export function InvoicesList() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => {
+              {invoices.map((row) => {
                 const selected = selectedIds.has(row.id);
                 return (
                   <tr
@@ -295,7 +344,7 @@ export function InvoicesList() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && (
+              {invoices.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
                     No invoices found
@@ -304,6 +353,19 @@ export function InvoicesList() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && invoices.length > 0 && (
+        <div className="flex items-center justify-center gap-3 py-1">
+          <span className="text-xs text-muted-foreground">
+            Showing {invoices.length} of {total} invoice{total === 1 ? "" : "s"}
+          </span>
+          {hasMore && (
+            <Button type="button" variant="outline" size="sm" onClick={loadMoreInvoices} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </Button>
+          )}
         </div>
       )}
 
@@ -331,8 +393,8 @@ export function InvoicesList() {
         invoiceId={editId}
         companyProfile={companyProfile}
         onClose={() => setEditId(null)}
-        onChanged={loadInvoices}
-        onDeleted={loadInvoices}
+        onChanged={refreshInvoices}
+        onDeleted={refreshInvoices}
       />
 
       <ConfirmDialog
