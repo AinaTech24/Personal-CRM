@@ -27,6 +27,25 @@ export async function attendanceAccessScope(
 }
 
 /**
+ * Like attendanceAccessScope, but for the Admin Attendance page specifically
+ * (the list, the year overview, and the CSV export) — a Permission Manager
+ * grant alone is deliberately NOT enough to reach that page, only a company
+ * Admin or a Department Admin (their own department). The grant still works
+ * exactly as before for the Team console's approve/edit routes and the
+ * crm/social/teams attendance endpoints, which call attendanceAccessScope
+ * directly — that's a separate, legitimate way a non-Department-Admin team
+ * lead manages their own team's attendance, and this narrower scope is only
+ * for the "Administration" sidebar page itself.
+ */
+export async function adminAttendanceAccessScope(
+  user: PermissionUser
+): Promise<"all" | { departmentId: string } | null> {
+  if (isAdmin(user)) return "all";
+  if (isDepartmentAdmin(user) && user.departmentId) return { departmentId: user.departmentId };
+  return null;
+}
+
+/**
  * Shared filter builder for the admin attendance list and its CSV export.
  * `scope` (from attendanceAccessScope) narrows the result to one department
  * when it isn't "all" — an Admin (or a company-wide grant) passes "all" for

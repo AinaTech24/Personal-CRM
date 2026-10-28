@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
 
-/** Admin (or an Attendance module grant) removes a holiday. */
+/** Admin, or a Department Admin holding an Attendance module grant, removes a holiday. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "DELETE")))) {
+  if (!user || (!isAdmin(user) && !(isDepartmentAdmin(user) && (await canManageModule(user, "ATTENDANCE", "DELETE"))))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

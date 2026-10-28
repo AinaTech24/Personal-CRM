@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
 
 /**
  * The roster for the Birthdays admin console: everyone active, with their
  * saved birthday — narrower than /api/users (no email, mobile, or role) so a
  * Birthdays-only module grant doesn't need the full Users list, which stays
- * admin-only, to manage just this one module.
+ * admin-only, to manage just this one module. Open to a company admin, or a
+ * Department Admin holding the grant — never a plain Department User.
  */
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "BIRTHDAYS", "READ")))) {
+  if (!user || (!isAdmin(user) && !(isDepartmentAdmin(user) && (await canManageModule(user, "BIRTHDAYS", "READ"))))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

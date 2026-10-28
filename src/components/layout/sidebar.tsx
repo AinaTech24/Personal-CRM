@@ -157,13 +157,12 @@ const commandCentreNavItem: NavItem = { href: "/consulting", label: "MFD Command
 const formsNavItem: NavItem = { href: "/forms", label: "Forms", icon: IconLayoutGrid, group: "workspace" };
 
 /**
- * Which adminNav entries an individually-granted module permission (not
- * company-admin) can unlock, and the module that unlocks each — Leave and
- * Attendance live under /admin for everyone, so this is how a Support
- * Executive-style grant reaches them without becoming a full Admin. Tasks,
- * Meetings, Leads, Projects, Messages already have their own always-visible
- * top-level nav entry above; Clients is handled separately below since its
- * non-admin page lives at /clients, not /admin/clients.
+ * Which adminNav entries an individually-granted module permission can
+ * additionally unlock for a Department Admin (never a plain Department
+ * User — see grantedAdminNav below), and the module that unlocks each.
+ * Tasks, Meetings, Leads, Projects, Messages already have their own
+ * always-visible top-level nav entry above; Clients is handled separately
+ * below since its non-admin page lives at /clients, not /admin/clients.
  */
 const MODULE_ADMIN_HREFS: Partial<Record<ManagedModule, string>> = {
   LEAVE: "/admin/leave",
@@ -821,20 +820,24 @@ export function Sidebar({
     });
   }
 
-  // Leave/Attendance/Birthdays each have an /admin page a module grant can
-  // unlock without making the holder a full Admin — everything else granted
-  // (Tasks, Meetings, Leads, Projects, Messages) already has its own
-  // always-visible top-level nav entry above. A Department Admin additionally
+  // No Administration item is ever visible to a plain Department User, no
+  // matter what the Permission Manager has them granted — Admin or
+  // Department Admin only. Leave/Attendance/Birthdays/Expenses each have an
+  // /admin page a module grant can additionally unlock for a Department
+  // Admin specifically (everything else granted — Tasks, Meetings, Leads,
+  // Projects, Messages — already has its own always-visible top-level nav
+  // entry above, outside this section entirely). A Department Admin also
   // gets the Permission Manager link, the one /admin page their own flag
   // (not a module grant) unlocks.
   const grantedAdminNav = isAdmin
     ? adminNav
     : adminNav.filter((item) => {
-        if (item.href === "/admin/permissions") return isDepartmentAdmin;
+        if (!isDepartmentAdmin) return false;
+        if (item.href === "/admin/permissions") return true;
         // A Department Admin reaches their own department's attendance
         // automatically, same exception Notes already makes elsewhere — no
         // Permission Manager grant required, but an explicit block still wins.
-        if (item.href === "/admin/attendance" && isDepartmentAdmin && !blockedModules.includes("ATTENDANCE")) return true;
+        if (item.href === "/admin/attendance") return !blockedModules.includes("ATTENDANCE");
         const grantedModule = ADMIN_HREF_MODULE.get(item.href);
         return !!grantedModule && managedModuleSet.has(grantedModule) && !blockedModules.includes(grantedModule);
       });
@@ -934,9 +937,13 @@ export function Sidebar({
     return () => clearTimeout(t);
   }, [pathname]);
 
-  const canSeeAttendanceAdmin = isAdmin || isDepartmentAdmin || managedModuleSet.has("ATTENDANCE");
-  const canSeeLeaveAdmin = isAdmin || managedModuleSet.has("LEAVE");
-  const canSeeExpensesAdmin = isAdmin || managedModuleSet.has("EXPENSES");
+  // A Permission Manager grant alone no longer reaches these Administration
+  // pages — only an Admin, or a Department Admin who also holds the grant.
+  // Attendance is the one exception: a Department Admin reaches their own
+  // department's attendance automatically, no grant required.
+  const canSeeAttendanceAdmin = isAdmin || isDepartmentAdmin;
+  const canSeeLeaveAdmin = isAdmin || (isDepartmentAdmin && managedModuleSet.has("LEAVE"));
+  const canSeeExpensesAdmin = isAdmin || (isDepartmentAdmin && managedModuleSet.has("EXPENSES"));
 
   // Poll pending attendance so the Attendance item can flag new check-ins.
   useEffect(() => {

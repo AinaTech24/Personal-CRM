@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
 import { DEFAULT_POLICY } from "@/lib/attendance";
 import { parseShifts } from "@/lib/attendance-settings";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "READ")))) {
+  if (!user || (!isAdmin(user) && !(isDepartmentAdmin(user) && (await canManageModule(user, "ATTENDANCE", "READ"))))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -61,7 +61,7 @@ const bodySchema = z
 
 export async function PUT(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "UPDATE")))) {
+  if (!user || (!isAdmin(user) && !(isDepartmentAdmin(user) && (await canManageModule(user, "ATTENDANCE", "UPDATE"))))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
