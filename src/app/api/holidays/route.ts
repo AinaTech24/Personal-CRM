@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
 
@@ -20,10 +20,10 @@ const bodySchema = z.object({
   name: z.string().trim().min(1).max(120),
 });
 
-/** Admin (or an Attendance module grant) adds a holiday. Unique per date — re-adding the same date updates its name. */
+/** Admin, or a Department Admin holding an Attendance module grant, adds a holiday. Unique per date — re-adding the same date updates its name. */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "ATTENDANCE", "CREATE")))) {
+  if (!user || (!isAdmin(user) && !(isDepartmentAdmin(user) && (await canManageModule(user, "ATTENDANCE", "CREATE"))))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
