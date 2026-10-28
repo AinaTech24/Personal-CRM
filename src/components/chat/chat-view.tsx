@@ -232,6 +232,11 @@ export function ChatView() {
   const previewDialog = useDialogState(preview);
   const forwardDialog = useDialogState(forwardOf);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
+  // Right-click on a conversation row in the list — separate from `ctx` (a
+  // message's own right-click menu) since the two show different content and
+  // are never open at the same time, but each needs its own positioned menu.
+  const [convCtx, setConvCtx] = useState<{ conversation: Conversation; x: number; y: number } | null>(null);
+  const [convMenuPos, setConvMenuPos] = useState<{ left: number; top: number } | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordSecs, setRecordSecs] = useState(0);
   const [recordStream, setRecordStream] = useState<MediaStream | null>(null);
@@ -247,6 +252,7 @@ export function ChatView() {
   const draftRef = useRef<HTMLTextAreaElement>(null);
   const emojiPanelRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const convMenuRef = useRef<HTMLDivElement>(null);
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastTypingEmit = useRef(0);
   const stopTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -451,6 +457,25 @@ export function ChatView() {
     setMenuPos({ left, top });
   }, [ctx]);
 
+  /* Same flip-to-fit placement as the message context menu above, for the conversation-row one. */
+  useLayoutEffect(() => {
+    if (!convCtx) {
+      setConvMenuPos(null);
+      return;
+    }
+    const el = convMenuRef.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    const pad = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = convCtx.x + width + pad > vw ? convCtx.x - width : convCtx.x;
+    let top = convCtx.y + height + pad > vh ? convCtx.y - height : convCtx.y;
+    left = Math.max(pad, Math.min(left, vw - width - pad));
+    top = Math.max(pad, Math.min(top, vh - height - pad));
+    setConvMenuPos({ left, top });
+  }, [convCtx]);
+
   /* close the emoji panel on an outside click — AnimatePresence plays the same
      animation in reverse, so it closes exactly the way it opened */
   useEffect(() => {
@@ -482,6 +507,19 @@ export function ChatView() {
       window.removeEventListener("keydown", onKey);
     };
   }, [ctx]);
+
+  /* close the conversation context menu on outside click / Escape */
+  useEffect(() => {
+    if (!convCtx) return;
+    const close = () => setConvCtx(null);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [convCtx]);
 
   const active = useMemo(() => conversations.find((c) => c.id === activeId) ?? null, [conversations, activeId]);
 
@@ -888,10 +926,10 @@ export function ChatView() {
             return (
               <div
                 key={c.id}
-                // Suppress the browser menu here and offer our own delete instead.
+                // Suppress the browser menu here and offer our own menu instead.
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  if (!c.isSystem) setDeleteChat(c);
+                  setConvCtx({ conversation: c, x: e.clientX, y: e.clientY });
                 }}
                 // Lets a file be dropped straight onto a conversation in the list —
                 // opens it (if it isn't already active) and attaches the file(s),
@@ -1523,6 +1561,43 @@ export function ChatView() {
             {ctx.message.senderId === me.id && !ctx.message.deletedForEveryone && (
               <MenuItem onClick={() => remove(ctx.message, "everyone")} danger>
                 <IconTrash className="h-4 w-4" /> Delete for everyone
+              </MenuItem>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {convCtx && (
+          <motion.div
+            ref={convMenuRef}
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.94 }}
+            transition={{ duration: 0.12 }}
+            style={{ left: convMenuPos?.left ?? convCtx.x, top: convMenuPos?.top ?? convCtx.y, visibility: convMenuPos ? "visible" : "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+            className="fixed z-50 w-48 overflow-hidden rounded-xl border border-border bg-popover py-1 shadow-2xl"
+          >
+            {convCtx.conversation.id === activeId && (
+              <MenuItem
+                onClick={() => {
+                  setActiveId(null);
+                  setConvCtx(null);
+                }}
+              >
+                <IconX className="h-4 w-4" /> Close chat
+              </MenuItem>
+            )}
+            {!convCtx.conversation.isSystem && (
+              <MenuItem
+                onClick={() => {
+                  setDeleteChat(convCtx.conversation);
+                  setConvCtx(null);
+                }}
+                danger
+              >
+                <IconTrash className="h-4 w-4" /> Delete chat permanently
               </MenuItem>
             )}
           </motion.div>
