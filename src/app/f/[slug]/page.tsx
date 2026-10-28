@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dropdown } from "@/components/ui/dropdown";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { AttachmentPreview } from "@/components/forms/attachment-preview";
@@ -218,16 +219,19 @@ function FieldInput({ field, value, onChange }: { field: FieldDef; value: Answer
       const selected = Array.isArray(value) && typeof value[0] !== "object" ? (value as string[]) : [];
       return (
         <div className="flex flex-col gap-2">
-          {parseFieldOptions(field.options).map((o) => (
-            <label key={o} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={selected.includes(o)}
-                onChange={(e) => onChange(e.target.checked ? [...selected, o] : selected.filter((s) => s !== o))}
-              />
-              {o}
-            </label>
-          ))}
+          {parseFieldOptions(field.options).map((o) => {
+            const checked = selected.includes(o);
+            return (
+              <label key={o} className="flex items-center gap-2.5 text-sm">
+                <Checkbox
+                  checked={checked}
+                  onChange={(c) => onChange(c ? [...selected, o] : selected.filter((s) => s !== o))}
+                  aria-label={o}
+                />
+                {o}
+              </label>
+            );
+          })}
         </div>
       );
     }
