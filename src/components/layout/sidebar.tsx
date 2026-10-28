@@ -98,7 +98,6 @@ const mainNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
-  { href: "/admin/modules", label: "Modules", icon: IconGrid, group: "admin" },
   { href: "/admin/logs", label: "System Logs", icon: IconHistory, group: "admin" },
   { href: "/admin/departments", label: "Departments", icon: IconBuilding, group: "admin" },
   { href: "/admin/users", label: "Users", icon: IconUsers, group: "admin" },
