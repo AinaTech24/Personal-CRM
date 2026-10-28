@@ -216,6 +216,11 @@ export function ChatView() {
   const [unpinTarget, setUnpinTarget] = useState<Message | null>(null);
   const [deleteChat, setDeleteChat] = useState<Conversation | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  // Which drop target (the open thread, or a specific conversation row in the
+  // list) a file is currently being dragged over — purely for the highlight;
+  // the actual files only ever arrive in onPickFiles via onDrop.
+  const [dragOverThread, setDragOverThread] = useState(false);
+  const [dragOverConvId, setDragOverConvId] = useState<string | null>(null);
   const [reactPickerFor, setReactPickerFor] = useState<Message | null>(null);
   const [infoUser, setInfoUser] = useState<ChatUser | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -565,6 +570,27 @@ export function ChatView() {
     if (fileRef.current) fileRef.current.value = "";
   }
 
+  /** Whether a drag carries real OS files (vs. dragged text/an element) — the only kind worth highlighting a drop zone for. */
+  function isFileDrag(e: React.DragEvent) {
+    return Array.from(e.dataTransfer.types).includes("Files");
+  }
+
+  /** Dropped directly onto the open thread — attaches to whichever conversation is already active. */
+  function onThreadDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOverThread(false);
+    if (!activeId) return;
+    onPickFiles(e.dataTransfer.files);
+  }
+
+  /** Dropped onto a conversation row in the list — opens it first (if it isn't already) so the files land in the right chat. */
+  function onConversationDrop(e: React.DragEvent, conversationId: string) {
+    e.preventDefault();
+    setDragOverConvId(null);
+    if (conversationId !== activeId) openConversation(conversationId);
+    onPickFiles(e.dataTransfer.files);
+  }
+
   /**
    * Voice notes. Recording stops either way; `keep` decides whether the audio
    * becomes a pending attachment or is dropped and never leaves the browser.
@@ -867,9 +893,19 @@ export function ChatView() {
                   e.preventDefault();
                   if (!c.isSystem) setDeleteChat(c);
                 }}
+                // Lets a file be dropped straight onto a conversation in the list —
+                // opens it (if it isn't already active) and attaches the file(s),
+                // without first having to click into the chat.
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (isFileDrag(e)) setDragOverConvId(c.id);
+                }}
+                onDragLeave={() => setDragOverConvId((id) => (id === c.id ? null : id))}
+                onDrop={(e) => onConversationDrop(e, c.id)}
                 className={cn(
                   "group/chat relative border-b border-border/50 transition-colors hover:bg-primary/5",
-                  activeId === c.id && "bg-accent/60"
+                  activeId === c.id && "bg-accent/60",
+                  dragOverConvId === c.id && "bg-primary/10 ring-2 ring-inset ring-primary"
                 )}
               >
                 <button
@@ -919,7 +955,22 @@ export function ChatView() {
       </div>
 
       {/* Thread */}
-      <div className={cn("flex min-w-0 flex-1 flex-col", !activeId && "hidden sm:flex")}>
+      <div
+        className={cn("relative flex min-w-0 flex-1 flex-col", !activeId && "hidden sm:flex")}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (active && isFileDrag(e)) setDragOverThread(true);
+        }}
+        onDragLeave={() => setDragOverThread(false)}
+        onDrop={onThreadDrop}
+      >
+        {/* Dropping anywhere on the open chat attaches the file(s) here — same as using the paperclip. */}
+        {dragOverThread && (
+          <div className="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/90 text-primary">
+            <IconPaperclip className="h-6 w-6" />
+            <p className="text-sm font-medium">Drop to attach to this chat</p>
+          </div>
+        )}
         {!active ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">Select a conversation</div>
         ) : (
