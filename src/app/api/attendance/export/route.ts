@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { keyFromDate, istDateKey, summarize } from "@/lib/attendance";
 import { STATUS_LABEL, APPROVAL_LABEL, HALF_DAY_REASON_LABEL, formatDuration, formatIstTime } from "@/lib/attendance-ui";
-import { attendanceAccessScope, buildAttendanceWhere } from "@/lib/attendance-query";
+import { adminAttendanceAccessScope, buildAttendanceWhere } from "@/lib/attendance-query";
 import { csvCell, csvResponse } from "@/lib/csv";
 
 /** Maps the report period to a human title and a filename slug. */
@@ -15,12 +15,12 @@ const PERIOD_META: Record<string, { title: string; slug: string }> = {
   annually: { title: "Annual Attendance Report", slug: "annual-attendance-report" },
 };
 
-/** Admin (company-wide), a Department Admin (their own department), or an Attendance module grant: CSV export of the filtered attendance, same filters and scoping as the list view. */
+/** Admin (company-wide) or a Department Admin (their own department) only: CSV export of the filtered attendance, same filters and scoping as the Administration page's list view. */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const scope = await attendanceAccessScope(user, "READ");
+  const scope = await adminAttendanceAccessScope(user);
   if (scope === null) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const where = buildAttendanceWhere(req.nextUrl.searchParams, scope);

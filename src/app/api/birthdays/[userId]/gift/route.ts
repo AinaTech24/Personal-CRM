@@ -2,17 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { canManageModule } from "@/lib/module-permissions-store";
 import { istDateKey, keyFromDate } from "@/lib/attendance";
 import { birthdayInfo, MAX_GIFT_LENGTH } from "@/lib/birthdays";
 
 const bodySchema = z.object({ gift: z.string().trim().min(1).max(MAX_GIFT_LENGTH).nullable() });
 
-/** Admin (or a Birthdays module grant): choose (or clear, with null) the gift for this person's next birthday. Free text: Hamper/Cake/Plant are only suggestions. */
+/** Admin, or a Department Admin holding a Birthdays module grant: choose (or clear, with null) the gift for this person's next birthday. Free text: Hamper/Cake/Plant are only suggestions. */
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const user = await getCurrentUser();
-  if (!user || (!isAdmin(user) && !(await canManageModule(user, "BIRTHDAYS", "UPDATE")))) {
+  if (!user || (!isAdmin(user) && !(isDepartmentAdmin(user) && (await canManageModule(user, "BIRTHDAYS", "UPDATE"))))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

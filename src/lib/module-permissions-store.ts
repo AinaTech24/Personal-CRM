@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import type { PermissionUser } from "@/lib/permissions";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { MODULE_KEYS } from "@/lib/modules";
 import {
   MANAGED_MODULES,
@@ -143,13 +143,28 @@ export async function canManageModule(user: PermissionUser, module: ManagedModul
  * their own, and no `allDepartments`, has nothing to scope to, so this
  * returns null — same as not holding the grant at all; the caller's
  * own-record fallback still applies.
+ *
+ * LEAVE and EXPENSES are the deliberate exception to all of the above: both
+ * have a dedicated "Administration" sidebar page (see sidebar.tsx's
+ * MODULE_ADMIN_HREFS) rather than being a plain department-lead widening, so
+ * a grant there only ever counts for a Department Admin — never a plain
+ * Department User, no matter what the Permission Manager has them granted.
+ * Attendance deliberately isn't included here even though it has the same
+ * kind of admin page: its grant also powers the Team console's approve/edit
+ * flow for team leads who aren't Department Admins, a separate, legitimate
+ * use this function must keep serving — see attendance-query.ts's
+ * `adminAttendanceAccessScope` for where Attendance's admin page narrows
+ * this instead, without touching the shared scope here.
  */
+const ADMIN_PAGE_ONLY_GRANT_MODULES = new Set<ManagedModule>(["LEAVE", "EXPENSES"]);
+
 export async function moduleAccessScope(
   user: PermissionUser,
   module: ManagedModule,
   action: ModuleAction
 ): Promise<"all" | { departmentId: string } | null> {
   if (isAdmin(user)) return "all";
+  if (ADMIN_PAGE_ONLY_GRANT_MODULES.has(module) && !isDepartmentAdmin(user)) return null;
   const row = await db.userModulePermission.findUnique({ where: { userId_module: { userId: user.id, module } } });
   if (!row || !hasModuleAction(row, action)) return null;
   if (row.allDepartments) return "all";
