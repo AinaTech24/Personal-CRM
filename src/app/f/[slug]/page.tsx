@@ -35,6 +35,7 @@ interface FieldDef {
   minValue: number | null;
   maxValue: number | null;
   pattern: string | null;
+  currencySymbol: string | null;
   conditionFieldId: string | null;
   conditionOperator: string | null;
   conditionValue: string | null;
@@ -192,6 +193,48 @@ function FieldInput({ field, value, onChange }: { field: FieldDef; value: Answer
           placeholder={field.placeholder ?? undefined}
           min={field.minValue ?? undefined}
           max={field.maxValue ?? undefined}
+        />
+      );
+    case "DECIMAL":
+      return (
+        <Input
+          type="number"
+          step="any"
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.required}
+          placeholder={field.placeholder ?? undefined}
+          min={field.minValue ?? undefined}
+          max={field.maxValue ?? undefined}
+        />
+      );
+    case "CURRENCY":
+      return (
+        <div className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+            {field.currencySymbol || "₹"}
+          </span>
+          <Input
+            type="number"
+            step="any"
+            value={(value as string) ?? ""}
+            onChange={(e) => onChange(e.target.value)}
+            required={field.required}
+            placeholder={field.placeholder ?? undefined}
+            min={field.minValue ?? undefined}
+            max={field.maxValue ?? undefined}
+            className="pl-7"
+          />
+        </div>
+      );
+    case "REGEX":
+      return (
+        <Input
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.required}
+          placeholder={field.placeholder ?? undefined}
+          {...lengthConstraints(field)}
         />
       );
     case "DATE":
