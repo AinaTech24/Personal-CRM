@@ -34,6 +34,7 @@ const patchSchema = z.object({
         return false;
       }
     }, "Invalid pattern"),
+  currencySymbol: z.string().trim().max(10).nullable().optional(),
   conditionFieldId: z.string().nullable().optional(),
   conditionOperator: z.enum(CONDITION_OPERATOR_VALUES).nullable().optional(),
   conditionValue: z.string().trim().max(500).nullable().optional(),
@@ -93,6 +94,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(d.minValue !== undefined && { minValue: d.minValue }),
       ...(d.maxValue !== undefined && { maxValue: d.maxValue }),
       ...(d.pattern !== undefined && { pattern: d.pattern || null }),
+      ...(d.currencySymbol !== undefined && { currencySymbol: d.currencySymbol || null }),
       ...(conditionPatch ?? {}),
     },
   });

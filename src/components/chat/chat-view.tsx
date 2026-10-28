@@ -216,6 +216,11 @@ export function ChatView() {
   const [unpinTarget, setUnpinTarget] = useState<Message | null>(null);
   const [deleteChat, setDeleteChat] = useState<Conversation | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  // Which drop target (the open thread, or a specific conversation row in the
+  // list) a file is currently being dragged over — purely for the highlight;
+  // the actual files only ever arrive in onPickFiles via onDrop.
+  const [dragOverThread, setDragOverThread] = useState(false);
+  const [dragOverConvId, setDragOverConvId] = useState<string | null>(null);
   const [reactPickerFor, setReactPickerFor] = useState<Message | null>(null);
   const [infoUser, setInfoUser] = useState<ChatUser | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -227,6 +232,11 @@ export function ChatView() {
   const previewDialog = useDialogState(preview);
   const forwardDialog = useDialogState(forwardOf);
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
+  // Right-click on a conversation row in the list — separate from `ctx` (a
+  // message's own right-click menu) since the two show different content and
+  // are never open at the same time, but each needs its own positioned menu.
+  const [convCtx, setConvCtx] = useState<{ conversation: Conversation; x: number; y: number } | null>(null);
+  const [convMenuPos, setConvMenuPos] = useState<{ left: number; top: number } | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordSecs, setRecordSecs] = useState(0);
   const [recordStream, setRecordStream] = useState<MediaStream | null>(null);
@@ -242,6 +252,7 @@ export function ChatView() {
   const draftRef = useRef<HTMLTextAreaElement>(null);
   const emojiPanelRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const convMenuRef = useRef<HTMLDivElement>(null);
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastTypingEmit = useRef(0);
   const stopTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -446,6 +457,25 @@ export function ChatView() {
     setMenuPos({ left, top });
   }, [ctx]);
 
+  /* Same flip-to-fit placement as the message context menu above, for the conversation-row one. */
+  useLayoutEffect(() => {
+    if (!convCtx) {
+      setConvMenuPos(null);
+      return;
+    }
+    const el = convMenuRef.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    const pad = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = convCtx.x + width + pad > vw ? convCtx.x - width : convCtx.x;
+    let top = convCtx.y + height + pad > vh ? convCtx.y - height : convCtx.y;
+    left = Math.max(pad, Math.min(left, vw - width - pad));
+    top = Math.max(pad, Math.min(top, vh - height - pad));
+    setConvMenuPos({ left, top });
+  }, [convCtx]);
+
   /* close the emoji panel on an outside click — AnimatePresence plays the same
      animation in reverse, so it closes exactly the way it opened */
   useEffect(() => {
@@ -477,6 +507,19 @@ export function ChatView() {
       window.removeEventListener("keydown", onKey);
     };
   }, [ctx]);
+
+  /* close the conversation context menu on outside click / Escape */
+  useEffect(() => {
+    if (!convCtx) return;
+    const close = () => setConvCtx(null);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [convCtx]);
 
   const active = useMemo(() => conversations.find((c) => c.id === activeId) ?? null, [conversations, activeId]);
 
@@ -563,6 +606,27 @@ export function ChatView() {
     }
     setPending((prev) => [...prev, ...picked].slice(0, 10));
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  /** Whether a drag carries real OS files (vs. dragged text/an element) — the only kind worth highlighting a drop zone for. */
+  function isFileDrag(e: React.DragEvent) {
+    return Array.from(e.dataTransfer.types).includes("Files");
+  }
+
+  /** Dropped directly onto the open thread — attaches to whichever conversation is already active. */
+  function onThreadDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOverThread(false);
+    if (!activeId) return;
+    onPickFiles(e.dataTransfer.files);
+  }
+
+  /** Dropped onto a conversation row in the list — opens it first (if it isn't already) so the files land in the right chat. */
+  function onConversationDrop(e: React.DragEvent, conversationId: string) {
+    e.preventDefault();
+    setDragOverConvId(null);
+    if (conversationId !== activeId) openConversation(conversationId);
+    onPickFiles(e.dataTransfer.files);
   }
 
   /**
@@ -862,14 +926,24 @@ export function ChatView() {
             return (
               <div
                 key={c.id}
-                // Suppress the browser menu here and offer our own delete instead.
+                // Suppress the browser menu here and offer our own menu instead.
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  if (!c.isSystem) setDeleteChat(c);
+                  setConvCtx({ conversation: c, x: e.clientX, y: e.clientY });
                 }}
+                // Lets a file be dropped straight onto a conversation in the list —
+                // opens it (if it isn't already active) and attaches the file(s),
+                // without first having to click into the chat.
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (isFileDrag(e)) setDragOverConvId(c.id);
+                }}
+                onDragLeave={() => setDragOverConvId((id) => (id === c.id ? null : id))}
+                onDrop={(e) => onConversationDrop(e, c.id)}
                 className={cn(
                   "group/chat relative border-b border-border/50 transition-colors hover:bg-primary/5",
-                  activeId === c.id && "bg-accent/60"
+                  activeId === c.id && "bg-accent/60",
+                  dragOverConvId === c.id && "bg-primary/10 ring-2 ring-inset ring-primary"
                 )}
               >
                 <button
@@ -919,7 +993,22 @@ export function ChatView() {
       </div>
 
       {/* Thread */}
-      <div className={cn("flex min-w-0 flex-1 flex-col", !activeId && "hidden sm:flex")}>
+      <div
+        className={cn("relative flex min-w-0 flex-1 flex-col", !activeId && "hidden sm:flex")}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (active && isFileDrag(e)) setDragOverThread(true);
+        }}
+        onDragLeave={() => setDragOverThread(false)}
+        onDrop={onThreadDrop}
+      >
+        {/* Dropping anywhere on the open chat attaches the file(s) here — same as using the paperclip. */}
+        {dragOverThread && (
+          <div className="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/90 text-primary">
+            <IconPaperclip className="h-6 w-6" />
+            <p className="text-sm font-medium">Drop to attach to this chat</p>
+          </div>
+        )}
         {!active ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">Select a conversation</div>
         ) : (
@@ -1472,6 +1561,43 @@ export function ChatView() {
             {ctx.message.senderId === me.id && !ctx.message.deletedForEveryone && (
               <MenuItem onClick={() => remove(ctx.message, "everyone")} danger>
                 <IconTrash className="h-4 w-4" /> Delete for everyone
+              </MenuItem>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {convCtx && (
+          <motion.div
+            ref={convMenuRef}
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.94 }}
+            transition={{ duration: 0.12 }}
+            style={{ left: convMenuPos?.left ?? convCtx.x, top: convMenuPos?.top ?? convCtx.y, visibility: convMenuPos ? "visible" : "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+            className="fixed z-50 w-48 overflow-hidden rounded-xl border border-border bg-popover py-1 shadow-2xl"
+          >
+            {convCtx.conversation.id === activeId && (
+              <MenuItem
+                onClick={() => {
+                  setActiveId(null);
+                  setConvCtx(null);
+                }}
+              >
+                <IconX className="h-4 w-4" /> Close chat
+              </MenuItem>
+            )}
+            {!convCtx.conversation.isSystem && (
+              <MenuItem
+                onClick={() => {
+                  setDeleteChat(convCtx.conversation);
+                  setConvCtx(null);
+                }}
+                danger
+              >
+                <IconTrash className="h-4 w-4" /> Delete chat permanently
               </MenuItem>
             )}
           </motion.div>

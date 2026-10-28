@@ -6,6 +6,8 @@ export const FORM_FIELD_TYPES = [
   "LINK",
   "PASSWORD",
   "NUMBER",
+  "DECIMAL",
+  "CURRENCY",
   "DATE",
   "DROPDOWN",
   "RADIO",
@@ -14,6 +16,7 @@ export const FORM_FIELD_TYPES = [
   "FILE_MULTI",
   "SECTION_HEADING",
   "PAGE_BREAK",
+  "REGEX",
 ] as const;
 
 export type FormFieldType = (typeof FORM_FIELD_TYPES)[number];
@@ -29,6 +32,8 @@ export interface FieldTypeMeta {
   isLayoutOnly: boolean;
   /** PASSWORD — masked everywhere the answer is shown (typing it in, and every admin view), not just stored as plain text like everything else already is. */
   isSensitive: boolean;
+  /** REGEX — the builder offers a pattern input instead of (or in addition to) the usual length/range controls; every other type's `pattern` is either unset or auto-applied from DEFAULT_FIELD_PATTERNS. */
+  hasCustomPattern: boolean;
   /**
    * Which validation rules the builder offers for this type: "length" for
    * minLength/maxLength/pattern on a text-like answer, "range" for
@@ -39,31 +44,37 @@ export interface FieldTypeMeta {
 }
 
 export const FIELD_TYPE_META: Record<FormFieldType, FieldTypeMeta> = {
-  SHORT_TEXT: { type: "SHORT_TEXT", label: "Text Box", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
-  LONG_TEXT: { type: "LONG_TEXT", label: "Paragraph", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
-  EMAIL: { type: "EMAIL", label: "Email", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
-  PHONE: { type: "PHONE", label: "Phone", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
-  LINK: { type: "LINK", label: "Link", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "length" },
-  PASSWORD: { type: "PASSWORD", label: "Password", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: true, validation: "length" },
-  NUMBER: { type: "NUMBER", label: "Number", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "range" },
-  DATE: { type: "DATE", label: "Date", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
-  DROPDOWN: { type: "DROPDOWN", label: "Dropdown", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
-  RADIO: { type: "RADIO", label: "Radio", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
-  CHECKBOX: { type: "CHECKBOX", label: "Checkboxes", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, validation: "none" },
-  FILE_SINGLE: { type: "FILE_SINGLE", label: "File", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, validation: "none" },
-  FILE_MULTI: { type: "FILE_MULTI", label: "Files", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, validation: "none" },
-  SECTION_HEADING: { type: "SECTION_HEADING", label: "Heading", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false, validation: "none" },
-  PAGE_BREAK: { type: "PAGE_BREAK", label: "Page Break", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false, validation: "none" },
+  SHORT_TEXT: { type: "SHORT_TEXT", label: "Text Box", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "length" },
+  LONG_TEXT: { type: "LONG_TEXT", label: "Paragraph", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "length" },
+  EMAIL: { type: "EMAIL", label: "Email", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "length" },
+  PHONE: { type: "PHONE", label: "Phone", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "length" },
+  LINK: { type: "LINK", label: "Link", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "length" },
+  PASSWORD: { type: "PASSWORD", label: "Password", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: true, hasCustomPattern: false, validation: "length" },
+  NUMBER: { type: "NUMBER", label: "Number", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "range" },
+  DECIMAL: { type: "DECIMAL", label: "Decimal", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "range" },
+  CURRENCY: { type: "CURRENCY", label: "Currency", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "range" },
+  DATE: { type: "DATE", label: "Date", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "none" },
+  DROPDOWN: { type: "DROPDOWN", label: "Dropdown", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "none" },
+  RADIO: { type: "RADIO", label: "Radio", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "none" },
+  CHECKBOX: { type: "CHECKBOX", label: "Checkboxes", hasOptions: true, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "none" },
+  FILE_SINGLE: { type: "FILE_SINGLE", label: "File", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "none" },
+  FILE_MULTI: { type: "FILE_MULTI", label: "Files", hasOptions: false, isFile: true, isLayoutOnly: false, isSensitive: false, hasCustomPattern: false, validation: "none" },
+  SECTION_HEADING: { type: "SECTION_HEADING", label: "Heading", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false, hasCustomPattern: false, validation: "none" },
+  PAGE_BREAK: { type: "PAGE_BREAK", label: "Page Break", hasOptions: false, isFile: false, isLayoutOnly: true, isSensitive: false, hasCustomPattern: false, validation: "none" },
+  REGEX: { type: "REGEX", label: "Regex", hasOptions: false, isFile: false, isLayoutOnly: false, isSensitive: false, hasCustomPattern: true, validation: "length" },
 };
 
 export const FIELD_PALETTE: FormFieldType[] = [
   "SHORT_TEXT",
   "LONG_TEXT",
+  "REGEX",
   "EMAIL",
   "PHONE",
   "LINK",
   "PASSWORD",
   "NUMBER",
+  "DECIMAL",
+  "CURRENCY",
   "DATE",
   "DROPDOWN",
   "RADIO",
@@ -169,7 +180,7 @@ export interface FieldValidationRules {
  * first problem found, or null when the value is acceptable.
  */
 export function validateFieldValue(field: FieldValidationRules, value: string): string | null {
-  if (field.type === "NUMBER") {
+  if (field.type === "NUMBER" || field.type === "DECIMAL" || field.type === "CURRENCY") {
     const n = Number(value);
     if (Number.isNaN(n)) return `"${field.label}" must be a number`;
     if (field.minValue != null && n < field.minValue) return `"${field.label}" must be at least ${field.minValue}`;

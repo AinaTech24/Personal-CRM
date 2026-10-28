@@ -34,6 +34,7 @@ import {
   IconCheck,
   IconChevronDown,
   IconChevronSquare,
+  IconCode,
   IconCopy,
   IconExternalLink,
   IconFile,
@@ -54,6 +55,7 @@ import {
   IconTextBox,
   IconTrash,
   IconUpload,
+  IconWallet,
   type IconProps,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -67,6 +69,8 @@ const FIELD_TYPE_ICON: Record<FormFieldType, (props: IconProps) => React.JSX.Ele
   LINK: IconLink,
   PASSWORD: IconKey,
   NUMBER: IconHash,
+  DECIMAL: IconHash,
+  CURRENCY: IconWallet,
   DATE: IconCalendar,
   DROPDOWN: IconChevronSquare,
   RADIO: IconRadioButton,
@@ -75,6 +79,7 @@ const FIELD_TYPE_ICON: Record<FormFieldType, (props: IconProps) => React.JSX.Ele
   FILE_MULTI: IconFiles,
   SECTION_HEADING: IconHeading,
   PAGE_BREAK: IconPageBreak,
+  REGEX: IconCode,
 };
 
 interface FieldRow {
@@ -91,6 +96,7 @@ interface FieldRow {
   minValue: number | null;
   maxValue: number | null;
   pattern: string | null;
+  currencySymbol: string | null;
   conditionFieldId: string | null;
   conditionOperator: string | null;
   conditionValue: string | null;
@@ -247,6 +253,28 @@ function FieldSettings({ field, allFields, onChange }: { field: FieldRow; allFie
               </Button>
             </div>
           </div>
+        </div>
+      )}
+      {meta.hasCustomPattern && (
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <Label className="text-xs">Pattern (regex)</Label>
+          <Input
+            value={field.pattern ?? ""}
+            onChange={(e) => onChange({ pattern: e.target.value })}
+            placeholder="e.g. ^[A-Z]{2}\d{4}$"
+            className="font-mono"
+          />
+        </div>
+      )}
+      {field.type === "CURRENCY" && (
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Currency symbol</Label>
+          <Input
+            value={field.currencySymbol ?? ""}
+            onChange={(e) => onChange({ currencySymbol: e.target.value })}
+            placeholder="₹"
+            className="w-20"
+          />
         </div>
       )}
       {(meta.validation !== "none" || !meta.isLayoutOnly) && (

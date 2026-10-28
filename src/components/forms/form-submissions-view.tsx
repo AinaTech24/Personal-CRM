@@ -121,6 +121,9 @@ function EditAnswerField({
       return <Input type="password" autoComplete="off" value={value} onChange={(e) => onChange(field.id, e.target.value)} />;
     case "NUMBER":
       return <Input type="number" value={value} onChange={(e) => onChange(field.id, e.target.value)} />;
+    case "DECIMAL":
+    case "CURRENCY":
+      return <Input type="number" step="any" value={value} onChange={(e) => onChange(field.id, e.target.value)} />;
     case "DATE":
       return <Input type="date" value={value} onChange={(e) => onChange(field.id, e.target.value)} />;
     case "DROPDOWN":
