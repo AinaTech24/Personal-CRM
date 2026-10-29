@@ -1001,6 +1001,14 @@ export function ChatView() {
         }}
         onDragLeave={() => setDragOverThread(false)}
         onDrop={onThreadDrop}
+        // A blanket fallback for the whole panel — the browser's own menu
+        // should never show anywhere in here. The message bubble and pinned
+        // bar already open their own menu on right-click (and call this
+        // same preventDefault first); this just catches everything else —
+        // a sticky date separator overlapping a message while scrolling,
+        // an avatar, the header, or plain empty space — so right-clicking
+        // there silently does nothing instead of popping the OS menu.
+        onContextMenu={(e) => e.preventDefault()}
       >
         {/* Dropping anywhere on the open chat attaches the file(s) here — same as using the paperclip. */}
         {dragOverThread && (
