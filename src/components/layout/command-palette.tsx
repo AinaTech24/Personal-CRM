@@ -27,6 +27,7 @@ import {
   IconHistory,
   IconWallet,
   IconLayoutGrid,
+  IconTrash,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -140,6 +141,7 @@ const RECENT_MODULES: ModuleDef[] = [
   { href: "/leave", label: "My Leave", icon: IconCalendar },
   { href: "/expenses", label: "My Expenses", icon: IconWallet },
   { href: "/activity", label: "My Activity", icon: IconHistory },
+  { href: "/trash", label: "Trash", icon: IconTrash },
   { href: "/clients", label: "Clients", icon: IconBuilding },
   { href: "/calls", label: "Calls", icon: IconPhone },
   { href: "/forms", label: "Forms", icon: IconLayoutGrid },

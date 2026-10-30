@@ -79,7 +79,7 @@ export async function GET() {
         take: 50,
       }),
       db.lead.findMany({
-        where: { assignedToId: user.id, status: { notIn: ["WON", "LOST"] } },
+        where: { assignedToId: user.id, status: { notIn: ["WON", "LOST"] }, deletedAt: null },
         select: { id: true, name: true, company: true, status: true, priority: true },
         orderBy: { updatedAt: "desc" },
         take: 5,

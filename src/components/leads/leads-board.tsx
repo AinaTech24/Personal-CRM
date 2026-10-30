@@ -695,7 +695,8 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete ${selectedIds.size} lead${selectedIds.size === 1 ? "" : "s"}?`}
-        description="This will permanently delete the selected lead(s) along with their notes, reminders, and activity history. This action cannot be undone."
+        description="This moves the selected lead(s) to Trash, where they'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={handleBulkDelete}
       />
 
@@ -733,7 +734,8 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         open={deleteTarget !== null}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title={`Delete "${deleteTarget?.name}"?`}
-        description="This permanently deletes the lead along with its notes, reminders, and activity history. This cannot be undone."
+        description="This moves the lead to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={async () => {
           if (deleteTarget) await deleteLead(deleteTarget.id);
         }}

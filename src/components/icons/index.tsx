@@ -296,6 +296,16 @@ export function IconTrash(props: IconProps) {
   );
 }
 
+/** A counter-clockwise rewind arrow — used for "Restore" (Trash). */
+export function IconRestore(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v5h5" />
+    </svg>
+  );
+}
+
 export function IconDownload(props: IconProps) {
   return (
     <svg {...base(props)}>

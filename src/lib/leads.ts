@@ -5,6 +5,7 @@ import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-sto
 import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
+import { TRASH_RETENTION_DAYS, trashExpiresAt, type TrashActionResult, type TrashItem } from "@/lib/trash-types";
 
 /** Whether `lead` belongs to someone on the caller's Social Media team (creator or assignee). */
 function isSocialMediaTeamLead(lead: { createdById: string; assignedToId: string | null }, teamUserIds: string[]) {
@@ -14,7 +15,9 @@ function isSocialMediaTeamLead(lead: { createdById: string; assignedToId: string
 /** `action` is READ for viewing, UPDATE for editing — only which action a Leads module grant must carry to widen access; ownership/team access is unaffected by it. */
 export async function getLeadForUser(user: PermissionUser, leadId: string, action: Extract<ModuleAction, "READ" | "UPDATE"> = "READ") {
   const lead = await db.lead.findUnique({ where: { id: leadId } });
-  if (!lead) return null;
+  // A trashed lead is only reachable through the Trash routes (restore/purge),
+  // never through the normal view/edit paths — same as if it didn't exist.
+  if (!lead || lead.deletedAt) return null;
   if (await isModuleBlocked(user, "LEADS")) return "forbidden" as const;
   if (canManageRecord(user, lead)) return lead;
 
@@ -66,16 +69,24 @@ export async function canDeleteLead(user: PermissionUser, lead: { createdById: s
  * an Admin, bypassing their usual `{}` — for the Social Media Team console's
  * Leads tab, which is a narrower, team-only view regardless of who's looking.
  */
+/**
+ * Always excludes a soft-deleted (Trash) lead unless `trashed` is set — every
+ * normal list/search/dashboard query goes through this, so none of them had
+ * to be individually taught about the Trash module. Pass `trashed: true` for
+ * the Trash page's own query, which wants exactly the opposite set.
+ */
 export function leadListWhere(
   user: PermissionUser,
   teamUserIds?: string[] | null,
   teamOnly?: boolean,
-  scope?: "all" | { departmentId: string } | null
+  scope?: "all" | { departmentId: string } | null,
+  opts?: { trashed?: boolean }
 ) {
+  const deletedAtWhere = opts?.trashed ? { not: null } : null;
   if (teamOnly && teamUserIds) {
-    return { OR: [{ assignedToId: { in: teamUserIds } }, { createdById: { in: teamUserIds } }] };
+    return { AND: [{ deletedAt: deletedAtWhere }, { OR: [{ assignedToId: { in: teamUserIds } }, { createdById: { in: teamUserIds } }] }] };
   }
-  if (isSuperAdmin(user) || isAdmin(user) || scope === "all") return {};
+  if (isSuperAdmin(user) || isAdmin(user) || scope === "all") return { deletedAt: deletedAtWhere };
   const or: object[] = [
     { departmentId: null },
     { assignedToId: user.id },
@@ -87,7 +98,7 @@ export function leadListWhere(
   if (scope && typeof scope === "object") {
     or.push({ departmentId: scope.departmentId });
   }
-  return { OR: or };
+  return { AND: [{ deletedAt: deletedAtWhere }, { OR: or }] };
 }
 
 /**
@@ -136,4 +147,57 @@ export async function assignableUsersFor(user: PermissionUser, opts?: { allActiv
     },
     orderBy: { name: "asc" },
   });
+}
+
+/* ------------------------------- Trash ------------------------------- */
+
+/** Every trashed lead this user can see — same visibility rule as the live list, just the opposite set of `deletedAt`. */
+export async function listTrashedLeadsFor(user: PermissionUser): Promise<TrashItem[]> {
+  if (await isModuleBlocked(user, "LEADS")) return [];
+  const scope = await moduleAccessScope(user, "LEADS", "READ");
+  const teamUserIds = await socialMediaTeamScopeFor(user);
+  const leads = await db.lead.findMany({
+    where: leadListWhere(user, teamUserIds, false, scope, { trashed: true }),
+    include: { deletedBy: { select: { id: true, name: true } } },
+    orderBy: { deletedAt: "desc" },
+  });
+  return leads.map((l) => ({
+    id: l.id,
+    module: "leads",
+    moduleLabel: "Leads",
+    title: l.name,
+    subtitle: l.company,
+    deletedAt: l.deletedAt!.toISOString(),
+    deletedBy: l.deletedBy,
+    expiresAt: trashExpiresAt(l.deletedAt!).toISOString(),
+  }));
+}
+
+/** Clears the trash flag, putting the lead back exactly as it was — nothing about it was ever actually touched while trashed. */
+export async function restoreLead(user: PermissionUser, leadId: string): Promise<TrashActionResult> {
+  const lead = await db.lead.findUnique({ where: { id: leadId } });
+  if (!lead || !lead.deletedAt) return "not_found";
+  if (!(await canDeleteLead(user, lead))) return "forbidden";
+
+  const restored = await db.lead.update({ where: { id: leadId }, data: { deletedAt: null, deletedById: null } });
+  await db.leadActivity.create({ data: { leadId, actorId: user.id, action: "restored" } });
+  broadcastLeadChange("lead_created", restored);
+  return "ok";
+}
+
+/** Same permission as deleting it in the first place — if you could trash it, you can also finish emptying it. */
+export async function purgeLead(user: PermissionUser, leadId: string): Promise<TrashActionResult> {
+  const lead = await db.lead.findUnique({ where: { id: leadId } });
+  if (!lead || !lead.deletedAt) return "not_found";
+  if (!(await canDeleteLead(user, lead))) return "forbidden";
+
+  await db.lead.delete({ where: { id: leadId } });
+  return "ok";
+}
+
+/** The 30-day auto-purge job's actual work — deletes every lead trashed longer ago than the retention window allows. */
+export async function purgeExpiredLeads(): Promise<number> {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await db.lead.deleteMany({ where: { deletedAt: { lte: cutoff } } });
+  return count;
 }

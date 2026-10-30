@@ -34,7 +34,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const [leads, tasks, projects, meetings, quotations, invoices, attendance] = await Promise.all([
     db.lead.findMany({
-      where: { assignedToId: id },
+      where: { assignedToId: id, deletedAt: null },
       select: { id: true, name: true, company: true, status: true, priority: true, createdAt: true },
       orderBy: { createdAt: "desc" },
       take: 200,

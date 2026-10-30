@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
   // a department changes the whole panel consistently, not just the table.
   const departmentId = req.nextUrl.searchParams.get("department");
   const userWhere = departmentId ? { departmentId } : undefined;
-  const leadWhere = departmentId ? { departmentId } : undefined;
+  // Trashed leads are excluded from every count here, same as the live list.
+  const leadWhere = departmentId ? { departmentId, deletedAt: null } : { deletedAt: null };
   // Tasks have no departmentId column — a department's tasks are whichever
   // have an assignee or creator that belongs to it.
   const taskWhere = departmentId

@@ -157,7 +157,7 @@ export async function PATCH(req: NextRequest) {
   if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   const leadsScope = await moduleAccessScope(user, "LEADS", "UPDATE");
-  const leads = await db.lead.findMany({ where: { id: { in: parsed.data.ids } } });
+  const leads = await db.lead.findMany({ where: { id: { in: parsed.data.ids }, deletedAt: null } });
   const editable = leads.filter(
     (l) => leadsScope === "all" || (leadsScope !== null && l.departmentId === leadsScope.departmentId) || canManageRecord(user, l)
   );
@@ -190,6 +190,7 @@ export async function PATCH(req: NextRequest) {
 
 const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });
 
+/** Soft delete — moves every deletable lead to Trash rather than removing it. */
 export async function DELETE(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -198,12 +199,15 @@ export async function DELETE(req: NextRequest) {
   const parsed = bulkDeleteSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
-  const leads = await db.lead.findMany({ where: { id: { in: parsed.data.ids } } });
+  const leads = await db.lead.findMany({ where: { id: { in: parsed.data.ids }, deletedAt: null } });
   const deletableFlags = await Promise.all(leads.map((l) => canDeleteLead(user, l)));
   const deletable = leads.filter((_l, i) => deletableFlags[i]);
 
   if (deletable.length > 0) {
-    await db.lead.deleteMany({ where: { id: { in: deletable.map((l) => l.id) } } });
+    await db.lead.updateMany({
+      where: { id: { in: deletable.map((l) => l.id) } },
+      data: { deletedAt: new Date(), deletedById: user.id },
+    });
     for (const lead of deletable) broadcastLeadChange("lead_deleted", lead);
   }
 

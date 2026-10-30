@@ -46,6 +46,7 @@ import {
   IconNotes,
   IconBuildingCog,
   IconPencil,
+  IconTrash,
 } from "@/components/icons";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -95,6 +96,7 @@ const mainNav: NavItem[] = [
   { href: "/leave", label: "My Leave", icon: IconCalendar, group: "mywork" },
   { href: "/expenses", label: "My Expenses", icon: IconWallet, group: "finance" },
   { href: "/activity", label: "Activity Log", icon: IconHistory, group: "mywork" },
+  { href: "/trash", label: "Trash", icon: IconTrash, group: "mywork" },
 ];
 
 const adminNav: NavItem[] = [
@@ -743,8 +745,10 @@ export function Sidebar({
     : mainNav.filter((item) => {
         // "My Activity" is a personal record of one's own actions, not a
         // toggleable module — an admin hiding it would just be hiding the
-        // one place a regular user can see their own history.
-        if (item.href === "/" || item.href === "/activity") return true;
+        // one place a regular user can see their own history. Trash is the
+        // same kind of baseline feature everyone keeps regardless: it only
+        // ever shows what you could already see live, just deleted.
+        if (item.href === "/" || item.href === "/activity" || item.href === "/trash") return true;
         if (!hiddenModules.includes(item.href.replace(/^\//, ""))) return true;
         const grantedModule = MAIN_NAV_HREF_MODULE[item.href];
         return !!grantedModule && managedModuleSet.has(grantedModule);
