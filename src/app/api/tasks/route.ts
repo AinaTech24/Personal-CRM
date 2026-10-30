@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
 }
 
 const bodySchema = z.object({
-  title: z.string().min(1),
+  title: z.string().min(1).max(200),
   description: z.string().optional().nullable(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
   status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELLED"]).default("TODO"),

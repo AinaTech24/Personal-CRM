@@ -35,6 +35,7 @@ import {
   type TaskSummary,
 } from "@/components/tasks/types";
 import { cn } from "@/lib/utils";
+import { PRIORITY_VARIANT } from "@/lib/priority";
 
 /** How many tasks a single fetch loads — both the initial page and each "Load more". */
 const PAGE_SIZE = 50;
@@ -45,13 +46,6 @@ const VIEW_OPTIONS = [
   { value: "pipeline", label: "Pipeline view" },
   { value: "list", label: "List view" },
 ];
-
-const PRIORITY_VARIANT = {
-  LOW: "secondary",
-  MEDIUM: "default",
-  HIGH: "warning",
-  URGENT: "destructive",
-} as const;
 
 /** Builds the Tasks list query string — shared by the initial/filtered fetch and "Load more", so both always agree on what's currently being searched for. */
 function tasksSearchParams(opts: {

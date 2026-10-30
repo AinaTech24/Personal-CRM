@@ -1,4 +1,5 @@
 import { differenceInCalendarDays, differenceInCalendarWeeks, differenceInCalendarMonths, differenceInCalendarYears } from "date-fns";
+import { istShift } from "@/lib/attendance";
 
 export interface RecencyLabel {
   text: string;
@@ -8,6 +9,23 @@ export interface RecencyLabel {
 
 function plural(n: number, unit: string) {
   return `${n} ${unit}${n === 1 ? "" : "s"} ago`;
+}
+
+/**
+ * `instant`'s IST calendar date (year/month/day), re-packed into a Date
+ * constructed from those fields rather than `instant` itself. date-fns'
+ * `differenceInCalendar*` functions read a Date's *local* Y/M/D — on a
+ * server whose own process timezone isn't IST (any local dev machine, or
+ * production if the one-time `timedatectl set-timezone Asia/Kolkata` step
+ * is ever missed on a redeploy), calling them on `instant` directly would
+ * silently use the wrong calendar day. Building a fresh Date from the
+ * IST-shifted Y/M/D instead means the same local Y/M/D goes in as comes back
+ * out, however `differenceInCalendar*` reads it — correct regardless of the
+ * server's own timezone.
+ */
+function istCalendarDate(instant: Date): Date {
+  const shifted = istShift(instant);
+  return new Date(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate());
 }
 
 /**
@@ -22,18 +40,21 @@ export function recencyLabel(createdAt: string | Date, now: Date = new Date()): 
   const created = typeof createdAt === "string" ? new Date(createdAt) : createdAt;
   if (Number.isNaN(created.getTime())) return null;
 
-  const days = differenceInCalendarDays(now, created);
+  const todayIst = istCalendarDate(now);
+  const createdIst = istCalendarDate(created);
+
+  const days = differenceInCalendarDays(todayIst, createdIst);
   if (days < 0) return null;
   if (days === 0) return { text: "New", isNew: true };
   if (days === 1) return { text: "Yesterday", isNew: false };
   if (days < 7) return { text: plural(days, "day"), isNew: false };
 
-  const weeks = differenceInCalendarWeeks(now, created, { weekStartsOn: 1 });
+  const weeks = differenceInCalendarWeeks(todayIst, createdIst, { weekStartsOn: 1 });
   if (weeks < 5) return { text: plural(weeks, "week"), isNew: false };
 
-  const months = differenceInCalendarMonths(now, created);
+  const months = differenceInCalendarMonths(todayIst, createdIst);
   if (months < 12) return { text: plural(months, "month"), isNew: false };
 
-  const years = differenceInCalendarYears(now, created);
+  const years = differenceInCalendarYears(todayIst, createdIst);
   return { text: plural(years, "year"), isNew: false };
 }

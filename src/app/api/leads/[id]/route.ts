@@ -35,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 const patchSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: z.string().min(1).max(200).optional(),
   company: z.string().nullable().optional(),
   email: z.string().email().nullable().optional().or(z.literal("")),
   phone: z.string().nullable().optional(),

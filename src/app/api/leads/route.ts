@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
 }
 
 const bodySchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1).max(200),
   company: z.string().optional().nullable(),
   email: z.string().email().optional().or(z.literal("")).nullable(),
   phone: z.string().optional().nullable(),
