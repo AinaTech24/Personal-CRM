@@ -3,6 +3,7 @@ import { listTrashedLeadsFor, restoreLead, purgeLead } from "@/lib/leads";
 import { listTrashedTasksFor, restoreTask, purgeTask } from "@/lib/tasks";
 import { listTrashedMeetingsFor, restoreMeeting, purgeMeeting } from "@/lib/meetings";
 import { listTrashedProjectsFor, restoreProject, purgeProject } from "@/lib/projects";
+import { listTrashedNotesFor, restoreNote, purgeNote } from "@/lib/notes";
 import { TRASH_MODULE_KEYS, TRASH_MODULE_LABEL, type TrashActionResult, type TrashItem, type TrashModuleKey } from "@/lib/trash-types";
 
 export { TRASH_MODULE_KEYS, TRASH_MODULE_LABEL, type TrashItem, type TrashModuleKey };
@@ -24,6 +25,7 @@ const TRASH_PROVIDERS: Record<TrashModuleKey, TrashProvider> = {
   tasks: { list: listTrashedTasksFor, restore: restoreTask, purge: purgeTask },
   meetings: { list: listTrashedMeetingsFor, restore: restoreMeeting, purge: purgeMeeting },
   projects: { list: listTrashedProjectsFor, restore: restoreProject, purge: purgeProject },
+  notes: { list: listTrashedNotesFor, restore: restoreNote, purge: purgeNote },
 };
 
 export function trashProviderFor(module: string): TrashProvider | null {

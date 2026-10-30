@@ -87,8 +87,14 @@ model Note {
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?       @relation("NoteDeletedBy", fields: [deletedById], references: [id])
+
   @@index([authorId])
   @@index([departmentId])
+  @@index([deletedAt])
 }
 
 /// One row per (user, module), company-wide — the same shape as CrmMember
@@ -280,6 +286,7 @@ model User {
   passwordSharesGiven              PasswordEntryShare[]        @relation("PasswordEntrySharedBy")
   passwordEntryActivities          PasswordEntryActivity[]
   notesCreated                     Note[]                      @relation("NoteAuthor")
+  notesDeleted                     Note[]                      @relation("NoteDeletedBy")
 }
 
 /// A browser/device push endpoint, so a user can be notified about a new

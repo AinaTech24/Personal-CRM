@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
 
 const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });
 
-/** Deletes every note in `ids` the caller is actually allowed to delete, silently skipping the rest rather than failing the whole batch. */
+/** Moves every note in `ids` the caller is actually allowed to delete to Trash, silently skipping the rest rather than failing the whole batch. */
 export async function DELETE(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -136,11 +136,14 @@ export async function DELETE(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
   const scope = await moduleAccessScope(user, "NOTES", "DELETE");
-  const notes = await db.note.findMany({ where: { id: { in: parsed.data.ids } } });
+  const notes = await db.note.findMany({ where: { id: { in: parsed.data.ids }, deletedAt: null } });
   const deletable = notes.filter((n) => canManageNote(user, n, scope));
 
   if (deletable.length > 0) {
-    await db.note.deleteMany({ where: { id: { in: deletable.map((n) => n.id) } } });
+    await db.note.updateMany({
+      where: { id: { in: deletable.map((n) => n.id) } },
+      data: { deletedAt: new Date(), deletedById: user.id },
+    });
     for (const note of deletable) broadcastNoteChange("note_deleted", note);
   }
 

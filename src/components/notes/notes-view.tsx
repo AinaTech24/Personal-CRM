@@ -604,7 +604,11 @@ export function NotesView() {
         open={!!deleting}
         onOpenChange={(v) => !v && setDeleting(null)}
         title="Delete this note?"
-        description={deleting ? `"${deleting.title || "Untitled note"}" will be permanently deleted.` : ""}
+        description={
+          deleting
+            ? `"${deleting.title || "Untitled note"}" moves to Trash, where it'll stay recoverable for 30 days before being permanently deleted.`
+            : ""
+        }
         confirmLabel="Delete"
         onConfirm={confirmDelete}
       />
@@ -613,7 +617,7 @@ export function NotesView() {
         open={bulkDeleteConfirm}
         onOpenChange={setBulkDeleteConfirm}
         title={`Delete ${selectedIds.size} note${selectedIds.size === 1 ? "" : "s"}?`}
-        description="These notes will be permanently deleted. Any you don't actually have delete access to will be skipped."
+        description="These notes move to Trash, where they'll stay recoverable for 30 days before being permanently deleted. Any you don't actually have delete access to will be skipped."
         confirmLabel="Delete"
         onConfirm={handleBulkDelete}
       />

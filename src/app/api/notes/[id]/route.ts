@@ -42,8 +42,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (await isModuleBlocked(user, "NOTES")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const existing = await db.note.findUnique({ where: { id }, select: { authorId: true, departmentId: true, updatedAt: true } });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const existing = await db.note.findUnique({ where: { id }, select: { authorId: true, departmentId: true, updatedAt: true, deletedAt: true } });
+  // A trashed note is only reachable through the Trash routes (restore/purge).
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const scope = await moduleAccessScope(user, "NOTES", "UPDATE");
   if (!canManageNote(user, existing, scope)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -78,6 +79,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ note: { ...note, tags: parseTags(note.tags), canManage: true } });
 }
 
+/** Soft delete — moves the note to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -85,13 +87,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (await isModuleBlocked(user, "NOTES")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const existing = await db.note.findUnique({ where: { id }, select: { authorId: true, departmentId: true } });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const existing = await db.note.findUnique({ where: { id }, select: { authorId: true, departmentId: true, deletedAt: true } });
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const scope = await moduleAccessScope(user, "NOTES", "DELETE");
   if (!canManageNote(user, existing, scope)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
-    await db.note.delete({ where: { id } });
+    await db.note.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   } catch (err) {
     // Already gone (e.g. a second delete click racing the first) — same end
     // state as a successful delete, not a real failure.

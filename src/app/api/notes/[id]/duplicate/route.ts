@@ -18,7 +18,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const existing = await db.note.findUnique({ where: { id } });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const scope = await moduleAccessScope(user, "NOTES", "UPDATE");
   if (!canManageNote(user, existing, scope)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
