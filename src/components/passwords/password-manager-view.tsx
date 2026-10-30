@@ -106,6 +106,8 @@ export function PasswordManagerView() {
   const [users, setUsers] = useState<PersonRef[]>([]);
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [query, setQuery] = useState("");
+  /** Admin-only — filters the (already company-wide) list down to one person's own added entries. */
+  const [creatorFilter, setCreatorFilter] = useState("");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [openSeq, setOpenSeq] = useState(0);
@@ -149,16 +151,27 @@ export function PasswordManagerView() {
   }, [load]);
 
   const filtered = useMemo(() => {
+    if (!entries) return [];
     const q = query.trim().toLowerCase();
-    if (!q || !entries) return entries ?? [];
-    return entries.filter(
-      (e) =>
+    return entries.filter((e) => {
+      if (creatorFilter && e.createdById !== creatorFilter) return false;
+      if (!q) return true;
+      return (
         e.label.toLowerCase().includes(q) ||
         (e.link ?? "").toLowerCase().includes(q) ||
         (e.description ?? "").toLowerCase().includes(q) ||
         (e.username ?? "").toLowerCase().includes(q)
-    );
-  }, [entries, query]);
+      );
+    });
+  }, [entries, query, creatorFilter]);
+
+  /** Who's shown in the "Added by" filter — only people who've actually added something, sorted by name, not the full company roster. */
+  const creatorOptions = useMemo(() => {
+    if (!entries) return [];
+    const byId = new Map<string, PersonRef>();
+    for (const e of entries) byId.set(e.createdById, e.createdBy);
+    return [...byId.values()].sort((a, b) => personName(a).localeCompare(personName(b)));
+  }, [entries]);
 
   function openCreate() {
     setEditing(null);
@@ -235,6 +248,15 @@ export function PasswordManagerView() {
           </HelpDialog>
         </div>
         <div className="flex items-center gap-2">
+          {me?.isAdmin && creatorOptions.length > 0 && (
+            <Dropdown
+              size="sm"
+              value={creatorFilter}
+              onChange={setCreatorFilter}
+              options={[{ value: "", label: "Everyone" }, ...creatorOptions.map((u) => ({ value: u.id, label: personName(u) }))]}
+              className="w-40"
+            />
+          )}
           {entries && entries.length > 0 && (
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search..." className="w-48" />
           )}
@@ -245,6 +267,13 @@ export function PasswordManagerView() {
           </Tooltip>
         </div>
       </div>
+
+      {entries && entries.length > 0 && (
+        <p className="-mt-3 text-xs text-muted-foreground">
+          {me?.isAdmin ? "Total" : "Showing"} {filtered.length} password{filtered.length === 1 ? "" : "s"}
+          {filtered.length !== entries.length && ` of ${entries.length}`}
+        </p>
+      )}
 
       {entries === null ? (
         <div className="flex min-h-[40vh] flex-1 items-center justify-center">
