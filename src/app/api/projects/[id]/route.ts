@@ -156,6 +156,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ project });
 }
 
+/** Soft delete — moves the project to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -168,7 +169,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Only the creator or an admin can delete this project" }, { status: 403 });
   }
 
-  await db.project.delete({ where: { id } });
+  await db.project.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   broadcastProjectChange(
     "project_deleted",
     access,

@@ -121,7 +121,7 @@ export async function PATCH(req: NextRequest) {
 
   const projectsScope = await moduleAccessScope(user, "PROJECTS", "UPDATE");
   const projects = await db.project.findMany({
-    where: { id: { in: parsed.data.ids } },
+    where: { id: { in: parsed.data.ids }, deletedAt: null },
     include: { members: { select: { userId: true } } },
   });
   // Authorization is strictly about the ACTOR's own relationship to each
@@ -179,6 +179,7 @@ export async function PATCH(req: NextRequest) {
 
 const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });
 
+/** Soft delete — moves every deletable project to Trash rather than removing it. */
 export async function DELETE(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -188,14 +189,17 @@ export async function DELETE(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
   const projects = await db.project.findMany({
-    where: { id: { in: parsed.data.ids } },
+    where: { id: { in: parsed.data.ids }, deletedAt: null },
     include: { members: { select: { userId: true } } },
   });
   const deletableFlags = await Promise.all(projects.map((p) => canDeleteProject(user, p)));
   const deletable = projects.filter((_p, i) => deletableFlags[i]);
 
   if (deletable.length > 0) {
-    await db.project.deleteMany({ where: { id: { in: deletable.map((p) => p.id) } } });
+    await db.project.updateMany({
+      where: { id: { in: deletable.map((p) => p.id) } },
+      data: { deletedAt: new Date(), deletedById: user.id },
+    });
     for (const project of deletable) {
       broadcastProjectChange(
         "project_deleted",

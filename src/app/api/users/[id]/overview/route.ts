@@ -46,7 +46,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       take: 200,
     }),
     db.project.findMany({
-      where: { OR: [{ assignedToId: id }, { members: { some: { userId: id } } }] },
+      where: { OR: [{ assignedToId: id }, { members: { some: { userId: id } } }], deletedAt: null },
       select: { id: true, name: true, status: true, progress: true, createdAt: true },
       orderBy: { createdAt: "desc" },
       take: 200,

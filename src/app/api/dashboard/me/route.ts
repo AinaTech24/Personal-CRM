@@ -97,13 +97,13 @@ export async function GET() {
         take: 5,
       }),
       db.project.findMany({
-        where: { OR: [{ assignedToId: user.id }, { members: { some: { userId: user.id } } }] },
+        where: { OR: [{ assignedToId: user.id }, { members: { some: { userId: user.id } } }], deletedAt: null },
         select: { id: true, name: true, status: true, progress: true, endDate: true },
         orderBy: { updatedAt: "desc" },
         take: 4,
       }),
       db.project.count({
-        where: { OR: [{ assignedToId: user.id }, { members: { some: { userId: user.id } } }] },
+        where: { OR: [{ assignedToId: user.id }, { members: { some: { userId: user.id } } }], deletedAt: null },
       }),
       db.conversationMember.findMany({
         where: { userId: user.id },
@@ -183,7 +183,7 @@ export async function GET() {
       db.project.groupBy({
         by: ["status"],
         _count: true,
-        where: { OR: [{ assignedToId: user.id }, { members: { some: { userId: user.id } } }] },
+        where: { OR: [{ assignedToId: user.id }, { members: { some: { userId: user.id } } }], deletedAt: null },
       }),
       crmAccess
         ? db.quotation.groupBy({ by: ["status"], _count: true, where: { createdById: user.id } })

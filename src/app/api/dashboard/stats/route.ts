@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
   const taskWhere = departmentId
     ? { OR: [{ assignedTo: { departmentId } }, { createdBy: { departmentId } }], deletedAt: null }
     : { deletedAt: null };
-  const projectWhere = departmentId ? { departmentId } : undefined;
+  // Trashed projects excluded, same as leads/tasks.
+  const projectWhere = departmentId ? { departmentId, deletedAt: null } : { deletedAt: null };
   const quotationWhere = departmentId ? { departmentId } : undefined;
   const invoiceWhere = departmentId ? { departmentId } : undefined;
 

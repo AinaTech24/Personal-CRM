@@ -537,7 +537,8 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete ${selectedIds.size} project${selectedIds.size === 1 ? "" : "s"}?`}
-        description="This will permanently delete the selected project(s) along with their milestones, tasks, documents, and activity history. This action cannot be undone."
+        description="This moves the selected project(s) to Trash, where they'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={handleBulkDelete}
       />
 
@@ -575,7 +576,8 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
         open={!!deleteTarget}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title={`Delete ${deleteTarget?.name}?`}
-        description="This permanently deletes the project along with its milestones, tasks, documents, and activity history. This cannot be undone."
+        description="This moves the project to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={confirmDeleteProject}
       />
 

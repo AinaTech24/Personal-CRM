@@ -209,6 +209,7 @@ model User {
   projectsCreated        Project[]          @relation("ProjectCreatedBy")
   projectsAssigned       Project[]          @relation("ProjectAssignedTo")
   projectsAssignedTo     Project[]          @relation("ProjectAssignees")
+  projectsDeleted        Project[]          @relation("ProjectDeletedBy")
   projectMemberships     ProjectMember[]
   projectDocuments       ProjectDocument[]
   projectActivities      ProjectActivity[]
@@ -633,8 +634,14 @@ model Project {
   documents   ProjectDocument[]
   activities  ProjectActivity[]
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("ProjectDeletedBy", fields: [deletedById], references: [id])
+
   @@index([departmentId])
   @@index([status])
+  @@index([deletedAt])
 }
 
 /// Someone who contributes to a project without being on its team: a reviewer,

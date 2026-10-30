@@ -5,6 +5,7 @@ import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-sto
 import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToDepartment, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
+import { TRASH_RETENTION_DAYS, trashExpiresAt, type TrashActionResult, type TrashItem } from "@/lib/trash-types";
 
 /** Whether `project` belongs to someone on the caller's Social Media team (creator, assignee, or a member). */
 function isSocialMediaTeamProject(
@@ -24,7 +25,8 @@ export async function getProjectForUser(
     where: { id: projectId },
     include: { members: { select: { userId: true } }, assignees: { select: { id: true } } },
   });
-  if (!project) return null;
+  // A trashed project is only reachable through the Trash routes (restore/purge).
+  if (!project || project.deletedAt) return null;
   if (!isAdmin(user) && (await isModuleBlocked(user, "PROJECTS"))) return "forbidden" as const;
 
   const isMember = project.members.some((m) => m.userId === user.id);
@@ -58,12 +60,19 @@ export function projectListWhere(
   user: PermissionUser,
   teamUserIds?: string[] | null,
   teamOnly?: boolean,
-  scope?: "all" | { departmentId: string } | null
+  scope?: "all" | { departmentId: string } | null,
+  opts?: { trashed?: boolean }
 ) {
+  const deletedAtWhere = opts?.trashed ? { not: null } : null;
   if (teamOnly && teamUserIds) {
-    return { OR: [{ createdById: { in: teamUserIds } }, { members: { some: { userId: { in: teamUserIds } } } }] };
+    return {
+      AND: [
+        { deletedAt: deletedAtWhere },
+        { OR: [{ createdById: { in: teamUserIds } }, { members: { some: { userId: { in: teamUserIds } } } }] },
+      ],
+    };
   }
-  if (isAdmin(user) || scope === "all") return {};
+  if (isAdmin(user) || scope === "all") return { deletedAt: deletedAtWhere };
   const or: object[] = [
     { createdById: user.id },
     { members: { some: { userId: user.id } } },
@@ -74,7 +83,7 @@ export function projectListWhere(
   if (scope && typeof scope === "object") {
     or.push({ departmentId: scope.departmentId });
   }
-  return { OR: or };
+  return { AND: [{ deletedAt: deletedAtWhere }, { OR: or }] };
 }
 
 /**
@@ -108,4 +117,56 @@ export function broadcastProjectChange(
 
 export async function logProjectActivity(projectId: string, actorId: string, action: string, meta?: object) {
   await db.projectActivity.create({ data: { projectId, actorId, action, meta } });
+}
+
+/* ------------------------------- Trash ------------------------------- */
+
+/** Every trashed project this user can see — same visibility rule as the live list, just the opposite set of `deletedAt`. */
+export async function listTrashedProjectsFor(user: PermissionUser): Promise<TrashItem[]> {
+  if (await isModuleBlocked(user, "PROJECTS")) return [];
+  const scope = await moduleAccessScope(user, "PROJECTS", "READ");
+  const teamUserIds = await socialMediaTeamScopeFor(user);
+  const projects = await db.project.findMany({
+    where: projectListWhere(user, teamUserIds, false, scope, { trashed: true }),
+    include: { department: { select: { name: true } }, deletedBy: { select: { id: true, name: true } } },
+    orderBy: { deletedAt: "desc" },
+  });
+  return projects.map((p) => ({
+    id: p.id,
+    module: "projects",
+    moduleLabel: "Projects",
+    title: p.name,
+    subtitle: p.department.name,
+    deletedAt: p.deletedAt!.toISOString(),
+    deletedBy: p.deletedBy,
+    expiresAt: trashExpiresAt(p.deletedAt!).toISOString(),
+  }));
+}
+
+/** Clears the trash flag, putting the project back exactly as it was. */
+export async function restoreProject(user: PermissionUser, projectId: string): Promise<TrashActionResult> {
+  const project = await db.project.findUnique({ where: { id: projectId }, include: { members: { select: { userId: true } } } });
+  if (!project || !project.deletedAt) return "not_found";
+  if (!(await canDeleteProject(user, project))) return "forbidden";
+
+  const restored = await db.project.update({ where: { id: projectId }, data: { deletedAt: null, deletedById: null } });
+  broadcastProjectChange("project_created", restored, project.members.map((m) => m.userId));
+  return "ok";
+}
+
+/** Same permission as deleting it in the first place. */
+export async function purgeProject(user: PermissionUser, projectId: string): Promise<TrashActionResult> {
+  const project = await db.project.findUnique({ where: { id: projectId }, include: { members: { select: { userId: true } } } });
+  if (!project || !project.deletedAt) return "not_found";
+  if (!(await canDeleteProject(user, project))) return "forbidden";
+
+  await db.project.delete({ where: { id: projectId } });
+  return "ok";
+}
+
+/** The 30-day auto-purge job's actual work. */
+export async function purgeExpiredProjects(): Promise<number> {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await db.project.deleteMany({ where: { deletedAt: { lte: cutoff } } });
+  return count;
 }
