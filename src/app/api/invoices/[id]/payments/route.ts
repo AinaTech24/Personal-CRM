@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params;
   const invoice = await db.invoice.findUnique({ where: { id } });
-  if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!invoice || invoice.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!canAccessBillingRecord(user, invoice)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
@@ -54,7 +54,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const { id } = await params;
   const invoice = await db.invoice.findUnique({ where: { id } });
-  if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!invoice || invoice.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!canAccessBillingRecord(user, invoice)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = deleteSchema.safeParse(await req.json().catch(() => null));

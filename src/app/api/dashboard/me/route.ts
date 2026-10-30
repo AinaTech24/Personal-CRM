@@ -127,14 +127,14 @@ export async function GET() {
         : Promise.resolve(0),
       crmAccess
         ? db.invoice.findMany({
-            where: { createdById: user.id, status: { notIn: ["PAID", "CANCELLED"] } },
+            where: { createdById: user.id, status: { notIn: ["PAID", "CANCELLED"] }, deletedAt: null },
             select: { id: true, invoiceNumber: true, clientName: true, status: true, total: true },
             orderBy: { createdAt: "desc" },
             take: 5,
           })
         : Promise.resolve([]),
       crmAccess
-        ? db.invoice.count({ where: { createdById: user.id, status: { notIn: ["PAID", "CANCELLED"] } } })
+        ? db.invoice.count({ where: { createdById: user.id, status: { notIn: ["PAID", "CANCELLED"] }, deletedAt: null } })
         : Promise.resolve(0),
       crmAccess
         ? db.call.findMany({
@@ -189,7 +189,7 @@ export async function GET() {
         ? db.quotation.groupBy({ by: ["status"], _count: true, where: { createdById: user.id, deletedAt: null } })
         : Promise.resolve([]),
       crmAccess
-        ? db.invoice.groupBy({ by: ["status"], _count: true, where: { createdById: user.id } })
+        ? db.invoice.groupBy({ by: ["status"], _count: true, where: { createdById: user.id, deletedAt: null } })
         : Promise.resolve([]),
     ]);
 

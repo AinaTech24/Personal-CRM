@@ -64,7 +64,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       take: 200,
     }),
     db.invoice.findMany({
-      where: { createdById: id },
+      where: { createdById: id, deletedAt: null },
       select: { id: true, invoiceNumber: true, clientName: true, status: true, total: true, invoiceDate: true },
       orderBy: { invoiceDate: "desc" },
       take: 200,

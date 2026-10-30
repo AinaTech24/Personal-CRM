@@ -443,7 +443,8 @@ export function InvoiceDetailDialog({
         open={confirmDeleteOpen}
         onOpenChange={setConfirmDeleteOpen}
         title="Delete this invoice?"
-        description="This permanently deletes the invoice, its line items, and payment history. This cannot be undone."
+        description="This moves the invoice to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={del}
       />
     </Dialog>

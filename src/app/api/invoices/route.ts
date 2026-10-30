@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   if (await isUngrantedModuleHidden(user, "invoices")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const params = req.nextUrl.searchParams;
-  const and: object[] = [billingListWhere(user)];
+  const and: object[] = [billingListWhere(user), { deletedAt: null }];
 
   const q = params.get("q")?.trim();
   if (q) {
@@ -160,6 +160,7 @@ export async function POST(req: NextRequest) {
 
 const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });
 
+/** Soft delete — moves every deletable invoice to Trash rather than removing it. */
 export async function DELETE(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -169,11 +170,14 @@ export async function DELETE(req: NextRequest) {
   const parsed = bulkDeleteSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
-  const rows = await db.invoice.findMany({ where: { id: { in: parsed.data.ids } } });
+  const rows = await db.invoice.findMany({ where: { id: { in: parsed.data.ids }, deletedAt: null } });
   const deletable = rows.filter((inv) => canDeleteBillingRecord(user, inv));
 
   if (deletable.length > 0) {
-    await db.invoice.deleteMany({ where: { id: { in: deletable.map((inv) => inv.id) } } });
+    await db.invoice.updateMany({
+      where: { id: { in: deletable.map((inv) => inv.id) } },
+      data: { deletedAt: new Date(), deletedById: user.id },
+    });
     for (const inv of deletable) broadcastInvoiceChange("invoice_deleted", inv);
   }
 

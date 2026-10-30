@@ -411,7 +411,8 @@ export function InvoicesList() {
         open={!!deleteId}
         onOpenChange={(v) => !v && setDeleteId(null)}
         title="Delete this invoice?"
-        description="This permanently deletes the invoice, its line items, and payment history. This cannot be undone."
+        description="This moves the invoice to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={singleDelete}
       />
 
@@ -419,7 +420,8 @@ export function InvoicesList() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete ${selectedIds.size} invoice${selectedIds.size === 1 ? "" : "s"}?`}
-        description="This permanently deletes the selected invoice(s) along with their items and payment history. This cannot be undone."
+        description="This moves the selected invoice(s) to Trash, where they'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={bulkDelete}
       />
     </div>

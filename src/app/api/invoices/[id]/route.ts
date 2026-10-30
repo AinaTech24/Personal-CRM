@@ -48,7 +48,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params;
   const invoice = await loadInvoice(id);
-  if (!invoice) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!invoice || invoice.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!canAccessBillingRecord(user, invoice)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   return NextResponse.json({ invoice: serialize(invoice) });
@@ -89,7 +89,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const existing = await db.invoice.findUnique({ where: { id } });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!canAccessBillingRecord(user, existing)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
@@ -142,6 +142,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ invoice: invoice ? serialize(invoice) : null });
 }
 
+/** Soft delete — moves the invoice to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -150,10 +151,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   const { id } = await params;
   const existing = await db.invoice.findUnique({ where: { id } });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!canDeleteBillingRecord(user, existing)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  await db.invoice.delete({ where: { id } });
+  await db.invoice.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   broadcastInvoiceChange("invoice_deleted", existing);
   return NextResponse.json({ ok: true });
 }

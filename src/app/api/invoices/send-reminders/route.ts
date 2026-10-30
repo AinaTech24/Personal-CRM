@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       dueDate: { lte: new Date() },
       status: { in: ["SENT", "PARTIAL_PAYMENT", "OVERDUE"] },
       overdueReminderSentAt: null,
+      deletedAt: null,
     },
     select: { id: true, invoiceNumber: true, createdById: true, clientName: true },
   });
