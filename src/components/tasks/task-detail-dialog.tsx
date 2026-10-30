@@ -516,7 +516,8 @@ export function TaskDetailDialog({
       open={deleteConfirmOpen}
       onOpenChange={setDeleteConfirmOpen}
       title={`Delete "${headerTitle ?? "this task"}"?`}
-      description="This will permanently delete this task along with its comments and attachments. This action cannot be undone."
+      description="This moves the task to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+      confirmLabel="Delete"
       onConfirm={deleteTask}
     />
     <ConfirmDialog

@@ -35,6 +35,7 @@ import {
   type TaskSummary,
 } from "@/components/tasks/types";
 import { cn } from "@/lib/utils";
+import { PRIORITY_VARIANT } from "@/lib/priority";
 
 /** How many tasks a single fetch loads — both the initial page and each "Load more". */
 const PAGE_SIZE = 50;
@@ -45,13 +46,6 @@ const VIEW_OPTIONS = [
   { value: "pipeline", label: "Pipeline view" },
   { value: "list", label: "List view" },
 ];
-
-const PRIORITY_VARIANT = {
-  LOW: "secondary",
-  MEDIUM: "default",
-  HIGH: "warning",
-  URGENT: "destructive",
-} as const;
 
 /** Builds the Tasks list query string — shared by the initial/filtered fetch and "Load more", so both always agree on what's currently being searched for. */
 function tasksSearchParams(opts: {
@@ -627,7 +621,8 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete ${selectedIds.size} task${selectedIds.size === 1 ? "" : "s"}?`}
-        description="This will permanently delete the selected task(s) along with their comments and attachments. This action cannot be undone."
+        description="This moves the selected task(s) to Trash, where they'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={handleBulkDelete}
       />
 
@@ -635,7 +630,8 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         open={deleteTarget !== null}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title={`Delete "${deleteTarget?.title}"?`}
-        description="This permanently deletes the task along with its comments and attachments. This cannot be undone."
+        description="This moves the task to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={async () => {
           if (deleteTarget) await deleteTask(deleteTarget.id);
         }}

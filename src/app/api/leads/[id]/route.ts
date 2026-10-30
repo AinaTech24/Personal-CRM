@@ -35,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 const patchSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: z.string().min(1).max(200).optional(),
   company: z.string().nullable().optional(),
   email: z.string().email().nullable().optional().or(z.literal("")),
   phone: z.string().nullable().optional(),
@@ -174,6 +174,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ lead: convertedClientId ? { ...lead, convertedToClientId: convertedClientId } : lead, convertedClientId });
 }
 
+/** Soft delete — moves the lead to Trash rather than removing it. It's permanently purged after 30 days, or sooner via the Trash page's "Delete permanently". */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -186,7 +187,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Only the creator or an admin can delete this lead" }, { status: 403 });
   }
 
-  await db.lead.delete({ where: { id } });
+  await db.lead.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   broadcastLeadChange("lead_deleted", access);
 
   return NextResponse.json({ ok: true });

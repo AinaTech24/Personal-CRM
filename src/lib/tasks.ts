@@ -5,6 +5,7 @@ import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-sto
 import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
+import { TRASH_RETENTION_DAYS, trashExpiresAt, type TrashActionResult, type TrashItem } from "@/lib/trash-types";
 
 interface TaskAssigneeShape {
   assignedToId?: string | null;
@@ -44,7 +45,8 @@ export async function getTaskForUser(user: PermissionUser, taskId: string, actio
       assignees: { select: { id: true, departmentId: true } },
     },
   });
-  if (!task) return null;
+  // A trashed task is only reachable through the Trash routes (restore/purge).
+  if (!task || task.deletedAt) return null;
   if (await isModuleBlocked(user, "TASKS")) return "forbidden" as const;
   if (canManageTask(user, task)) return task;
 
@@ -110,18 +112,25 @@ export function taskListWhere(
   user: PermissionUser,
   teamUserIds?: string[] | null,
   teamOnly?: boolean,
-  scope?: "all" | { departmentId: string } | null
+  scope?: "all" | { departmentId: string } | null,
+  opts?: { trashed?: boolean }
 ) {
+  const deletedAtWhere = opts?.trashed ? { not: null } : null;
   if (teamOnly && teamUserIds) {
     return {
-      OR: [
-        { createdById: { in: teamUserIds } },
-        { assignedToId: { in: teamUserIds } },
-        { assignees: { some: { id: { in: teamUserIds } } } },
+      AND: [
+        { deletedAt: deletedAtWhere },
+        {
+          OR: [
+            { createdById: { in: teamUserIds } },
+            { assignedToId: { in: teamUserIds } },
+            { assignees: { some: { id: { in: teamUserIds } } } },
+          ],
+        },
       ],
     };
   }
-  if (isAdmin(user) || scope === "all") return {};
+  if (isAdmin(user) || scope === "all") return { deletedAt: deletedAtWhere };
   const or: object[] = [{ createdById: user.id }, { assignedToId: user.id }, { assignees: { some: { id: user.id } } }];
   if (teamUserIds && teamUserIds.length > 0) {
     or.push(
@@ -137,7 +146,7 @@ export function taskListWhere(
       { assignees: { some: { departmentId: scope.departmentId } } }
     );
   }
-  return { OR: or };
+  return { AND: [{ deletedAt: deletedAtWhere }, { OR: or }] };
 }
 
 export function broadcastTaskChange(
@@ -147,4 +156,63 @@ export function broadcastTaskChange(
   emitToUser(task.createdById, event, { taskId: task.id });
   for (const id of assigneeIdsOf(task)) emitToUser(id, event, { taskId: task.id });
   emitToAdmins(event, { taskId: task.id });
+}
+
+/* ------------------------------- Trash ------------------------------- */
+
+/** Every trashed task this user can see — same visibility rule as the live list, just the opposite set of `deletedAt`. */
+export async function listTrashedTasksFor(user: PermissionUser): Promise<TrashItem[]> {
+  if (await isModuleBlocked(user, "TASKS")) return [];
+  const scope = await moduleAccessScope(user, "TASKS", "READ");
+  const teamUserIds = await socialMediaTeamScopeFor(user);
+  const tasks = await db.task.findMany({
+    where: taskListWhere(user, teamUserIds, false, scope, { trashed: true }),
+    include: { deletedBy: { select: { id: true, name: true } } },
+    orderBy: { deletedAt: "desc" },
+  });
+  return tasks.map((t) => ({
+    id: t.id,
+    module: "tasks",
+    moduleLabel: "Tasks",
+    title: t.title,
+    subtitle: null,
+    deletedAt: t.deletedAt!.toISOString(),
+    deletedBy: t.deletedBy,
+    expiresAt: trashExpiresAt(t.deletedAt!).toISOString(),
+  }));
+}
+
+/** Needed by canDeleteTask's department-widening check — Tasks have no departmentId of their own. */
+const deleteCheckInclude = {
+  createdBy: { select: { departmentId: true } },
+  assignedTo: { select: { departmentId: true } },
+  assignees: { select: { id: true, departmentId: true } },
+} as const;
+
+/** Clears the trash flag, putting the task back exactly as it was. */
+export async function restoreTask(user: PermissionUser, taskId: string): Promise<TrashActionResult> {
+  const task = await db.task.findUnique({ where: { id: taskId }, include: deleteCheckInclude });
+  if (!task || !task.deletedAt) return "not_found";
+  if (!(await canDeleteTask(user, task))) return "forbidden";
+
+  const restored = await db.task.update({ where: { id: taskId }, data: { deletedAt: null, deletedById: null } });
+  broadcastTaskChange("task_created", restored);
+  return "ok";
+}
+
+/** Same permission as deleting it in the first place. */
+export async function purgeTask(user: PermissionUser, taskId: string): Promise<TrashActionResult> {
+  const task = await db.task.findUnique({ where: { id: taskId }, include: deleteCheckInclude });
+  if (!task || !task.deletedAt) return "not_found";
+  if (!(await canDeleteTask(user, task))) return "forbidden";
+
+  await db.task.delete({ where: { id: taskId } });
+  return "ok";
+}
+
+/** The 30-day auto-purge job's actual work. */
+export async function purgeExpiredTasks(): Promise<number> {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await db.task.deleteMany({ where: { deletedAt: { lte: cutoff } } });
+  return count;
 }

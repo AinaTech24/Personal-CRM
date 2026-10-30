@@ -50,6 +50,8 @@ function activityLabel(a: { action: string; meta: Record<string, unknown> | null
       return `${a.actor.name} added a note`;
     case "reminder_added":
       return `${a.actor.name} added a reminder`;
+    case "restored":
+      return `${a.actor.name} restored this lead from Trash`;
     default:
       return `${a.actor.name}: ${a.action}`;
   }

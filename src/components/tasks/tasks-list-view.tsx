@@ -6,13 +6,7 @@ import { HoverCheckbox } from "@/components/ui/checkbox";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { TASK_STATUSES, taskAssignees, type TaskSummary } from "@/components/tasks/types";
 import { cn } from "@/lib/utils";
-
-const PRIORITY_VARIANT = {
-  LOW: "secondary",
-  MEDIUM: "default",
-  HIGH: "warning",
-  URGENT: "destructive",
-} as const;
+import { PRIORITY_VARIANT } from "@/lib/priority";
 
 function statusLabel(status: string) {
   return TASK_STATUSES.find((s) => s.value === status)?.label ?? status;

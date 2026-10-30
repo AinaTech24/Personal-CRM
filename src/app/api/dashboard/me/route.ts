@@ -73,13 +73,14 @@ export async function GET() {
         where: {
           OR: [{ assignedToId: user.id }, { assignees: { some: { id: user.id } } }],
           status: { notIn: ["COMPLETED", "CANCELLED"] },
+          deletedAt: null,
         },
         select: { id: true, title: true, status: true, priority: true, dueDate: true },
         orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
         take: 50,
       }),
       db.lead.findMany({
-        where: { assignedToId: user.id, status: { notIn: ["WON", "LOST"] } },
+        where: { assignedToId: user.id, status: { notIn: ["WON", "LOST"] }, deletedAt: null },
         select: { id: true, name: true, company: true, status: true, priority: true },
         orderBy: { updatedAt: "desc" },
         take: 5,
@@ -175,9 +176,9 @@ export async function GET() {
       db.task.groupBy({
         by: ["status"],
         _count: true,
-        where: { OR: [{ assignedToId: user.id }, { assignees: { some: { id: user.id } } }] },
+        where: { OR: [{ assignedToId: user.id }, { assignees: { some: { id: user.id } } }], deletedAt: null },
       }),
-      db.lead.groupBy({ by: ["status"], _count: true, where: { assignedToId: user.id } }),
+      db.lead.groupBy({ by: ["status"], _count: true, where: { assignedToId: user.id, deletedAt: null } }),
       db.project.groupBy({
         by: ["status"],
         _count: true,

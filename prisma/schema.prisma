@@ -194,6 +194,7 @@ model User {
 
   leadsCreated   Lead[]         @relation("LeadCreatedBy")
   leadsAssigned  Lead[]         @relation("LeadAssignedTo")
+  leadsDeleted   Lead[]         @relation("LeadDeletedBy")
   leadNotes      LeadNote[]
   leadActivities LeadActivity[]
   leadReminders  LeadReminder[]
@@ -201,6 +202,7 @@ model User {
   tasksCreated    Task[]           @relation("TaskCreatedBy")
   tasksAssigned   Task[]           @relation("TaskAssignedTo")
   tasksAssignedTo Task[]           @relation("TaskAssignees")
+  tasksDeleted    Task[]           @relation("TaskDeletedBy")
   taskComments    TaskComment[]
   taskAttachments TaskAttachment[]
 
@@ -447,6 +449,14 @@ model Lead {
   /// unrelated domains, this is just a soft pointer for the redirect/link.
   convertedToClientId String?
 
+  /// Soft delete for the Trash module — null means active. A deleted lead is
+  /// never actually removed (every relation below stays intact for an exact
+  /// recovery); it's just excluded from the normal list/search/detail
+  /// queries until either restored or purged 30 days after deletedAt.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("LeadDeletedBy", fields: [deletedById], references: [id])
+
   notes      LeadNote[]
   activities LeadActivity[]
   reminders  LeadReminder[]
@@ -456,6 +466,7 @@ model Lead {
   @@index([status])
   @@index([departmentId])
   @@index([assignedToId])
+  @@index([deletedAt])
 }
 
 model LeadNote {
@@ -533,12 +544,18 @@ model Task {
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("TaskDeletedBy", fields: [deletedById], references: [id])
+
   comments    TaskComment[]
   attachments TaskAttachment[]
 
   @@index([status])
   @@index([assignedToId])
   @@index([remindAt])
+  @@index([deletedAt])
 }
 
 model TaskComment {
@@ -1242,6 +1259,10 @@ model Message {
   sender         User         @relation("MessageSender", fields: [senderId], references: [id])
   body           String       @db.Text
   createdAt      DateTime     @default(now())
+  /// Set the moment the sender edits `body` after sending — null means never
+  /// edited. Shown in the thread as a small "edited" marker next to the
+  /// timestamp; the original text isn't kept anywhere.
+  editedAt       DateTime?
 
   /// Quoted message this one replies to.
   replyToId String?

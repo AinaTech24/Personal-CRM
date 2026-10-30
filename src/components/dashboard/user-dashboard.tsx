@@ -29,6 +29,8 @@ import { Chart, CHART_TYPES, type Slice } from "@/components/dashboard/charts";
 import { STATUS_HEX, STATUS_ORDER, statusLabel, type DashboardEntityKey } from "@/lib/dashboard-colors";
 import { formatIstTime, formatDuration } from "@/lib/attendance-ui";
 import { cn, formatMoney } from "@/lib/utils";
+import { PRIORITY_VARIANT } from "@/lib/priority";
+import { PROJECT_STATUS_VARIANT } from "@/components/projects/types";
 
 interface MeDashboard {
   todayKey: string;
@@ -85,21 +87,6 @@ interface MeDashboard {
 }
 
 const pretty = (s: string) => s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
-
-const PRIORITY_VARIANT: Record<string, "secondary" | "default" | "warning" | "destructive"> = {
-  LOW: "secondary",
-  MEDIUM: "default",
-  HIGH: "warning",
-  URGENT: "destructive",
-};
-
-const PROJECT_STATUS_VARIANT: Record<string, "secondary" | "default" | "warning" | "success" | "destructive"> = {
-  PLANNED: "secondary",
-  ACTIVE: "default",
-  ON_HOLD: "warning",
-  COMPLETED: "success",
-  CANCELLED: "destructive",
-};
 
 const QUOTATION_STATUS_VARIANT: Record<string, "secondary" | "default" | "warning" | "success" | "destructive"> = {
   DRAFT: "secondary",
@@ -305,7 +292,7 @@ export function UserDashboard({ firstName }: { firstName: string }) {
                   <span className="block truncate text-sm">{t.title}</span>
                   <span className="mt-0.5 flex items-center gap-1.5">
                     <span className="text-xs text-muted-foreground">{pretty(t.status)}</span>
-                    <Badge variant={PRIORITY_VARIANT[t.priority] ?? "default"} className="px-1.5 py-0 text-[10px]">
+                    <Badge variant={PRIORITY_VARIANT[t.priority as keyof typeof PRIORITY_VARIANT] ?? "default"} className="px-1.5 py-0 text-[10px]">
                       {pretty(t.priority)}
                     </Badge>
                   </span>
@@ -355,7 +342,7 @@ export function UserDashboard({ firstName }: { firstName: string }) {
                   {l.company && <span className="block truncate text-xs text-muted-foreground">{l.company}</span>}
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
-                  <Badge variant={PRIORITY_VARIANT[l.priority] ?? "default"} className="px-1.5 py-0 text-[10px]">
+                  <Badge variant={PRIORITY_VARIANT[l.priority as keyof typeof PRIORITY_VARIANT] ?? "default"} className="px-1.5 py-0 text-[10px]">
                     {pretty(l.priority)}
                   </Badge>
                   <span className="rounded-full bg-muted px-2 py-0.5 text-[11px]">{pretty(l.status)}</span>
@@ -400,7 +387,7 @@ export function UserDashboard({ firstName }: { firstName: string }) {
                   <ProgressBar value={p.progress} className="mt-1.5" />
                   {p.endDate && <span className="mt-1 block text-xs text-muted-foreground">Due {format(parseISO(p.endDate), "MMM d")}</span>}
                 </span>
-                <Badge variant={PROJECT_STATUS_VARIANT[p.status] ?? "default"} className="shrink-0">
+                <Badge variant={PROJECT_STATUS_VARIANT[p.status as keyof typeof PROJECT_STATUS_VARIANT] ?? "default"} className="shrink-0">
                   {pretty(p.status)}
                 </Badge>
               </Link>

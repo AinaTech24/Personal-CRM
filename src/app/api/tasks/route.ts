@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
 }
 
 const bodySchema = z.object({
-  title: z.string().min(1),
+  title: z.string().min(1).max(200),
   description: z.string().optional().nullable(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
   status: z.enum(["TODO", "IN_PROGRESS", "REVIEW", "COMPLETED", "CANCELLED"]).default("TODO"),
@@ -132,6 +132,7 @@ export async function POST(req: NextRequest) {
 
 const bulkDeleteSchema = z.object({ ids: z.array(z.string()).min(1) });
 
+/** Soft delete — moves every deletable task to Trash rather than removing it. */
 export async function DELETE(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -141,7 +142,7 @@ export async function DELETE(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
   const tasks = await db.task.findMany({
-    where: { id: { in: parsed.data.ids } },
+    where: { id: { in: parsed.data.ids }, deletedAt: null },
     include: {
       createdBy: { select: { departmentId: true } },
       assignedTo: { select: { departmentId: true } },
@@ -152,7 +153,10 @@ export async function DELETE(req: NextRequest) {
   const deletable = tasks.filter((_t, i) => deletableFlags[i]);
 
   if (deletable.length > 0) {
-    await db.task.deleteMany({ where: { id: { in: deletable.map((t) => t.id) } } });
+    await db.task.updateMany({
+      where: { id: { in: deletable.map((t) => t.id) } },
+      data: { deletedAt: new Date(), deletedById: user.id },
+    });
     for (const task of deletable) broadcastTaskChange("task_deleted", task);
   }
 

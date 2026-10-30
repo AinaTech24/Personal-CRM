@@ -58,7 +58,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 const patchSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: z.string().min(1).max(200).optional(),
   description: z.string().nullable().optional(),
   status: z.enum(["PLANNED", "ACTIVE", "ON_HOLD", "COMPLETED", "CANCELLED"]).optional(),
   progress: z.number().int().min(0).max(100).optional(),

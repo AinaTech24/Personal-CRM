@@ -34,13 +34,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const [leads, tasks, projects, meetings, quotations, invoices, attendance] = await Promise.all([
     db.lead.findMany({
-      where: { assignedToId: id },
+      where: { assignedToId: id, deletedAt: null },
       select: { id: true, name: true, company: true, status: true, priority: true, createdAt: true },
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
     db.task.findMany({
-      where: { OR: [{ assignedToId: id }, { assignees: { some: { id } } }] },
+      where: { OR: [{ assignedToId: id }, { assignees: { some: { id } } }], deletedAt: null },
       select: { id: true, title: true, status: true, priority: true, dueDate: true, createdAt: true },
       orderBy: { createdAt: "desc" },
       take: 200,
