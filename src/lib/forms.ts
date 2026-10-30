@@ -6,6 +6,7 @@ import { isSocialMediaLead } from "@/lib/social-media-permissions";
 import { getCrmMembership, isCrmLead } from "@/lib/crm-team";
 import { canManageModule } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
+import { TRASH_RETENTION_DAYS, trashExpiresAt, type TrashActionResult, type TrashItem } from "@/lib/trash-types";
 
 /**
  * Company Admins/Super Admins, "department admins" (a Social Media or CRM
@@ -60,4 +61,53 @@ export async function uniqueFormSlug(): Promise<string> {
 /** True if a Prisma error is a unique-constraint violation (P2002) — used to retry a slug collision at create time. */
 export function isUniqueConstraintError(err: unknown): boolean {
   return !!err && typeof err === "object" && "code" in err && err.code === "P2002";
+}
+
+/* ------------------------------- Trash ------------------------------- */
+
+/** Every trashed form this user can manage — same gate as canManageForms itself. */
+export async function listTrashedFormsFor(user: PermissionUser): Promise<TrashItem[]> {
+  if (!(await canManageForms(user))) return [];
+  const forms = await db.form.findMany({
+    where: { deletedAt: { not: null } },
+    include: { deletedBy: { select: { id: true, name: true } } },
+    orderBy: { deletedAt: "desc" },
+  });
+  return forms.map((f) => ({
+    id: f.id,
+    module: "forms",
+    moduleLabel: "Forms",
+    title: f.title,
+    subtitle: f.description,
+    deletedAt: f.deletedAt!.toISOString(),
+    deletedBy: f.deletedBy,
+    expiresAt: trashExpiresAt(f.deletedAt!).toISOString(),
+  }));
+}
+
+/** Clears the trash flag, putting the form back exactly as it was. */
+export async function restoreForm(user: PermissionUser, formId: string): Promise<TrashActionResult> {
+  if (!(await canManageForms(user, "DELETE"))) return "forbidden";
+  const form = await db.form.findUnique({ where: { id: formId } });
+  if (!form || !form.deletedAt) return "not_found";
+
+  await db.form.update({ where: { id: formId }, data: { deletedAt: null, deletedById: null } });
+  return "ok";
+}
+
+/** Same permission as deleting it in the first place — cascades to its fields/submissions, like the live DELETE route. */
+export async function purgeForm(user: PermissionUser, formId: string): Promise<TrashActionResult> {
+  if (!(await canManageForms(user, "DELETE"))) return "forbidden";
+  const form = await db.form.findUnique({ where: { id: formId } });
+  if (!form || !form.deletedAt) return "not_found";
+
+  await db.form.delete({ where: { id: formId } });
+  return "ok";
+}
+
+/** The 30-day auto-purge job's actual work. */
+export async function purgeExpiredForms(): Promise<number> {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await db.form.deleteMany({ where: { deletedAt: { lte: cutoff } } });
+  return count;
 }

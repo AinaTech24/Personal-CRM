@@ -13,7 +13,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     where: { id: formId },
     include: { viewerDepartments: { select: { departmentId: true } } },
   });
-  if (!form) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!form || form.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!(await canViewFormSubmissions(user, form.viewerDepartments.map((v) => v.departmentId)))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -51,7 +51,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!user || !(await canManageForms(user, "UPDATE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: formId, submissionId } = await params;
-  const submission = await db.formSubmission.findFirst({ where: { id: submissionId, formId }, select: { id: true } });
+  const submission = await db.formSubmission.findFirst({ where: { id: submissionId, formId, form: { deletedAt: null } }, select: { id: true } });
   if (!submission) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
@@ -111,7 +111,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!user || !(await canManageForms(user, "DELETE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: formId, submissionId } = await params;
-  const submission = await db.formSubmission.findFirst({ where: { id: submissionId, formId }, select: { id: true } });
+  const submission = await db.formSubmission.findFirst({ where: { id: submissionId, formId, form: { deletedAt: null } }, select: { id: true } });
   if (!submission) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await db.formSubmission.delete({ where: { id: submissionId } });

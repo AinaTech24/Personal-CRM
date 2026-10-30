@@ -11,6 +11,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       title: true,
       description: true,
       isActive: true,
+      deletedAt: true,
       fields: {
         orderBy: { order: "asc" },
         select: {
@@ -33,7 +34,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ slu
       },
     },
   });
-  if (!form || !form.isActive) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!form || !form.isActive || form.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return NextResponse.json({ form });
+  const { deletedAt: _deletedAt, ...publicForm } = form;
+  return NextResponse.json({ form: publicForm });
 }

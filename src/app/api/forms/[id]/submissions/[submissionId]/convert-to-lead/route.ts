@@ -29,9 +29,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id: formId, submissionId } = await params;
   const form = await db.form.findUnique({
     where: { id: formId },
-    select: { title: true, viewerDepartments: { select: { departmentId: true } } },
+    select: { title: true, deletedAt: true, viewerDepartments: { select: { departmentId: true } } },
   });
-  if (!form) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!form || form.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!(await canViewFormSubmissions(user, form.viewerDepartments.map((v) => v.departmentId)))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

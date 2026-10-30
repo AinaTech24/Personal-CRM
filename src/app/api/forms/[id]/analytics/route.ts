@@ -21,6 +21,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     where: { id: formId },
     select: {
       viewCount: true,
+      deletedAt: true,
       viewerDepartments: { select: { departmentId: true } },
       fields: {
         where: { type: { notIn: ["SECTION_HEADING", "PAGE_BREAK"] } },
@@ -29,7 +30,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       },
     },
   });
-  if (!form) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!form || form.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!(await canViewFormSubmissions(user, form.viewerDepartments.map((v) => v.departmentId)))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

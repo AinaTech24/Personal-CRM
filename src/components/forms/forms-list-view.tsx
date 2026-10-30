@@ -321,7 +321,7 @@ export function FormsListView() {
         open={deleting !== null}
         onOpenChange={(v) => !v && setDeleting(null)}
         title="Delete this form?"
-        description={deleting ? `"${deleting.title}" and its ${deleting.submissionCount} submission(s) will be permanently deleted.` : ""}
+        description={deleting ? `"${deleting.title}" will be moved to Trash, where it'll stay recoverable for 30 days before being permanently deleted (along with its ${deleting.submissionCount} submission(s)).` : ""}
         confirmLabel="Delete"
         onConfirm={confirmDelete}
       />

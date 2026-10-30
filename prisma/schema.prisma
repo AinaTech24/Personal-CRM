@@ -242,6 +242,7 @@ model User {
   expensesDeleted       Expense[]              @relation("ExpenseDeletedBy")
   clientsCreated        Client[]               @relation("ClientCreatedBy")
   formsCreated          Form[]                 @relation("FormCreatedBy")
+  formsDeleted          Form[]                 @relation("FormDeletedBy")
   clientTeamRoles       ClientTeamMember[]     @relation("ClientTeamMemberUser")
   birthdayGifts         BirthdayGift[]         @relation("BirthdayGiftFor")
   birthdayGiftReminders BirthdayGiftReminder[]
@@ -2268,6 +2269,13 @@ model Form {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("FormDeletedBy", fields: [deletedById], references: [id])
+
+  @@index([deletedAt])
 }
 
 /// Which departments besides Admins may view a given form's submissions —

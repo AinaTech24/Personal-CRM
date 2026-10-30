@@ -24,7 +24,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     where: { id: formId },
     include: { viewerDepartments: { select: { departmentId: true } } },
   });
-  if (!form) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!form || form.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!(await canViewFormSubmissions(user, form.viewerDepartments.map((v) => v.departmentId)))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

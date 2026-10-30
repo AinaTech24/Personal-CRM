@@ -14,6 +14,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const forms = await db.form.findMany({
+    where: { deletedAt: null },
     include: {
       viewerDepartments: { select: { departmentId: true } },
       department: { select: { id: true, name: true } },

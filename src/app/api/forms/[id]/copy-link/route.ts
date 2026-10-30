@@ -14,8 +14,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!user || !(await canManageForms(user, "UPDATE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const form = await db.form.findUnique({ where: { id }, select: { id: true, slug: true, lockSlug: true } });
-  if (!form) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const form = await db.form.findUnique({ where: { id }, select: { id: true, slug: true, lockSlug: true, deletedAt: true } });
+  if (!form || form.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (form.lockSlug) {
     return NextResponse.json({ slug: form.slug });

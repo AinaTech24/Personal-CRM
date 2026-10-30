@@ -17,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params;
   const form = await db.form.findUnique({ where: { id }, include: formInclude });
-  if (!form) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!form || form.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const canEdit = await canManageForms(user);
   if (!canEdit && !(await canViewFormSubmissions(user, form.viewerDepartments.map((v) => v.departmentId)))) {
@@ -44,8 +44,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!user || !(await canManageForms(user, "UPDATE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const existing = await db.form.findUnique({ where: { id }, select: { id: true } });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const existing = await db.form.findUnique({ where: { id }, select: { id: true, deletedAt: true } });
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
@@ -81,11 +81,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ form: { ...form, canEdit: true } });
 }
 
+/** Soft delete — moves the form to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user || !(await canManageForms(user, "DELETE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  await db.form.delete({ where: { id } }).catch(() => null);
+  await db.form.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } }).catch(() => null);
   return NextResponse.json({ ok: true });
 }

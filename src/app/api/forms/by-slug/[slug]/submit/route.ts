@@ -44,7 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     where: { slug },
     include: { fields: { orderBy: { order: "asc" } }, viewerDepartments: { select: { departmentId: true } } },
   });
-  if (!form || !form.isActive) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!form || !form.isActive || form.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await req.json().catch(() => null);
   const answersInput = body && typeof body === "object" ? ((body as { answers?: Record<string, unknown> }).answers ?? {}) : {};

@@ -22,7 +22,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       viewerDepartments: { select: { departmentId: true } },
     },
   });
-  if (!source) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!source || source.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const slug = await uniqueFormSlug();
   const form = await db.form.create({

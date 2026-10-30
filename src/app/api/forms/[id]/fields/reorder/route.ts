@@ -15,7 +15,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
 
-  const fields = await db.formField.findMany({ where: { formId }, select: { id: true } });
+  const fields = await db.formField.findMany({ where: { formId, form: { deletedAt: null } }, select: { id: true } });
   const validIds = new Set(fields.map((f) => f.id));
   const ids = parsed.data.fieldIds.filter((id) => validIds.has(id));
 
