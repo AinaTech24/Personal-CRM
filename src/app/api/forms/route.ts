@@ -53,7 +53,7 @@ const createSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || !(await canManageForms(user))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || !(await canManageForms(user, "CREATE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

@@ -774,6 +774,13 @@ export function Sidebar({
     visibleMainNav.splice(insertAt, 0, ...crmExtras);
   }
 
+  // Someone granted the Calls module permission gets the same "Calls" link
+  // a CRM team member has — unless they already got it above.
+  if (!isAdmin && managedModuleSet.has("CALLS") && !visibleMainNav.some((item) => item.href === "/calls")) {
+    const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
+    visibleMainNav.splice(leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1, 0, callsNavItem);
+  }
+
   // A department shared on at least one form (or a department admin) gets
   // their own way into Forms, not a company admin who already sees this
   // via adminNav.

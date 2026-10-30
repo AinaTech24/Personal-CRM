@@ -6,6 +6,7 @@ import { callListWhere, broadcastCallChange } from "@/lib/calls";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
 import { parsePageParams } from "@/lib/pagination";
+import { canManageModule } from "@/lib/module-permissions-store";
 
 const callInclude = {
   lead: { select: { id: true, name: true, company: true } },
@@ -27,7 +28,8 @@ export async function GET(req: NextRequest) {
   const { teamOnly, teamUserIds } = await resolveTeamScope(user, params.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const where = callListWhere(user, teamUserIds, teamOnly);
+  const hasGrant = await canManageModule(user, "CALLS", "READ");
+  const where = callListWhere(user, teamUserIds, teamOnly, hasGrant);
   const { take, skip } = parsePageParams(params, { defaultTake: 50, maxTake: 200 });
 
   const [calls, total] = await Promise.all([

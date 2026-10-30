@@ -48,6 +48,15 @@ enum ManagedModule {
   PROJECTS
   EXPENSES
   NOTES
+  /// Build/edit/delete forms and manage submissions — same flat, company-wide
+  /// capability a Social Media or CRM team lead already has (see
+  /// canManageForms in src/lib/forms.ts), just reachable via a Permission
+  /// Manager grant too, for someone who isn't a team lead.
+  FORMS
+  /// See every call, not just your own or your CRM team's — Call has no
+  /// department of its own to scope to, so this is flat ("all" or nothing),
+  /// same as FORMS/BIRTHDAYS, not department-scoped like LEADS/TASKS.
+  CALLS
 }
 
 /// A personal note. Visibility is its own fixed 3-tier floor (Admin/Super
