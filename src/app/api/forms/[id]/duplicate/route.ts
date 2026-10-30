@@ -12,7 +12,7 @@ import { canManageForms, uniqueFormSlug } from "@/lib/forms";
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || !(await canManageForms(user))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || !(await canManageForms(user, "CREATE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const source = await db.form.findUnique({

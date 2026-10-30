@@ -41,7 +41,7 @@ const patchSchema = z.object({
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || !(await canManageForms(user))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || !(await canManageForms(user, "UPDATE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   const existing = await db.form.findUnique({ where: { id }, select: { id: true } });
@@ -83,7 +83,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user || !(await canManageForms(user))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || !(await canManageForms(user, "DELETE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
   await db.form.delete({ where: { id } }).catch(() => null);

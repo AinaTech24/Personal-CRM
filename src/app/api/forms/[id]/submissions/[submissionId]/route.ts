@@ -45,10 +45,10 @@ const patchSchema = z.object({
   answers: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
 });
 
-/** Admin only — corrects a submitted answer. Attachments aren't editable here (delete the submission and ask for a fresh one if a file needs replacing). */
+/** Corrects a submitted answer — same access as building the form itself (see canManageForms). Attachments aren't editable here (delete the submission and ask for a fresh one if a file needs replacing). */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string; submissionId: string }> }) {
   const user = await getCurrentUser();
-  if (!user || !(await canManageForms(user))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || !(await canManageForms(user, "UPDATE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: formId, submissionId } = await params;
   const submission = await db.formSubmission.findFirst({ where: { id: submissionId, formId }, select: { id: true } });
@@ -105,10 +105,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ submission: updated });
 }
 
-/** Admin only. Cascades to the submission's answers and attachments. */
+/** Same access as building the form itself (see canManageForms). Cascades to the submission's answers and attachments. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string; submissionId: string }> }) {
   const user = await getCurrentUser();
-  if (!user || !(await canManageForms(user))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user || !(await canManageForms(user, "DELETE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: formId, submissionId } = await params;
   const submission = await db.formSubmission.findFirst({ where: { id: submissionId, formId }, select: { id: true } });

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageCall, canDeleteCall, broadcastCallChange } from "@/lib/calls";
 import { combinedTeamScopeFor } from "@/lib/team-scope";
+import { canManageModule } from "@/lib/module-permissions-store";
 
 const callInclude = {
   lead: { select: { id: true, name: true, company: true } },
@@ -31,8 +32,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const call = await db.call.findUnique({ where: { id }, include: callInclude });
   if (!call) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const teamUserIds = await combinedTeamScopeFor(user);
-  if (!canManageCall(user, call, teamUserIds)) {
+  const [teamUserIds, hasGrant] = await Promise.all([combinedTeamScopeFor(user), canManageModule(user, "CALLS", "READ")]);
+  if (!canManageCall(user, call, teamUserIds, hasGrant)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -47,8 +48,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = await db.call.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const teamUserIds = await combinedTeamScopeFor(user);
-  if (!canManageCall(user, existing, teamUserIds)) {
+  const [teamUserIds, hasGrant] = await Promise.all([combinedTeamScopeFor(user), canManageModule(user, "CALLS", "UPDATE")]);
+  if (!canManageCall(user, existing, teamUserIds, hasGrant)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -90,8 +91,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const existing = await db.call.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const teamUserIds = await combinedTeamScopeFor(user);
-  if (!canDeleteCall(user, existing, teamUserIds)) {
+  const [teamUserIds, hasGrant] = await Promise.all([combinedTeamScopeFor(user), canManageModule(user, "CALLS", "DELETE")]);
+  if (!canDeleteCall(user, existing, teamUserIds, hasGrant)) {
     return NextResponse.json({ error: "Only the creator, a CRM lead, or an admin can delete this call" }, { status: 403 });
   }
 
