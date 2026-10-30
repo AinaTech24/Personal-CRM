@@ -42,7 +42,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const expense = await db.expense.findUnique({ where: { id }, include: { user: { select: { departmentId: true } } } });
-  if (!expense) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!expense || expense.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const expenseScope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "EXPENSES", "UPDATE");
   const canManageExpenses = expenseScope === "all" || (expenseScope !== null && expense.user.departmentId === expenseScope.departmentId);
@@ -128,21 +128,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ expense: serializeExpense(updated) });
 }
 
-/** Admins and an EXPENSES grantee for their own department. */
+/** Admins and an EXPENSES grantee for their own department. Soft delete — moves the claim to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   const expense = await db.expense.findUnique({ where: { id }, include: { user: { select: { departmentId: true } } } });
-  if (!expense) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!expense || expense.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const expenseScope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "EXPENSES", "DELETE");
   if (expenseScope !== "all" && !(expenseScope !== null && expense.user.departmentId === expenseScope.departmentId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  await db.expense.delete({ where: { id } });
+  await db.expense.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   emitToAdmins("expense_request_changed", { id });
   return NextResponse.json({ ok: true });
 }

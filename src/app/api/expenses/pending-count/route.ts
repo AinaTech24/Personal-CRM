@@ -12,7 +12,7 @@ export async function GET() {
   if (scope === null) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const count = await db.expense.count({
-    where: { status: "PENDING", ...(scope === "all" ? {} : { user: { departmentId: scope.departmentId } }) },
+    where: { status: "PENDING", deletedAt: null, ...(scope === "all" ? {} : { user: { departmentId: scope.departmentId } }) },
   });
   return NextResponse.json({ count });
 }

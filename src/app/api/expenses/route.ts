@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
         if (!teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         const status = STATUSES.find((s) => s === params.get("status"));
         const rows = await db.expense.findMany({
-          where: { ...(status ? { status } : {}), userId: { in: teamUserIds } },
+          where: { ...(status ? { status } : {}), userId: { in: teamUserIds }, deletedAt: null },
           include: expenseInclude,
           omit: { receiptData: true },
           orderBy: { createdAt: "desc" },
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
 
     const status = STATUSES.find((s) => s === params.get("status"));
     const rows = await db.expense.findMany({
-      where: { ...(status ? { status } : {}), ...scopeFilter },
+      where: { ...(status ? { status } : {}), ...scopeFilter, deletedAt: null },
       include: expenseInclude,
       omit: { receiptData: true },
       orderBy: { createdAt: "desc" },
@@ -74,8 +74,8 @@ export async function GET(req: NextRequest) {
   }
 
   const [rows, totals] = await Promise.all([
-    db.expense.findMany({ where: { userId: user.id }, include: expenseInclude, omit: { receiptData: true }, orderBy: { createdAt: "desc" }, take: 200 }),
-    db.expense.groupBy({ by: ["status"], where: { userId: user.id }, _sum: { amount: true } }),
+    db.expense.findMany({ where: { userId: user.id, deletedAt: null }, include: expenseInclude, omit: { receiptData: true }, orderBy: { createdAt: "desc" }, take: 200 }),
+    db.expense.groupBy({ by: ["status"], where: { userId: user.id, deletedAt: null }, _sum: { amount: true } }),
   ]);
   const sumFor = (status: (typeof STATUSES)[number]) => toNumber(totals.find((t) => t.status === status)?._sum.amount ?? 0);
   const summary = {

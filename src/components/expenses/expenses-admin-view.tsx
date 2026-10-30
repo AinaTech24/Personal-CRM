@@ -427,7 +427,7 @@ export function ExpensesAdminView({
         open={deletingExpense !== null}
         onOpenChange={(v) => !v && setDeletingExpense(null)}
         title="Delete this expense claim?"
-        description={deletingExpense ? `${deletingExpense.user.name}'s claim for ${fmtAmount(deletingExpense.amount)} will be permanently deleted.` : ""}
+        description={deletingExpense ? `${deletingExpense.user.name}'s claim for ${fmtAmount(deletingExpense.amount)} will be moved to Trash, where it'll stay recoverable for 30 days before being permanently deleted.` : ""}
         confirmLabel="Delete"
         onConfirm={confirmDeleteExpense}
       />
