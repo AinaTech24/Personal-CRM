@@ -8,10 +8,21 @@ import type { AttendanceStatus } from "@/generated/prisma/enums";
  */
 const IST_OFFSET_MINUTES = 5.5 * 60;
 
+/**
+ * `instant`, shifted so that reading its UTC calendar fields (date, day-of-
+ * week, "how many calendar days/weeks/months apart from another instant")
+ * gives the IST answer — regardless of what timezone the server process
+ * itself is running in. Anything elsewhere in the app that needs an
+ * IST-calendar-day comparison (not just attendance) should shift through
+ * this, not redefine the offset.
+ */
+export function istShift(instant: Date): Date {
+  return new Date(instant.getTime() + IST_OFFSET_MINUTES * 60_000);
+}
+
 /** The IST calendar day for an instant, as "YYYY-MM-DD". */
 export function istDateKey(instant: Date = new Date()): string {
-  const shifted = new Date(instant.getTime() + IST_OFFSET_MINUTES * 60_000);
-  return shifted.toISOString().slice(0, 10);
+  return istShift(instant).toISOString().slice(0, 10);
 }
 
 /** A "YYYY-MM-DD" key as a Date at UTC midnight — how DATE columns round-trip. */
@@ -50,7 +61,7 @@ export interface AttendancePolicy {
 
 /** Current IST wall-clock as minutes past midnight. */
 export function istMinutesOfDay(instant: Date = new Date()): number {
-  const shifted = new Date(instant.getTime() + IST_OFFSET_MINUTES * 60_000);
+  const shifted = istShift(instant);
   return shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
 }
 

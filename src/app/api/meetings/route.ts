@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
 import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
 import { parsePageParams } from "@/lib/pagination";
 import { parseFilterParam } from "@/lib/filter-utils";
+import { meetingListWhere } from "@/lib/meetings";
 
 const meetingInclude = {
   organizer: { select: { id: true, name: true, email: true } },
@@ -42,28 +42,8 @@ export async function GET(req: NextRequest) {
   const { teamOnly, teamUserIds } = await resolveTeamScope(user, params.get("scope"));
   if (teamOnly && !teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  let where: object;
-  if (teamOnly && teamUserIds) {
-    where = { OR: [{ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } }] };
-  } else if (isAdmin(user)) {
-    where = {};
-  } else {
-    const scope = await moduleAccessScope(user, "MEETINGS", "READ");
-    if (scope === "all") {
-      where = {};
-    } else {
-      const or: object[] = [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }];
-      if (teamUserIds && teamUserIds.length > 0) {
-        or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
-      }
-      if (scope) {
-        or.push({ organizer: { departmentId: scope.departmentId } }, { attendees: { some: { departmentId: scope.departmentId } } });
-      }
-      where = { OR: or };
-    }
-  }
-
-  const and: object[] = [where, { deletedAt: null }];
+  const scope = await moduleAccessScope(user, "MEETINGS", "READ");
+  const and: object[] = [meetingListWhere(user, teamUserIds, teamOnly, scope)];
 
   const organizerFilter = parseFilterParam(params.get("organizer"));
   if (organizerFilter) and.push({ organizerId: { in: organizerFilter } });

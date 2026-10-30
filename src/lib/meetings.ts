@@ -6,6 +6,40 @@ import type { ModuleAction } from "@/lib/module-permissions";
 import { TRASH_RETENTION_DAYS, trashExpiresAt, type TrashActionResult, type TrashItem } from "@/lib/trash-types";
 
 /**
+ * Same shape as leadListWhere/taskListWhere/projectListWhere — "own record"
+ * for a meeting is organizing it or being an attendee. `scope` is resolved
+ * by the caller (a DB call via moduleAccessScope, so it stays out of this
+ * pure function), same convention as its siblings. Always excludes a
+ * trashed meeting unless `trashed` is set, same as those siblings too.
+ */
+export function meetingListWhere(
+  user: PermissionUser,
+  teamUserIds?: string[] | null,
+  teamOnly?: boolean,
+  scope?: "all" | { departmentId: string } | null,
+  opts?: { trashed?: boolean }
+) {
+  const deletedAtWhere = opts?.trashed ? { not: null } : null;
+  if (teamOnly && teamUserIds) {
+    return {
+      AND: [
+        { deletedAt: deletedAtWhere },
+        { OR: [{ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } }] },
+      ],
+    };
+  }
+  if (isAdmin(user) || scope === "all") return { deletedAt: deletedAtWhere };
+  const or: object[] = [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }];
+  if (teamUserIds && teamUserIds.length > 0) {
+    or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
+  }
+  if (scope && typeof scope === "object") {
+    or.push({ organizer: { departmentId: scope.departmentId } }, { attendees: { some: { departmentId: scope.departmentId } } });
+  }
+  return { AND: [{ deletedAt: deletedAtWhere }, { OR: or }] };
+}
+
+/**
  * Only the organizer, an admin, a Meetings module grant covering the
  * meeting's own department, or a Social Media/CRM lead managing a meeting
  * organized by (or attended by) someone on their team may change, remove,
@@ -52,32 +86,14 @@ const meetingTrashInclude = {
   deletedBy: { select: { id: true, name: true } },
 };
 
-/** Same visibility rule the live list applies inline (meetings/route.ts), just the opposite set of `deletedAt`. */
+/** Same visibility rule the live list applies (meetingListWhere), just the opposite set of `deletedAt`. */
 export async function listTrashedMeetingsFor(user: PermissionUser): Promise<TrashItem[]> {
   if (await isModuleBlocked(user, "MEETINGS")) return [];
 
   const teamUserIds = await combinedTeamScopeFor(user);
-  let where: object;
-  if (isAdmin(user)) {
-    where = {};
-  } else {
-    const scope = await moduleAccessScope(user, "MEETINGS", "READ");
-    if (scope === "all") {
-      where = {};
-    } else {
-      const or: object[] = [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }];
-      if (teamUserIds && teamUserIds.length > 0) {
-        or.push({ organizerId: { in: teamUserIds } }, { attendees: { some: { id: { in: teamUserIds } } } });
-      }
-      if (scope) {
-        or.push({ organizer: { departmentId: scope.departmentId } }, { attendees: { some: { departmentId: scope.departmentId } } });
-      }
-      where = { OR: or };
-    }
-  }
-
+  const scope = await moduleAccessScope(user, "MEETINGS", "READ");
   const meetings = await db.meeting.findMany({
-    where: { AND: [where, { deletedAt: { not: null } }] },
+    where: meetingListWhere(user, teamUserIds, false, scope, { trashed: true }),
     include: meetingTrashInclude,
     orderBy: { deletedAt: "desc" },
   });

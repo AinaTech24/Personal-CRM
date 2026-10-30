@@ -6,13 +6,7 @@ import { HoverCheckbox } from "@/components/ui/checkbox";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { MEETING_STATUS_OPTIONS, type LeadStatus, type LeadSummary } from "@/components/leads/types";
 import { cn } from "@/lib/utils";
-
-const PRIORITY_VARIANT = {
-  LOW: "secondary",
-  MEDIUM: "default",
-  HIGH: "warning",
-  URGENT: "destructive",
-} as const;
+import { PRIORITY_VARIANT } from "@/lib/priority";
 
 function statusLabel(status: string, statusOptions: { value: LeadStatus; label: string }[]) {
   return statusOptions.find((s) => s.value === status)?.label ?? status;

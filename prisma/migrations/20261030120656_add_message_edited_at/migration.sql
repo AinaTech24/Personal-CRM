@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `Message` ADD COLUMN `editedAt` DATETIME(3) NULL;
