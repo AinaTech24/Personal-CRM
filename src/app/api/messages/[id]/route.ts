@@ -52,12 +52,22 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   return NextResponse.json({ ok: true });
 }
 
-const patchSchema = z.object({ pinned: z.boolean() });
+const patchSchema = z.object({
+  pinned: z.boolean().optional(),
+  body: z.string().trim().min(1).max(10_000).optional(),
+});
 
 /**
- * Pin / unpin a message — any member in a DM (there's no "admin" concept for
- * a 2-person thread), but only that group's own admin (or a company admin)
- * in a GROUP conversation, so pins there don't turn into a free-for-all.
+ * Pin/unpin — any member in a DM (there's no "admin" concept for a 2-person
+ * thread), but only that group's own admin (or a company admin) in a GROUP
+ * conversation, so pins there don't turn into a free-for-all.
+ *
+ * Edit `body` — the sender only, on their own non-deleted, non-system
+ * message. No time limit and no "originally said" history kept — editedAt
+ * just flips from null to the edit time, shown in the thread as a small
+ * "edited" marker.
+ *
+ * The two are independent — either field, or both, can be sent in one call.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -68,21 +78,40 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!msg) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (msg === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  if (!isAdmin(user)) {
-    const { isGroup, isGroupAdmin } = await groupAdminStatus(user.id, msg.conversationId);
-    if (isGroup && !isGroupAdmin) {
-      return NextResponse.json({ error: "Only a group admin can pin messages here" }, { status: 403 });
+  const parsed = patchSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  const d = parsed.data;
+  if (d.pinned === undefined && d.body === undefined) {
+    return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+  }
+
+  const data: { pinnedAt?: Date | null; pinnedById?: string | null; body?: string; editedAt?: Date } = {};
+
+  if (d.pinned !== undefined) {
+    if (!isAdmin(user)) {
+      const { isGroup, isGroupAdmin } = await groupAdminStatus(user.id, msg.conversationId);
+      if (isGroup && !isGroupAdmin) {
+        return NextResponse.json({ error: "Only a group admin can pin messages here" }, { status: 403 });
+      }
+    }
+    if (d.pinned) {
+      data.pinnedAt = new Date();
+      data.pinnedById = user.id;
+    } else {
+      data.pinnedAt = null;
+      data.pinnedById = null;
     }
   }
 
-  const parsed = patchSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+  if (d.body !== undefined) {
+    if (msg.senderId !== user.id) return NextResponse.json({ error: "You can only edit your own messages" }, { status: 403 });
+    if (msg.isSystem) return NextResponse.json({ error: "Can't edit a system message" }, { status: 400 });
+    if (msg.deletedForEveryone) return NextResponse.json({ error: "Can't edit a deleted message" }, { status: 400 });
+    data.body = d.body;
+    data.editedAt = new Date();
+  }
 
-  const updated = await db.message.update({
-    where: { id },
-    data: parsed.data.pinned ? { pinnedAt: new Date(), pinnedById: user.id } : { pinnedAt: null, pinnedById: null },
-    include: messageInclude,
-  });
+  const updated = await db.message.update({ where: { id }, data, include: messageInclude });
 
   emitToMembers(await memberIdsOf(msg.conversationId), "message:update", {
     conversationId: msg.conversationId,

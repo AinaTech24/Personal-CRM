@@ -1259,6 +1259,10 @@ model Message {
   sender         User         @relation("MessageSender", fields: [senderId], references: [id])
   body           String       @db.Text
   createdAt      DateTime     @default(now())
+  /// Set the moment the sender edits `body` after sending — null means never
+  /// edited. Shown in the thread as a small "edited" marker next to the
+  /// timestamp; the original text isn't kept anywhere.
+  editedAt       DateTime?
 
   /// Quoted message this one replies to.
   replyToId String?

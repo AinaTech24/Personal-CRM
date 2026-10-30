@@ -97,7 +97,7 @@ export async function memberIdsOf(conversationId: string) {
 export async function loadActionableMessage(userId: string, messageId: string) {
   const message = await db.message.findUnique({
     where: { id: messageId },
-    select: { id: true, senderId: true, conversationId: true, deletedForEveryone: true, pinnedAt: true },
+    select: { id: true, senderId: true, conversationId: true, deletedForEveryone: true, pinnedAt: true, isSystem: true },
   });
   if (!message) return null;
   if (!(await isMember(userId, message.conversationId))) return "forbidden" as const;

@@ -35,6 +35,7 @@ import {
   IconInfo,
   IconMic,
   IconStop,
+  IconPencil,
 } from "@/components/icons";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -88,6 +89,7 @@ interface Message {
   isSystem?: boolean;
   deletedForEveryone: boolean;
   pinnedAt: string | null;
+  editedAt: string | null;
 }
 interface Conversation {
   id: string;
@@ -204,6 +206,7 @@ export function ChatView() {
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [mention, setMention] = useState<{ query: string } | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [ctx, setCtx] = useState<{ message: Message; x: number; y: number } | null>(null);
   const [forwardOf, setForwardOf] = useState<Message | null>(null);
   const [preview, setPreview] = useState<Attachment | null>(null);
@@ -716,7 +719,35 @@ export function ChatView() {
     }
   }
 
+  /** Saves an in-flight edit (see editingMessage) instead of posting a new message — swapped in for send() while the composer is in edit mode. */
+  async function saveEdit() {
+    const text = draft.trim();
+    const target = editingMessage;
+    if (!text || !target || sending) return;
+    setSending(true);
+    setDraft("");
+    setEditingMessage(null);
+    try {
+      const res = await fetch(`/api/messages/${target.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: text }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error("Couldn't save the edit", data.error);
+        setDraft(text);
+        setEditingMessage(target);
+        return;
+      }
+      upsertMessage(data.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function send() {
+    if (editingMessage) return saveEdit();
     const text = draft.trim();
     if ((!text && pending.length === 0) || !activeId || sending) return;
     setSending(true);
@@ -1260,6 +1291,31 @@ export function ChatView() {
               )}
             </AnimatePresence>
 
+            {/* Editing banner — the composer doubles as the edit box; sending while this is up saves the edit instead of posting a new message. */}
+            <AnimatePresence>
+              {editingMessage && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="flex items-center gap-2 overflow-hidden border-t border-border bg-muted/40 px-4 py-2"
+                >
+                  <IconPencil className="h-4 w-4 shrink-0 text-primary" />
+                  <p className="min-w-0 flex-1 truncate text-xs font-medium text-primary">Editing message</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMessage(null);
+                      setDraft("");
+                    }}
+                    aria-label="Cancel edit"
+                  >
+                    <IconX className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Pending attachments with caption hint */}
             <AnimatePresence>
               {pending.length > 0 && (
@@ -1541,6 +1597,18 @@ export function ChatView() {
                 <MenuItem onClick={() => { setReplyTo(ctx.message); setCtx(null); }}>
                   <IconReply className="h-4 w-4" /> Reply
                 </MenuItem>
+                {ctx.message.senderId === me.id && !ctx.message.isSystem && (
+                  <MenuItem
+                    onClick={() => {
+                      setEditingMessage(ctx.message);
+                      setReplyTo(null);
+                      setDraft(ctx.message.body);
+                      setCtx(null);
+                    }}
+                  >
+                    <IconPencil className="h-4 w-4" /> Edit
+                  </MenuItem>
+                )}
                 <MenuItem onClick={() => { setForwardOf(ctx.message); setCtx(null); }}>
                   <IconForward className="h-4 w-4" /> Forward
                 </MenuItem>
@@ -1933,7 +2001,10 @@ function MessageBubble({
         {!m.deletedForEveryone && (!mine && group) && (
           <p className="mb-0.5 flex items-baseline gap-2 text-[11px] font-medium opacity-70">
             <span className="min-w-0 truncate">{fullName(m.sender)}</span>
-            <span className="ml-auto shrink-0 tabular-nums opacity-80">{fmtTime(m.createdAt)}</span>
+            <span className="ml-auto shrink-0 tabular-nums opacity-80">
+              {m.editedAt && "edited · "}
+              {fmtTime(m.createdAt)}
+            </span>
           </p>
         )}
 
@@ -2079,6 +2150,7 @@ function MessageBubble({
             compact footer — it also carries the delivery ticks. */}
         {(mine || !group || m.deletedForEveryone) && (
           <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px]", mine ? "text-primary-foreground/70" : "text-muted-foreground")}>
+            {m.editedAt && !m.deletedForEveryone && <span>edited ·</span>}
             <span>{fmtTime(m.createdAt)}</span>
             {mine && !m.deletedForEveryone && <StatusTicks status={status} />}
           </div>
