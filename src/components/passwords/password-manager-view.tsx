@@ -332,7 +332,7 @@ export function PasswordManagerView() {
         open={!!deleteTarget}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title={`Delete "${deleteTarget?.label}"?`}
-        description="This permanently removes the credential and everyone's access to it — including anyone it was shared with."
+        description="This moves the credential to Trash, where it'll stay recoverable for 30 days before being permanently deleted — including everyone's shared access to it."
         confirmLabel="Delete"
         onConfirm={remove}
       />
@@ -727,7 +727,7 @@ function PasswordEntryDialog({
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={`Delete "${entry?.label}"?`}
-        description="This permanently removes the credential and everyone's access to it — including anyone it was shared with."
+        description="This moves the credential to Trash, where it'll stay recoverable for 30 days before being permanently deleted — including everyone's shared access to it."
         confirmLabel="Delete"
         onConfirm={remove}
       />

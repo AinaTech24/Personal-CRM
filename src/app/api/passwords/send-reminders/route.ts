@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
   const staleCutoff = new Date(Date.now() - ROTATION_DAYS * 24 * 60 * 60 * 1000);
   const candidates = await db.passwordEntry.findMany({
-    where: { updatedAt: { lte: staleCutoff }, rotationReminderSentAt: null },
+    where: { updatedAt: { lte: staleCutoff }, rotationReminderSentAt: null, deletedAt: null },
     select: { id: true, label: true, createdById: true, updatedById: true },
   });
 

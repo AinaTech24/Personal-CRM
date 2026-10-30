@@ -121,6 +121,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ entry });
 }
 
+/** Soft delete — moves the entry to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -132,7 +133,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!canManagePasswordEntry(user, access)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  await db.passwordEntry.delete({ where: { id } });
+  await db.passwordEntry.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
 
   return NextResponse.json({ ok: true });
 }

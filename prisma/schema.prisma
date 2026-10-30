@@ -287,6 +287,7 @@ model User {
   socialClientImagesUploaded       SocialClientImage[]         @relation("SocialClientImageUploadedBy")
   passwordEntriesCreated           PasswordEntry[]             @relation("PasswordEntryCreatedBy")
   passwordEntriesUpdated           PasswordEntry[]             @relation("PasswordEntryUpdatedBy")
+  passwordEntriesDeleted           PasswordEntry[]             @relation("PasswordEntryDeletedBy")
   passwordSharesReceived           PasswordEntryShare[]        @relation("PasswordEntrySharedWith")
   passwordSharesGiven              PasswordEntryShare[]        @relation("PasswordEntrySharedBy")
   passwordEntryActivities          PasswordEntryActivity[]
@@ -1886,7 +1887,13 @@ model PasswordEntry {
   shares     PasswordEntryShare[]
   activities PasswordEntryActivity[]
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("PasswordEntryDeletedBy", fields: [deletedById], references: [id])
+
   @@index([departmentId])
+  @@index([deletedAt])
 }
 
 /// Grants one specific user access to one specific entry, independent of
