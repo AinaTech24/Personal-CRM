@@ -265,6 +265,7 @@ model User {
   crmMembership                    CrmMember?
   callsOwned                       Call[]                      @relation("CallOwner")
   callsCreated                     Call[]                      @relation("CallCreatedBy")
+  callsDeleted                     Call[]                      @relation("CallDeletedBy")
   socialClientsCreated             SocialClient[]              @relation("SocialClientCreatedBy")
   socialClientsAssigned            SocialClient[]              @relation("SocialClientAssignedTo")
   socialContentCreated             SocialContentItem[]         @relation("SocialContentCreatedBy")
@@ -1564,9 +1565,15 @@ model Call {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("CallDeletedBy", fields: [deletedById], references: [id])
+
   @@index([leadId])
   @@index([ownerId])
   @@index([startTime])
+  @@index([deletedAt])
 }
 
 model SocialClient {

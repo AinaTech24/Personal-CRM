@@ -30,7 +30,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
 
   const call = await db.call.findUnique({ where: { id }, include: callInclude });
-  if (!call) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!call || call.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const [teamUserIds, hasGrant] = await Promise.all([combinedTeamScopeFor(user), canManageModule(user, "CALLS", "READ")]);
   if (!canManageCall(user, call, teamUserIds, hasGrant)) {
@@ -46,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
 
   const existing = await db.call.findUnique({ where: { id } });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const [teamUserIds, hasGrant] = await Promise.all([combinedTeamScopeFor(user), canManageModule(user, "CALLS", "UPDATE")]);
   if (!canManageCall(user, existing, teamUserIds, hasGrant)) {
@@ -83,20 +83,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ call });
 }
 
+/** Soft delete — moves the call to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
   const existing = await db.call.findUnique({ where: { id } });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const [teamUserIds, hasGrant] = await Promise.all([combinedTeamScopeFor(user), canManageModule(user, "CALLS", "DELETE")]);
   if (!canDeleteCall(user, existing, teamUserIds, hasGrant)) {
     return NextResponse.json({ error: "Only the creator, a CRM lead, or an admin can delete this call" }, { status: 403 });
   }
 
-  await db.call.delete({ where: { id } });
+  await db.call.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   broadcastCallChange("call_deleted", existing);
 
   return NextResponse.json({ ok: true });

@@ -138,7 +138,7 @@ export async function GET() {
         : Promise.resolve(0),
       crmAccess
         ? db.call.findMany({
-            where: { OR: [{ ownerId: user.id }, { createdById: user.id }] },
+            where: { AND: [{ OR: [{ ownerId: user.id }, { createdById: user.id }] }, { deletedAt: null }] },
             select: {
               id: true,
               clientName: true,

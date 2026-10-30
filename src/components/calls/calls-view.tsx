@@ -288,7 +288,7 @@ export function CallsView({ scope }: { scope?: "crm" } = {}) {
         open={deleteTarget !== null}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title="Delete this call log?"
-        description="This permanently removes the call record."
+        description="This moves the call to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
         confirmLabel="Delete"
         onConfirm={async () => {
           if (deleteTarget) await deleteCall(deleteTarget.id);
@@ -478,7 +478,7 @@ function CallDialog({
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title="Delete this call log?"
-        description="This permanently removes the call record."
+        description="This moves the call to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
         confirmLabel="Delete"
         onConfirm={remove}
       />
