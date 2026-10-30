@@ -113,6 +113,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ task });
 }
 
+/** Soft delete — moves the task to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -125,7 +126,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Only the creator or an admin can delete this task" }, { status: 403 });
   }
 
-  await db.task.delete({ where: { id } });
+  await db.task.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   broadcastTaskChange("task_deleted", access);
 
   return NextResponse.json({ ok: true });

@@ -29,7 +29,12 @@ export async function POST(req: NextRequest) {
   }
 
   const due = await db.task.findMany({
-    where: { remindAt: { lte: new Date() }, reminderSentAt: null, status: { notIn: ["COMPLETED", "CANCELLED"] } },
+    where: {
+      remindAt: { lte: new Date() },
+      reminderSentAt: null,
+      status: { notIn: ["COMPLETED", "CANCELLED"] },
+      deletedAt: null,
+    },
     select: { id: true, title: true, assignedToId: true, assignees: { select: { id: true } } },
   });
 

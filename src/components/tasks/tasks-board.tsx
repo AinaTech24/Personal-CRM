@@ -627,7 +627,8 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete ${selectedIds.size} task${selectedIds.size === 1 ? "" : "s"}?`}
-        description="This will permanently delete the selected task(s) along with their comments and attachments. This action cannot be undone."
+        description="This moves the selected task(s) to Trash, where they'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={handleBulkDelete}
       />
 
@@ -635,7 +636,8 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         open={deleteTarget !== null}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title={`Delete "${deleteTarget?.title}"?`}
-        description="This permanently deletes the task along with its comments and attachments. This cannot be undone."
+        description="This moves the task to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={async () => {
           if (deleteTarget) await deleteTask(deleteTarget.id);
         }}

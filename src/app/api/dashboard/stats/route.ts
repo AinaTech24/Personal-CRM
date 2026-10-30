@@ -24,10 +24,10 @@ export async function GET(req: NextRequest) {
   // Trashed leads are excluded from every count here, same as the live list.
   const leadWhere = departmentId ? { departmentId, deletedAt: null } : { deletedAt: null };
   // Tasks have no departmentId column — a department's tasks are whichever
-  // have an assignee or creator that belongs to it.
+  // have an assignee or creator that belongs to it. Trashed tasks excluded, same as leads.
   const taskWhere = departmentId
-    ? { OR: [{ assignedTo: { departmentId } }, { createdBy: { departmentId } }] }
-    : undefined;
+    ? { OR: [{ assignedTo: { departmentId } }, { createdBy: { departmentId } }], deletedAt: null }
+    : { deletedAt: null };
   const projectWhere = departmentId ? { departmentId } : undefined;
   const quotationWhere = departmentId ? { departmentId } : undefined;
   const invoiceWhere = departmentId ? { departmentId } : undefined;

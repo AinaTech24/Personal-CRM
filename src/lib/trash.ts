@@ -1,5 +1,6 @@
 import type { PermissionUser } from "@/lib/permissions";
 import { listTrashedLeadsFor, restoreLead, purgeLead } from "@/lib/leads";
+import { listTrashedTasksFor, restoreTask, purgeTask } from "@/lib/tasks";
 import { TRASH_MODULE_KEYS, TRASH_MODULE_LABEL, type TrashActionResult, type TrashItem, type TrashModuleKey } from "@/lib/trash-types";
 
 export { TRASH_MODULE_KEYS, TRASH_MODULE_LABEL, type TrashItem, type TrashModuleKey };
@@ -18,6 +19,7 @@ interface TrashProvider {
  */
 const TRASH_PROVIDERS: Record<TrashModuleKey, TrashProvider> = {
   leads: { list: listTrashedLeadsFor, restore: restoreLead, purge: purgeLead },
+  tasks: { list: listTrashedTasksFor, restore: restoreTask, purge: purgeTask },
 };
 
 export function trashProviderFor(module: string): TrashProvider | null {

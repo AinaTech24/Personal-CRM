@@ -202,6 +202,7 @@ model User {
   tasksCreated    Task[]           @relation("TaskCreatedBy")
   tasksAssigned   Task[]           @relation("TaskAssignedTo")
   tasksAssignedTo Task[]           @relation("TaskAssignees")
+  tasksDeleted    Task[]           @relation("TaskDeletedBy")
   taskComments    TaskComment[]
   taskAttachments TaskAttachment[]
 
@@ -543,12 +544,18 @@ model Task {
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("TaskDeletedBy", fields: [deletedById], references: [id])
+
   comments    TaskComment[]
   attachments TaskAttachment[]
 
   @@index([status])
   @@index([assignedToId])
   @@index([remindAt])
+  @@index([deletedAt])
 }
 
 model TaskComment {
