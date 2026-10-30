@@ -449,7 +449,6 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
                       <p className="truncate text-sm font-medium">{project.name}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      <RecencyBadge createdAt={project.createdAt} />
                       {!project.isActive && <Badge variant="secondary">Disabled</Badge>}
                       <Badge variant={PROJECT_STATUS_VARIANT[project.status]}>{statusLabel(project.status)}</Badge>
                     </div>
@@ -461,11 +460,12 @@ export function ProjectsList({ scope }: { scope?: "social-media" | "crm" | `team
                       style={{ width: `${project.progress}%` }}
                     />
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                     <span>{project.progress}% complete</span>
-                    <span>
+                    <span className="flex shrink-0 items-center gap-1.5">
                       {project._count.members} member{project._count.members === 1 ? "" : "s"} ·{" "}
                       {project._count.tasks} task{project._count.tasks === 1 ? "" : "s"}
+                      <RecencyBadge createdAt={project.createdAt} />
                     </span>
                   </div>
                   {projectAssignees(project).length > 0 && (
