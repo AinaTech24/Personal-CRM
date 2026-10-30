@@ -125,6 +125,12 @@ export { isAdmin };
  * is limited to records the user created — sharing a department doesn't by
  * itself grant visibility into a colleague's quotations/invoices (same
  * reasoning as canManageRecord in src/lib/permissions.ts).
+ *
+ * Deliberately says nothing about `deletedAt` — Quotation and Invoice each
+ * got that column added in a separate commit/deploy, so baking a shared
+ * assumption about it into this one function (used by both) would break
+ * whichever table hadn't gotten the column yet. Each module's own routes
+ * add their own `deletedAt` condition alongside this.
  */
 export function billingListWhere(user: PermissionUser) {
   if (isAdmin(user)) return {};

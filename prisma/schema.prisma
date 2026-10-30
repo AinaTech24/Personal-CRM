@@ -227,6 +227,7 @@ model User {
   projectTimeLogged      ProjectTimeEntry[] @relation("ProjectTimeEntryCreatedBy")
 
   quotationsCreated  Quotation[]         @relation("QuotationCreatedBy")
+  quotationsDeleted  Quotation[]         @relation("QuotationDeletedBy")
   quotationApprovals QuotationApproval[]
 
   invoicesCreated  Invoice[] @relation("InvoiceCreatedBy")
@@ -848,8 +849,14 @@ model Quotation {
   approvals QuotationApproval[]
   invoices  Invoice[]
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("QuotationDeletedBy", fields: [deletedById], references: [id])
+
   @@index([status])
   @@index([departmentId])
+  @@index([deletedAt])
 }
 
 model QuotationItem {

@@ -444,7 +444,8 @@ export function QuotationDetailDialog({
         open={confirmDeleteOpen}
         onOpenChange={setConfirmDeleteOpen}
         title="Delete this quotation?"
-        description="This permanently deletes the quotation, its line items, versions, and approval history. This cannot be undone."
+        description="This moves the quotation to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={del}
       />
     </Dialog>

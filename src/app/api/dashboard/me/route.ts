@@ -116,14 +116,14 @@ export async function GET() {
       }),
       crmAccess
         ? db.quotation.findMany({
-            where: { createdById: user.id, status: { notIn: ["APPROVED", "REJECTED", "EXPIRED"] } },
+            where: { createdById: user.id, status: { notIn: ["APPROVED", "REJECTED", "EXPIRED"] }, deletedAt: null },
             select: { id: true, quotationNumber: true, clientName: true, status: true, total: true, validUntil: true },
             orderBy: { createdAt: "desc" },
             take: 5,
           })
         : Promise.resolve([]),
       crmAccess
-        ? db.quotation.count({ where: { createdById: user.id, status: { notIn: ["APPROVED", "REJECTED", "EXPIRED"] } } })
+        ? db.quotation.count({ where: { createdById: user.id, status: { notIn: ["APPROVED", "REJECTED", "EXPIRED"] }, deletedAt: null } })
         : Promise.resolve(0),
       crmAccess
         ? db.invoice.findMany({
@@ -186,7 +186,7 @@ export async function GET() {
         where: { OR: [{ assignedToId: user.id }, { members: { some: { userId: user.id } } }], deletedAt: null },
       }),
       crmAccess
-        ? db.quotation.groupBy({ by: ["status"], _count: true, where: { createdById: user.id } })
+        ? db.quotation.groupBy({ by: ["status"], _count: true, where: { createdById: user.id, deletedAt: null } })
         : Promise.resolve([]),
       crmAccess
         ? db.invoice.groupBy({ by: ["status"], _count: true, where: { createdById: user.id } })

@@ -284,6 +284,7 @@ export async function GET(req: NextRequest) {
         {
           ...(targetUserId && { createdById: targetUserId }),
           ...(hasRange && { createdAt: range }),
+          deletedAt: null,
         },
         departmentId ? { departmentId } : null
       ),

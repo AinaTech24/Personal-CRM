@@ -30,7 +30,8 @@ export async function GET(req: NextRequest) {
     : { deletedAt: null };
   // Trashed projects excluded, same as leads/tasks.
   const projectWhere = departmentId ? { departmentId, deletedAt: null } : { deletedAt: null };
-  const quotationWhere = departmentId ? { departmentId } : undefined;
+  // Trashed quotations excluded, same as leads/tasks/projects.
+  const quotationWhere = departmentId ? { departmentId, deletedAt: null } : { deletedAt: null };
   const invoiceWhere = departmentId ? { departmentId } : undefined;
 
   const [

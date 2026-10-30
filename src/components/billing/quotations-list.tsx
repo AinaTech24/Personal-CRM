@@ -409,7 +409,8 @@ export function QuotationsList() {
         open={!!deleteId}
         onOpenChange={(v) => !v && setDeleteId(null)}
         title="Delete this quotation?"
-        description="This permanently deletes the quotation, its line items, versions, and approval history. This cannot be undone."
+        description="This moves the quotation to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={singleDelete}
       />
 
@@ -417,7 +418,8 @@ export function QuotationsList() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete ${selectedIds.size} quotation${selectedIds.size === 1 ? "" : "s"}?`}
-        description="This permanently deletes the selected quotation(s) along with their items, versions, and approval history. This cannot be undone."
+        description="This moves the selected quotation(s) to Trash, where they'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={bulkDelete}
       />
     </div>

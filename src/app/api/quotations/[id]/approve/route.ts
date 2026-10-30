@@ -20,7 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params;
   const quotation = await db.quotation.findUnique({ where: { id } });
-  if (!quotation) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!quotation || quotation.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });

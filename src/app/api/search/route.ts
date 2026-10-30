@@ -96,6 +96,7 @@ export async function GET(req: NextRequest) {
       where: {
         AND: [
           billingListWhere(user),
+          { deletedAt: null },
           { OR: [{ quotationNumber: { contains: q } }, { clientName: { contains: q } }, { subject: { contains: q } }, { notes: { contains: q } }] },
         ],
       },

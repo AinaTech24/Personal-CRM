@@ -58,7 +58,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       take: 200,
     }),
     db.quotation.findMany({
-      where: { createdById: id },
+      where: { createdById: id, deletedAt: null },
       select: { id: true, quotationNumber: true, clientName: true, status: true, total: true, createdAt: true },
       orderBy: { createdAt: "desc" },
       take: 200,

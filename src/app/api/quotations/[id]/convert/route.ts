@@ -17,7 +17,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const quotation = await db.quotation.findUnique({ where: { id }, include: { items: true } });
-  if (!quotation) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!quotation || quotation.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!canAccessBillingRecord(user, quotation)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   if (quotation.status !== "APPROVED") {
