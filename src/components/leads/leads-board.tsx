@@ -632,7 +632,6 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
                             <p className="line-clamp-2 text-sm font-medium">{lead.name}</p>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
-                            <RecencyBadge createdAt={lead.createdAt} />
                             <Badge variant={PRIORITY_VARIANT[lead.priority]}>{lead.priority}</Badge>
                             {selectedIds.size === 0 && (
                               <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
@@ -644,10 +643,11 @@ export function LeadsBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
                         {lead.company && (
                           <p className="mt-0.5 text-xs text-muted-foreground">{lead.company}</p>
                         )}
-                        <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                          <span>{lead.assignedTo ? lead.assignedTo.name : "Unassigned"}</span>
-                          <span>
+                        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                          <span className="truncate">{lead.assignedTo ? lead.assignedTo.name : "Unassigned"}</span>
+                          <span className="flex shrink-0 items-center gap-1.5">
                             {lead._count.notes > 0 && `${lead._count.notes} note${lead._count.notes === 1 ? "" : "s"}`}
+                            <RecencyBadge createdAt={lead.createdAt} />
                           </span>
                         </div>
                       </Card>

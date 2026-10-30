@@ -48,6 +48,15 @@ enum ManagedModule {
   PROJECTS
   EXPENSES
   NOTES
+  /// Build/edit/delete forms and manage submissions — same flat, company-wide
+  /// capability a Social Media or CRM team lead already has (see
+  /// canManageForms in src/lib/forms.ts), just reachable via a Permission
+  /// Manager grant too, for someone who isn't a team lead.
+  FORMS
+  /// See every call, not just your own or your CRM team's — Call has no
+  /// department of its own to scope to, so this is flat ("all" or nothing),
+  /// same as FORMS/BIRTHDAYS, not department-scoped like LEADS/TASKS.
+  CALLS
 }
 
 /// A personal note. Visibility is its own fixed 3-tier floor (Admin/Super
@@ -2143,6 +2152,13 @@ enum FormFieldType {
   LINK
   PASSWORD
   NUMBER
+  /// Like NUMBER, but the public page accepts fractional input (step="any")
+  /// instead of whole numbers only. minValue/maxValue still apply, same
+  /// Int columns as NUMBER — a decimal field can still have whole-number
+  /// bounds even though the value entered within them can be fractional.
+  DECIMAL
+  /// Like NUMBER, formatted with a currency symbol (FormField.currencySymbol).
+  CURRENCY
   DATE
   DROPDOWN
   RADIO
@@ -2153,6 +2169,10 @@ enum FormFieldType {
   /// Layout-only, like SECTION_HEADING — splits the form into steps at the
   /// public page. Never has an answer.
   PAGE_BREAK
+  /// A single-line text field (like SHORT_TEXT) whose `pattern` is set by
+  /// the admin in the builder, not auto-applied from DEFAULT_FIELD_PATTERNS
+  /// like EMAIL/PHONE/LINK — for a custom format no built-in type covers.
+  REGEX
 }
 
 /// A form an admin built with the drag-and-drop builder (src/app/(dashboard)/forms).
@@ -2224,6 +2244,8 @@ model FormField {
   maxValue    Int?
   /// Regex source (no flags) a text-like answer must match, e.g. an EMAIL/PHONE shape.
   pattern     String?       @db.VarChar(500)
+  /// CURRENCY only — the symbol shown before the amount, e.g. "$" or "₹". Null falls back to "₹" at render time.
+  currencySymbol String?    @db.VarChar(10)
 
   /// Conditional logic — this field (and its validation/requiredness) is
   /// only in play when the field `conditionFieldId` points at currently

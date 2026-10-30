@@ -556,7 +556,6 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
                             <p className="line-clamp-2 text-sm font-medium">{task.title}</p>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
-                            <RecencyBadge createdAt={task.createdAt} />
                             <Badge variant={PRIORITY_VARIANT[task.priority]}>{task.priority}</Badge>
                             {selectedIds.size === 0 && (
                               <span className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
@@ -570,15 +569,16 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
                             Due {new Date(task.dueDate).toLocaleDateString()}
                           </p>
                         )}
-                        <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                           <span className="truncate">
                             {taskAssignees(task).length > 0
                               ? taskAssignees(task).map((a) => a.name).join(", ")
                               : "Unassigned"}
                           </span>
-                          <span>
+                          <span className="flex shrink-0 items-center gap-1.5">
                             {task._count.comments > 0 &&
                               `${task._count.comments} comment${task._count.comments === 1 ? "" : "s"}`}
+                            <RecencyBadge createdAt={task.createdAt} />
                           </span>
                         </div>
                       </Card>

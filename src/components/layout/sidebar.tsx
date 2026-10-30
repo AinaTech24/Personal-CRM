@@ -100,7 +100,6 @@ const mainNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
-  { href: "/admin/modules", label: "Modules", icon: IconGrid, group: "admin" },
   { href: "/admin/logs", label: "System Logs", icon: IconHistory, group: "admin" },
   { href: "/admin/departments", label: "Departments", icon: IconBuilding, group: "admin" },
   { href: "/admin/users", label: "Users", icon: IconUsers, group: "admin" },
@@ -777,6 +776,13 @@ export function Sidebar({
     const insertAt = leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1;
     const crmExtras = [callsNavItem, ...(hiddenModules.includes("clients") ? [] : [clientsNavItem]), ...(isCrmLead ? [crmTeamNavItem] : [])];
     visibleMainNav.splice(insertAt, 0, ...crmExtras);
+  }
+
+  // Someone granted the Calls module permission gets the same "Calls" link
+  // a CRM team member has — unless they already got it above.
+  if (!isAdmin && managedModuleSet.has("CALLS") && !visibleMainNav.some((item) => item.href === "/calls")) {
+    const leadsIndex = visibleMainNav.findIndex((item) => item.href === "/leads");
+    visibleMainNav.splice(leadsIndex === -1 ? visibleMainNav.length : leadsIndex + 1, 0, callsNavItem);
   }
 
   // A department shared on at least one form (or a department admin) gets

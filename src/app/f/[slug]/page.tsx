@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dropdown } from "@/components/ui/dropdown";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/providers/toast-provider";
 import { AttachmentPreview } from "@/components/forms/attachment-preview";
@@ -34,6 +35,7 @@ interface FieldDef {
   minValue: number | null;
   maxValue: number | null;
   pattern: string | null;
+  currencySymbol: string | null;
   conditionFieldId: string | null;
   conditionOperator: string | null;
   conditionValue: string | null;
@@ -193,6 +195,48 @@ function FieldInput({ field, value, onChange }: { field: FieldDef; value: Answer
           max={field.maxValue ?? undefined}
         />
       );
+    case "DECIMAL":
+      return (
+        <Input
+          type="number"
+          step="any"
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.required}
+          placeholder={field.placeholder ?? undefined}
+          min={field.minValue ?? undefined}
+          max={field.maxValue ?? undefined}
+        />
+      );
+    case "CURRENCY":
+      return (
+        <div className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+            {field.currencySymbol || "₹"}
+          </span>
+          <Input
+            type="number"
+            step="any"
+            value={(value as string) ?? ""}
+            onChange={(e) => onChange(e.target.value)}
+            required={field.required}
+            placeholder={field.placeholder ?? undefined}
+            min={field.minValue ?? undefined}
+            max={field.maxValue ?? undefined}
+            className="pl-7"
+          />
+        </div>
+      );
+    case "REGEX":
+      return (
+        <Input
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          required={field.required}
+          placeholder={field.placeholder ?? undefined}
+          {...lengthConstraints(field)}
+        />
+      );
     case "DATE":
       return <Input type="date" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} required={field.required} />;
     case "DROPDOWN":
@@ -218,16 +262,19 @@ function FieldInput({ field, value, onChange }: { field: FieldDef; value: Answer
       const selected = Array.isArray(value) && typeof value[0] !== "object" ? (value as string[]) : [];
       return (
         <div className="flex flex-col gap-2">
-          {parseFieldOptions(field.options).map((o) => (
-            <label key={o} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={selected.includes(o)}
-                onChange={(e) => onChange(e.target.checked ? [...selected, o] : selected.filter((s) => s !== o))}
-              />
-              {o}
-            </label>
-          ))}
+          {parseFieldOptions(field.options).map((o) => {
+            const checked = selected.includes(o);
+            return (
+              <label key={o} className="flex items-center gap-2.5 text-sm">
+                <Checkbox
+                  checked={checked}
+                  onChange={(c) => onChange(c ? [...selected, o] : selected.filter((s) => s !== o))}
+                  aria-label={o}
+                />
+                {o}
+              </label>
+            );
+          })}
         </div>
       );
     }

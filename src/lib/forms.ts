@@ -4,12 +4,23 @@ import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { getSocialMembership } from "@/lib/social-media";
 import { isSocialMediaLead } from "@/lib/social-media-permissions";
 import { getCrmMembership, isCrmLead } from "@/lib/crm-team";
+import { canManageModule } from "@/lib/module-permissions-store";
+import type { ModuleAction } from "@/lib/module-permissions";
 
-/** Company Admins/Super Admins, plus "department admins" — a Social Media or CRM team lead — can build/edit/delete any form and see every form that exists. */
-export async function canManageForms(user: PermissionUser): Promise<boolean> {
+/**
+ * Company Admins/Super Admins, "department admins" (a Social Media or CRM
+ * team lead), or a Permission Manager FORMS grant — any of the three can
+ * build/edit/delete any form and see every form that exists. `action`
+ * defaults to READ for an open-the-page/list check; callers that mutate
+ * (create, edit, delete) pass the matching action so a grant missing just
+ * that one action is correctly refused, same as every other module's
+ * per-action grant.
+ */
+export async function canManageForms(user: PermissionUser, action: ModuleAction = "READ"): Promise<boolean> {
   if (isAdmin(user)) return true;
   const [socialMembership, crmMembership] = await Promise.all([getSocialMembership(user.id), getCrmMembership(user.id)]);
-  return isSocialMediaLead(user, socialMembership) || isCrmLead(user, crmMembership);
+  if (isSocialMediaLead(user, socialMembership) || isCrmLead(user, crmMembership)) return true;
+  return canManageModule(user, "FORMS", action);
 }
 
 /** Viewing one specific form's submissions — admins and department admins (see canManageForms), plus whichever departments that form was shared with. */
