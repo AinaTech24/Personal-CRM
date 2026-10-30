@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const params = req.nextUrl.searchParams;
-  const and: object[] = [];
+  const and: object[] = [{ deletedAt: null }];
 
   const category = params.get("category");
   if (category && (CLIENT_CATEGORIES as readonly string[]).includes(category)) {
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   const [rows, total, categoryGroups] = await Promise.all([
     db.client.findMany({ where, include: clientInclude, orderBy: { createdAt: "desc" }, take, skip }),
     db.client.count({ where }),
-    db.client.groupBy({ by: ["category"], _count: { _all: true } }),
+    db.client.groupBy({ by: ["category"], where: { deletedAt: null }, _count: { _all: true } }),
   ]);
 
   const counts: Record<string, number> = { ALL: 0 };

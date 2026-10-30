@@ -9,8 +9,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const existing = await db.client.findUnique({ where: { id }, select: { id: true } });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const existing = await db.client.findUnique({ where: { id }, select: { id: true, deletedAt: true } });
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const parsed = clientBodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -34,14 +34,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json({ client: serializeClient(client) });
 }
 
+/** Soft delete — moves the client to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user || !isAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const existing = await db.client.findUnique({ where: { id }, select: { id: true } });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const existing = await db.client.findUnique({ where: { id }, select: { id: true, deletedAt: true } });
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  await db.client.delete({ where: { id } });
+  await db.client.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   return NextResponse.json({ ok: true });
 }

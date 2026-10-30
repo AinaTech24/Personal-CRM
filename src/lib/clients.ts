@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { Client, ClientTeamMember, User } from "@/generated/prisma/client";
+import { db } from "@/lib/db";
+import { isAdmin, type PermissionUser } from "@/lib/permissions";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
+import { TRASH_RETENTION_DAYS, trashExpiresAt, type TrashActionResult, type TrashItem } from "@/lib/trash-types";
 
 export const CLIENT_CATEGORIES = ["CRM", "WEBSITE", "WHATSAPP", "SMM", "DDQ"] as const;
 
@@ -106,4 +109,53 @@ export function clientData(b: ClientBody) {
 /** One row per person: a repeated user keeps its last role rather than violating the unique key. */
 export function dedupeTeam(team: ClientBody["team"]) {
   return [...new Map(team.map((m) => [m.userId, m])).values()];
+}
+
+/* ------------------------------- Trash ------------------------------- */
+
+/** Every trashed client account — admin-only, same as the live list. */
+export async function listTrashedClientsFor(user: PermissionUser): Promise<TrashItem[]> {
+  if (!isAdmin(user)) return [];
+  const clients = await db.client.findMany({
+    where: { deletedAt: { not: null } },
+    include: { deletedBy: { select: { id: true, name: true } } },
+    orderBy: { deletedAt: "desc" },
+  });
+  return clients.map((c) => ({
+    id: c.id,
+    module: "clients",
+    moduleLabel: "Client Accounts",
+    title: c.name,
+    subtitle: c.ownerName,
+    deletedAt: c.deletedAt!.toISOString(),
+    deletedBy: c.deletedBy,
+    expiresAt: trashExpiresAt(c.deletedAt!).toISOString(),
+  }));
+}
+
+/** Clears the trash flag, putting the client back exactly as it was. */
+export async function restoreClient(user: PermissionUser, clientId: string): Promise<TrashActionResult> {
+  if (!isAdmin(user)) return "forbidden";
+  const client = await db.client.findUnique({ where: { id: clientId } });
+  if (!client || !client.deletedAt) return "not_found";
+
+  await db.client.update({ where: { id: clientId }, data: { deletedAt: null, deletedById: null } });
+  return "ok";
+}
+
+/** Same permission as deleting it in the first place. */
+export async function purgeClient(user: PermissionUser, clientId: string): Promise<TrashActionResult> {
+  if (!isAdmin(user)) return "forbidden";
+  const client = await db.client.findUnique({ where: { id: clientId } });
+  if (!client || !client.deletedAt) return "not_found";
+
+  await db.client.delete({ where: { id: clientId } });
+  return "ok";
+}
+
+/** The 30-day auto-purge job's actual work. */
+export async function purgeExpiredClients(): Promise<number> {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await db.client.deleteMany({ where: { deletedAt: { lte: cutoff } } });
+  return count;
 }

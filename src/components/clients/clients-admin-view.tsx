@@ -329,7 +329,8 @@ export function ClientsAdminView() {
         open={deleteTarget !== null}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title="Delete this client?"
-        description={deleteTarget ? `${deleteTarget.name} and its team assignments will be removed. This can't be undone.` : ""}
+        description={deleteTarget ? `${deleteTarget.name} will be moved to Trash, where it'll stay recoverable for 30 days before being permanently deleted.` : ""}
+        confirmLabel="Delete"
         onConfirm={() => (deleteTarget ? remove(deleteTarget) : undefined)}
       />
     </div>

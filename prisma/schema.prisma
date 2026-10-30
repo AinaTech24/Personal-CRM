@@ -241,6 +241,7 @@ model User {
   expenseDecisions      Expense[]              @relation("ExpenseDecider")
   expensesDeleted       Expense[]              @relation("ExpenseDeletedBy")
   clientsCreated        Client[]               @relation("ClientCreatedBy")
+  clientsDeleted        Client[]               @relation("ClientDeletedBy")
   formsCreated          Form[]                 @relation("FormCreatedBy")
   formsDeleted          Form[]                 @relation("FormDeletedBy")
   clientTeamRoles       ClientTeamMember[]     @relation("ClientTeamMemberUser")
@@ -2072,7 +2073,13 @@ model Client {
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("ClientDeletedBy", fields: [deletedById], references: [id])
+
   @@index([category])
+  @@index([deletedAt])
 }
 
 model ClientTeamMember {
