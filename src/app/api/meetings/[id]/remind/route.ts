@@ -23,11 +23,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       id: true,
       title: true,
       organizerId: true,
+      deletedAt: true,
       organizer: { select: { departmentId: true } },
       attendees: { select: { id: true, departmentId: true } },
     },
   });
-  if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!meeting || meeting.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   let allowed = isAdmin(user) || meeting.organizerId === user.id;
   if (!allowed) {

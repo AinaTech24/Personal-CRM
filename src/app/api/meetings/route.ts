@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const and: object[] = [where];
+  const and: object[] = [where, { deletedAt: null }];
 
   const organizerFilter = parseFilterParam(params.get("organizer"));
   if (organizerFilter) and.push({ organizerId: { in: organizerFilter } });

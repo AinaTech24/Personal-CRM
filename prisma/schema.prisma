@@ -242,6 +242,7 @@ model User {
 
   meetingsOrganized Meeting[] @relation("MeetingOrganizer")
   meetingsAttending Meeting[] @relation("MeetingAttendees")
+  meetingsDeleted   Meeting[] @relation("MeetingDeletedBy")
 
   conversationsCreated    Conversation[]       @relation("ConversationCreatedBy")
   conversationMemberships ConversationMember[]
@@ -1195,9 +1196,15 @@ model Meeting {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("MeetingDeletedBy", fields: [deletedById], references: [id])
+
   @@index([startsAt])
   @@index([organizerId])
   @@index([remindAt])
+  @@index([deletedAt])
 }
 
 // ---------- Chat / Messaging ----------

@@ -49,8 +49,8 @@ export async function GET(req: NextRequest) {
 
   const admin = isAdmin(user);
   const meetingVisibility = admin
-    ? {}
-    : { OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }] };
+    ? { deletedAt: null }
+    : { AND: [{ deletedAt: null }, { OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }] }] };
 
   // Shared prerequisites for scoping — resolved once, reused by several queries below.
   const [membership, teamUserIds] = await Promise.all([getSocialMembership(user.id), combinedTeamScopeFor(user)]);

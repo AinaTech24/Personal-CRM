@@ -532,7 +532,7 @@ export function MeetingsView({ scope }: { scope?: "social-media" | "crm" | `team
         open={deleteTarget !== null}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title={`Delete "${deleteTarget?.title}"?`}
-        description="This permanently removes the meeting for everyone."
+        description="This moves the meeting to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
         confirmLabel="Delete"
         onConfirm={async () => {
           if (deleteTarget) await deleteMeeting(deleteTarget.id);
@@ -812,7 +812,7 @@ function MeetingDialog({
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title="Delete meeting?"
-        description="This permanently removes the meeting for everyone."
+        description="This moves the meeting to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
         confirmLabel="Delete"
         onConfirm={remove}
       />

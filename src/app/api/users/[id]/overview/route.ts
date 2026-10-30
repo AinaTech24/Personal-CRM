@@ -52,7 +52,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       take: 200,
     }),
     db.meeting.findMany({
-      where: { OR: [{ organizerId: id }, { attendees: { some: { id } } }] },
+      where: { OR: [{ organizerId: id }, { attendees: { some: { id } } }], deletedAt: null },
       select: { id: true, title: true, startsAt: true, status: true },
       orderBy: { startsAt: "desc" },
       take: 200,

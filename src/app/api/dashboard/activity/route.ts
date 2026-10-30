@@ -160,7 +160,7 @@ export async function GET(req: NextRequest) {
     const rows = await db.meeting.findMany({
       // No departmentId column on meetings either — scoped to the organizer's department.
       where: withDepartment(
-        { ...where, ...(hasRange && { startsAt: range }) },
+        { ...where, ...(hasRange && { startsAt: range }), deletedAt: null },
         departmentId ? { organizer: { departmentId } } : null
       ),
       select: { id: true, title: true, location: true, status: true, startsAt: true, organizer: userSelect },

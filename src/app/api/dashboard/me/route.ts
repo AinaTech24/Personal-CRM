@@ -90,6 +90,7 @@ export async function GET() {
           status: "SCHEDULED",
           startsAt: { gte: now },
           OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }],
+          deletedAt: null,
         },
         select: { id: true, title: true, startsAt: true, location: true },
         orderBy: { startsAt: "asc" },

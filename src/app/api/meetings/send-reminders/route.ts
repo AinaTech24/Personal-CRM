@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   const due = await db.meeting.findMany({
-    where: { remindAt: { lte: new Date() }, reminderSentAt: null, status: { not: "CANCELLED" } },
+    where: { remindAt: { lte: new Date() }, reminderSentAt: null, status: { not: "CANCELLED" }, deletedAt: null },
     select: { id: true, title: true, organizerId: true, attendees: { select: { id: true } } },
   });
 

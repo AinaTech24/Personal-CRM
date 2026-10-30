@@ -31,7 +31,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
 
   const meeting = await db.meeting.findUnique({ where: { id }, include: meetingInclude });
-  if (!meeting) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!meeting || meeting.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   let visible = isAdmin(user) || meeting.organizer.id === user.id || meeting.attendees.some((a) => a.id === user.id);
   if (!visible) {
@@ -143,6 +143,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ meeting });
 }
 
+/** Soft delete — moves the meeting to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -153,6 +154,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Only the organizer can delete this meeting" }, { status: 403 });
   }
 
-  await db.meeting.delete({ where: { id } });
+  await db.meeting.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   return NextResponse.json({ ok: true });
 }
