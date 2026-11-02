@@ -52,7 +52,7 @@ async function expenseDeleteScope(user: PermissionUser) {
 }
 
 /** The claimant themselves (removing their own history), or an admin/EXPENSES grantee for their department. */
-export async function canDeleteExpense(user: PermissionUser, expense: { userId: string; user: { departmentId: string } }): Promise<boolean> {
+export async function canDeleteExpense(user: PermissionUser, expense: { userId: string; user: { departmentId: string | null } }): Promise<boolean> {
   if (expense.userId === user.id) return true;
   const scope = await expenseDeleteScope(user);
   return scope === "all" || (scope !== null && expense.user.departmentId === scope.departmentId);

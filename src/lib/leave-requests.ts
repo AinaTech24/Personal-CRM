@@ -52,7 +52,7 @@ async function leaveDeleteScope(user: PermissionUser) {
 }
 
 /** The requester themselves (removing their own history), or an admin/LEAVE grantee for the requester's department. */
-export async function canDeleteLeaveRequest(user: PermissionUser, request: { userId: string; user: { departmentId: string } }): Promise<boolean> {
+export async function canDeleteLeaveRequest(user: PermissionUser, request: { userId: string; user: { departmentId: string | null } }): Promise<boolean> {
   if (request.userId === user.id) return true;
   const scope = await leaveDeleteScope(user);
   return scope === "all" || (scope !== null && request.user.departmentId === scope.departmentId);
