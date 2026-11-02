@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SkeletonCards, SkeletonTable } from "@/components/ui/skeleton";
-import { IconCalendar, IconCheck, IconClock, IconPlus, IconX } from "@/components/icons";
+import { IconCalendar, IconCheck, IconClock, IconPlus, IconTrash, IconX } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { ApplyLeaveDialog } from "@/components/leave/apply-leave-dialog";
@@ -49,6 +49,7 @@ export function LeaveView() {
   const [year, setYear] = useState<number | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<LeaveRequestRow | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LeaveRequestRow | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/leave-requests");
@@ -76,6 +77,16 @@ export function LeaveView() {
       const d = await res.json().catch(() => ({}));
       toast.error("Couldn't cancel the request", d.error);
     }
+    load();
+  }
+
+  async function del(r: LeaveRequestRow) {
+    const res = await fetch(`/api/leave-requests/${r.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast.error("Couldn't delete the request", d.error);
+    }
+    setDeleteTarget(null);
     load();
   }
 
@@ -160,11 +171,22 @@ export function LeaveView() {
                           {r.decidedAt ? format(parseISO(r.decidedAt), "dd MMM yyyy") : "—"}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">
-                          {r.status === "PENDING" && (
-                            <Button type="button" size="sm" variant="outline" onClick={() => setCancelTarget(r)}>
-                              Cancel
+                          <div className="flex items-center justify-end gap-2">
+                            {r.status === "PENDING" && (
+                              <Button type="button" size="sm" variant="outline" onClick={() => setCancelTarget(r)}>
+                                Cancel
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              aria-label="Delete leave request"
+                              onClick={() => setDeleteTarget(r)}
+                            >
+                              <IconTrash className="h-4 w-4" />
                             </Button>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -185,6 +207,19 @@ export function LeaveView() {
         confirmLabel="Cancel request"
         loadingLabel="Cancelling…"
         onConfirm={() => (cancelTarget ? cancel(cancelTarget) : undefined)}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete this leave request?"
+        description={
+          deleteTarget
+            ? `Your request for ${leaveDatesLabel(deleteTarget.startDate, deleteTarget.endDate)} will be moved to Trash, where it'll stay recoverable for 30 days before being permanently deleted.` +
+              (deleteTarget.status === "APPROVED" ? " This also removes the leave from your attendance until restored." : "")
+            : ""
+        }
+        confirmLabel="Delete"
+        onConfirm={() => (deleteTarget ? del(deleteTarget) : undefined)}
       />
     </div>
   );

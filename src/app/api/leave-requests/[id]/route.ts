@@ -7,7 +7,7 @@ import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { sharesLedTeamWith } from "@/lib/teams";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
 import { grantLeaveDay, leaveWorkingDays, revokeLeaveDay } from "@/lib/leave";
-import { leaveRequestInclude, serializeLeaveRequest, CATEGORY_LABEL } from "@/lib/leave-requests";
+import { leaveRequestInclude, serializeLeaveRequest, CATEGORY_LABEL, canDeleteLeaveRequest } from "@/lib/leave-requests";
 import { notifyAndPush } from "@/lib/notify";
 import { emitToAdmins } from "@/lib/socket-emit";
 
@@ -158,7 +158,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 /**
- * Admins and a LEAVE grantee for their own department. An approved request's
+ * The requester themselves (removing it from their own "My Leave" history),
+ * or an admin/LEAVE grantee for their department. An approved request's
  * attendance stamp is undone first, so nothing is left stuck marked as leave
  * — restoring it from Trash re-stamps it (see restoreLeaveRequest).
  * Soft delete — moves the request to Trash rather than removing it.
@@ -171,8 +172,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const request = await db.leaveRequest.findUnique({ where: { id }, include: { user: { select: { departmentId: true } } } });
   if (!request || request.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const leaveScope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "LEAVE", "DELETE");
-  if (leaveScope !== "all" && !(leaveScope !== null && request.user.departmentId === leaveScope.departmentId)) {
+  if (!(await canDeleteLeaveRequest(user, request))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

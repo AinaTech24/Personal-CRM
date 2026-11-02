@@ -51,11 +51,23 @@ async function leaveDeleteScope(user: PermissionUser) {
   return isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "LEAVE", "DELETE");
 }
 
-/** Every trashed leave request this user is allowed to manage. */
+/** The requester themselves (removing their own history), or an admin/LEAVE grantee for the requester's department. */
+export async function canDeleteLeaveRequest(user: PermissionUser, request: { userId: string; user: { departmentId: string } }): Promise<boolean> {
+  if (request.userId === user.id) return true;
+  const scope = await leaveDeleteScope(user);
+  return scope === "all" || (scope !== null && request.user.departmentId === scope.departmentId);
+}
+
+/** Every trashed leave request this user is allowed to manage — their own, plus whatever their admin/grant scope covers. */
 export async function listTrashedLeaveRequestsFor(user: PermissionUser): Promise<TrashItem[]> {
   const scope = await leaveDeleteScope(user);
-  if (scope === null) return [];
-  const where = scope === "all" ? { deletedAt: { not: null } } : { deletedAt: { not: null }, user: { departmentId: scope.departmentId } };
+  const where =
+    scope === "all"
+      ? { deletedAt: { not: null } }
+      : {
+          deletedAt: { not: null },
+          OR: [{ userId: user.id }, ...(scope ? [{ user: { departmentId: scope.departmentId } }] : [])],
+        };
 
   const requests = await db.leaveRequest.findMany({
     where,
@@ -82,9 +94,7 @@ export async function listTrashedLeaveRequestsFor(user: PermissionUser): Promise
 export async function restoreLeaveRequest(user: PermissionUser, requestId: string): Promise<TrashActionResult> {
   const request = await db.leaveRequest.findUnique({ where: { id: requestId }, include: { user: { select: { departmentId: true } } } });
   if (!request || !request.deletedAt) return "not_found";
-
-  const scope = await leaveDeleteScope(user);
-  if (scope === null || (scope !== "all" && request.user.departmentId !== scope.departmentId)) return "forbidden";
+  if (!(await canDeleteLeaveRequest(user, request))) return "forbidden";
 
   await db.leaveRequest.update({ where: { id: requestId }, data: { deletedAt: null, deletedById: null } });
 
@@ -103,9 +113,7 @@ export async function restoreLeaveRequest(user: PermissionUser, requestId: strin
 export async function purgeLeaveRequest(user: PermissionUser, requestId: string): Promise<TrashActionResult> {
   const request = await db.leaveRequest.findUnique({ where: { id: requestId }, include: { user: { select: { departmentId: true } } } });
   if (!request || !request.deletedAt) return "not_found";
-
-  const scope = await leaveDeleteScope(user);
-  if (scope === null || (scope !== "all" && request.user.departmentId !== scope.departmentId)) return "forbidden";
+  if (!(await canDeleteLeaveRequest(user, request))) return "forbidden";
 
   await db.leaveRequest.delete({ where: { id: requestId } });
   return "ok";
