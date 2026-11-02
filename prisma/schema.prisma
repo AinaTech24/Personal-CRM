@@ -270,14 +270,18 @@ model User {
   callsCreated                     Call[]                      @relation("CallCreatedBy")
   callsDeleted                     Call[]                      @relation("CallDeletedBy")
   socialClientsCreated             SocialClient[]              @relation("SocialClientCreatedBy")
+  socialClientsDeleted             SocialClient[]              @relation("SocialClientDeletedBy")
   socialClientsAssigned            SocialClient[]              @relation("SocialClientAssignedTo")
   socialContentCreated             SocialContentItem[]         @relation("SocialContentCreatedBy")
   socialContentUpdated             SocialContentItem[]         @relation("SocialContentUpdatedBy")
+  socialContentDeleted             SocialContentItem[]         @relation("SocialContentDeletedBy")
   socialContentApprovals           SocialContentApproval[]
   socialAdsCreated                 SocialAdCampaign[]          @relation("SocialAdCreatedBy")
   socialAdsUpdated                 SocialAdCampaign[]          @relation("SocialAdUpdatedBy")
+  socialAdsDeleted                 SocialAdCampaign[]          @relation("SocialAdDeletedBy")
   socialReportsCreated             SocialMonthlyReport[]       @relation("SocialReportCreatedBy")
   socialReportsUpdated             SocialMonthlyReport[]       @relation("SocialReportUpdatedBy")
+  socialReportsDeleted             SocialMonthlyReport[]       @relation("SocialReportDeletedBy")
   socialReportFilesUploaded        SocialReportFile[]          @relation("SocialReportFileUploadedBy")
   socialClientActivities           SocialClientActivity[]
   socialPlatformsCreated           SocialPlatformAccount[]     @relation("SocialPlatformCreatedBy")
@@ -1610,8 +1614,14 @@ model SocialClient {
   calendarSlots    SocialContentCalendarSlot[]
   folders          SocialClientFolder[]
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("SocialClientDeletedBy", fields: [deletedById], references: [id])
+
   @@index([stage])
   @@index([assignedToId])
+  @@index([deletedAt])
 }
 
 /// A flat (single-level) folder for organizing a client's images — the
@@ -1732,9 +1742,15 @@ model SocialContentItem {
 
   approvals SocialContentApproval[]
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("SocialContentDeletedBy", fields: [deletedById], references: [id])
+
   @@index([clientId])
   @@index([stage])
   @@index([type])
+  @@index([deletedAt])
 }
 
 /// Append-only stage-transition log, same shape as QuotationApproval.
@@ -1779,8 +1795,14 @@ model SocialAdCampaign {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("SocialAdDeletedBy", fields: [deletedById], references: [id])
+
   @@index([clientId])
   @@index([stage])
+  @@index([deletedAt])
 }
 
 model SocialMonthlyReport {
@@ -1813,7 +1835,13 @@ model SocialMonthlyReport {
 
   files SocialReportFile[]
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?     @relation("SocialReportDeletedBy", fields: [deletedById], references: [id])
+
   @@unique([clientId, year, month])
+  @@index([deletedAt])
 }
 
 /// One uploaded attachment on a monthly report — same base64-in-MySQL shape

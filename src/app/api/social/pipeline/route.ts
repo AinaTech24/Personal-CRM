@@ -25,18 +25,20 @@ export async function GET() {
   if (!isSocialMediaLead(user, membership)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const clients = await db.socialClient.findMany({
+    where: { deletedAt: null },
     include: {
       contentItems: {
-        where: { stage: { not: "CANCELLED" } },
+        where: { stage: { not: "CANCELLED" }, deletedAt: null },
         select: { id: true, type: true, title: true, stage: true, scheduledFor: true, updatedAt: true },
         orderBy: { updatedAt: "desc" },
       },
       adCampaigns: {
-        where: { stage: { not: "CANCELLED" } },
+        where: { stage: { not: "CANCELLED" }, deletedAt: null },
         select: { id: true, name: true, stage: true, updatedAt: true },
         orderBy: { updatedAt: "desc" },
       },
       monthlyReports: {
+        where: { deletedAt: null },
         select: { id: true, year: true, month: true, title: true, reviewedAt: true, updatedAt: true },
         orderBy: [{ year: "desc" }, { month: "desc" }],
       },

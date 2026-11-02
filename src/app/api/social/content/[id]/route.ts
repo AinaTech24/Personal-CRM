@@ -67,6 +67,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ content });
 }
 
+/** Soft delete — moves the content item to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -84,7 +85,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Only a Social Media lead or admin can delete content" }, { status: 403 });
   }
 
-  await db.socialContentItem.delete({ where: { id } });
+  await db.socialContentItem.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   await logSocialClientActivity(access.clientId, user.id, "content_deleted", { contentId: id, title: access.title });
 
   return NextResponse.json({ ok: true });

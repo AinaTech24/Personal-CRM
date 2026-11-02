@@ -643,7 +643,8 @@ export function ClientsPageClient() {
         open={!!deleteTarget}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title={`Delete ${deleteTarget?.name}?`}
-        description="This permanently removes the client along with its platform accounts, content, ad campaigns, and reports. This cannot be undone."
+        description="This moves the client to Trash, where it'll stay recoverable for 30 days before being permanently deleted (along with its platform accounts, content, ad campaigns, and reports)."
+        confirmLabel="Delete"
         onConfirm={confirmDelete}
       />
     </div>

@@ -40,31 +40,42 @@ describe("isSocialMediaLead", () => {
 });
 
 describe("socialClientListWhere", () => {
-  it("imposes no filter for a lead or an admin", () => {
-    expect(socialClientListWhere(user({ role: "ADMIN" }), null)).toEqual({});
-    expect(socialClientListWhere(user(), { isLead: true })).toEqual({});
+  it("imposes no visibility filter for a lead or an admin, besides excluding trashed clients", () => {
+    expect(socialClientListWhere(user({ role: "ADMIN" }), null)).toEqual({ AND: [{}, { deletedAt: null }] });
+    expect(socialClientListWhere(user(), { isLead: true })).toEqual({ AND: [{}, { deletedAt: null }] });
   });
 
   it("scopes a regular member to clients they created or are assigned", () => {
     const u = user({ id: "u1" });
     expect(socialClientListWhere(u, { isLead: false })).toEqual({
-      OR: [{ createdById: "u1" }, { assignedToId: "u1" }],
+      AND: [{ OR: [{ createdById: "u1" }, { assignedToId: "u1" }] }, { deletedAt: null }],
     });
   });
 
-  it("imposes no filter for a module grant scoped to \"all\"", () => {
-    expect(socialClientListWhere(user(), { isLead: false }, "all")).toEqual({});
+  it("imposes no visibility filter for a module grant scoped to \"all\"", () => {
+    expect(socialClientListWhere(user(), { isLead: false }, "all")).toEqual({ AND: [{}, { deletedAt: null }] });
   });
 
   it("widens a non-lead's own-record visibility to their department for a department-scoped grant", () => {
     const u = user({ id: "u1" });
     expect(socialClientListWhere(u, { isLead: false }, { departmentId: "dept-1" })).toEqual({
-      OR: [
-        { createdById: "u1" },
-        { assignedToId: "u1" },
-        { createdBy: { departmentId: "dept-1" } },
-        { assignedTo: { departmentId: "dept-1" } },
+      AND: [
+        {
+          OR: [
+            { createdById: "u1" },
+            { assignedToId: "u1" },
+            { createdBy: { departmentId: "dept-1" } },
+            { assignedTo: { departmentId: "dept-1" } },
+          ],
+        },
+        { deletedAt: null },
       ],
+    });
+  });
+
+  it("flips to trashed-only when asked for the Trash listing", () => {
+    expect(socialClientListWhere(user({ role: "ADMIN" }), null, undefined, { trashed: true })).toEqual({
+      AND: [{}, { deletedAt: { not: null } }],
     });
   });
 });

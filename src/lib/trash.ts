@@ -11,6 +11,20 @@ import { listTrashedExpensesFor, restoreExpense, purgeExpense } from "@/lib/expe
 import { listTrashedFormsFor, restoreForm, purgeForm } from "@/lib/forms";
 import { listTrashedPasswordEntriesFor, restorePasswordEntry, purgePasswordEntry } from "@/lib/passwords";
 import { listTrashedClientsFor, restoreClient, purgeClient } from "@/lib/clients";
+import {
+  listTrashedSocialClientsFor,
+  restoreSocialClient,
+  purgeSocialClient,
+  listTrashedSocialContentFor,
+  restoreSocialContent,
+  purgeSocialContent,
+  listTrashedSocialAdsFor,
+  restoreSocialAd,
+  purgeSocialAd,
+  listTrashedSocialReportsFor,
+  restoreSocialReport,
+  purgeSocialReport,
+} from "@/lib/social-media";
 import { TRASH_MODULE_KEYS, TRASH_MODULE_LABEL, type TrashActionResult, type TrashItem, type TrashModuleKey } from "@/lib/trash-types";
 
 export { TRASH_MODULE_KEYS, TRASH_MODULE_LABEL, type TrashItem, type TrashModuleKey };
@@ -40,6 +54,10 @@ const TRASH_PROVIDERS: Record<TrashModuleKey, TrashProvider> = {
   forms: { list: listTrashedFormsFor, restore: restoreForm, purge: purgeForm },
   passwords: { list: listTrashedPasswordEntriesFor, restore: restorePasswordEntry, purge: purgePasswordEntry },
   clients: { list: listTrashedClientsFor, restore: restoreClient, purge: purgeClient },
+  socialClients: { list: listTrashedSocialClientsFor, restore: restoreSocialClient, purge: purgeSocialClient },
+  socialContent: { list: listTrashedSocialContentFor, restore: restoreSocialContent, purge: purgeSocialContent },
+  socialAds: { list: listTrashedSocialAdsFor, restore: restoreSocialAd, purge: purgeSocialAd },
+  socialReports: { list: listTrashedSocialReportsFor, restore: restoreSocialReport, purge: purgeSocialReport },
 };
 
 export function trashProviderFor(module: string): TrashProvider | null {

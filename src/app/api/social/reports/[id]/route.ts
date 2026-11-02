@@ -72,6 +72,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ report });
 }
 
+/** Soft delete — moves the report to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -82,7 +83,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (access === "forbidden") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  await db.socialMonthlyReport.delete({ where: { id } });
+  await db.socialMonthlyReport.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   await logSocialClientActivity(access.clientId, user.id, "monthly_report_deleted", { year: access.year, month: access.month });
 
   return NextResponse.json({ ok: true });

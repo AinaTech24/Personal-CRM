@@ -103,6 +103,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ ad });
 }
 
+/** Soft delete — moves the ad campaign to Trash rather than removing it. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -120,7 +121,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Only a Social Media lead or admin can delete an ad campaign" }, { status: 403 });
   }
 
-  await db.socialAdCampaign.delete({ where: { id } });
+  await db.socialAdCampaign.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   await logSocialClientActivity(access.clientId, user.id, "ad_campaign_deleted", { adId: id, name: access.name });
 
   return NextResponse.json({ ok: true });

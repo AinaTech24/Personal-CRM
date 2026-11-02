@@ -44,14 +44,20 @@ export function isSocialMediaOnlyUser(user: PermissionUser, membership: SocialMe
 export function socialClientListWhere(
   user: PermissionUser,
   membership: SocialMembership | null,
-  scope?: "all" | { departmentId: string } | null
+  scope?: "all" | { departmentId: string } | null,
+  opts?: { trashed?: boolean }
 ) {
-  if (isSocialMediaLead(user, membership) || scope === "all") return {};
-  const or: object[] = [{ createdById: user.id }, { assignedToId: user.id }];
-  if (scope && typeof scope === "object") {
-    or.push({ createdBy: { departmentId: scope.departmentId } }, { assignedTo: { departmentId: scope.departmentId } });
+  let visibility: object;
+  if (isSocialMediaLead(user, membership) || scope === "all") {
+    visibility = {};
+  } else {
+    const or: object[] = [{ createdById: user.id }, { assignedToId: user.id }];
+    if (scope && typeof scope === "object") {
+      or.push({ createdBy: { departmentId: scope.departmentId } }, { assignedTo: { departmentId: scope.departmentId } });
+    }
+    visibility = { OR: or };
   }
-  return { OR: or };
+  return { AND: [visibility, { deletedAt: opts?.trashed ? { not: null } : null }] };
 }
 
 export function canAccessSocialClient(

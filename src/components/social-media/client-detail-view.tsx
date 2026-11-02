@@ -963,7 +963,8 @@ const ContentTab = forwardRef<TabCreateHandle, { clientId: string; platformAccou
         open={!!deleteTarget}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title={`Delete "${deleteTarget?.title}"?`}
-        description="This permanently deletes the content item along with its approval history. This cannot be undone."
+        description="This moves the content item to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={confirmRemove}
       />
     </div>
@@ -1213,7 +1214,8 @@ const AdsTab = forwardRef<
         open={!!deleteTarget}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title={`Delete "${deleteTarget?.name}"?`}
-        description="This permanently deletes the ad campaign and its stats. This cannot be undone."
+        description="This moves the ad campaign to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={confirmRemove}
       />
     </div>
@@ -1508,7 +1510,8 @@ const ReportsTab = forwardRef<TabCreateHandle, { clientId: string; onChanged: ()
         open={!!deleteTarget}
         onOpenChange={(v) => !v && setDeleteTarget(null)}
         title={`Delete ${deleteTarget ? `${MONTH_NAMES[deleteTarget.month - 1]} ${deleteTarget.year}` : ""} report?`}
-        description="This permanently deletes the monthly report. This cannot be undone."
+        description="This moves the monthly report to Trash, where it'll stay recoverable for 30 days before being permanently deleted."
+        confirmLabel="Delete"
         onConfirm={confirmRemove}
       />
     </div>

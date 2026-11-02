@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const ads = await db.socialAdCampaign.findMany({
-    where: { clientId: id },
+    where: { clientId: id, deletedAt: null },
     include: {
       createdBy: { select: { id: true, name: true } },
       updatedBy: { select: { id: true, name: true } },

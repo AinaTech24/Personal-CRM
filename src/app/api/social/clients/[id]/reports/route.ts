@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const reports = await db.socialMonthlyReport.findMany({
-    where: { clientId: id },
+    where: { clientId: id, deletedAt: null },
     include: {
       createdBy: { select: { id: true, name: true } },
       updatedBy: { select: { id: true, name: true } },
@@ -69,7 +69,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const report = await db.socialMonthlyReport.upsert({
     where: { clientId_year_month: { clientId: id, year: data.year, month: data.month } },
     create: { ...data, clientId: id, createdById: user.id, updatedById: user.id },
-    update: { ...data, updatedById: user.id },
+    // Submitting a new report for a month whose old one was trashed brings it
+    // back out of Trash with the fresh data, rather than leaving a revived
+    // row stuck behind a stale deletedAt.
+    update: { ...data, updatedById: user.id, deletedAt: null, deletedById: null },
     include: {
       createdBy: { select: { id: true, name: true } },
       updatedBy: { select: { id: true, name: true } },

@@ -15,7 +15,24 @@ export function trashExpiresAt(deletedAt: Date): Date {
 }
 
 /** Registered as each module gets its own Trash support — see trash.ts's TRASH_MODULE_KEYS. */
-export const TRASH_MODULE_KEYS = ["leads", "tasks", "meetings", "projects", "notes", "quotations", "invoices", "calls", "expenses", "forms", "passwords", "clients"] as const;
+export const TRASH_MODULE_KEYS = [
+  "leads",
+  "tasks",
+  "meetings",
+  "projects",
+  "notes",
+  "quotations",
+  "invoices",
+  "calls",
+  "expenses",
+  "forms",
+  "passwords",
+  "clients",
+  "socialClients",
+  "socialContent",
+  "socialAds",
+  "socialReports",
+] as const;
 export type TrashModuleKey = (typeof TRASH_MODULE_KEYS)[number];
 
 export const TRASH_MODULE_LABEL: Record<TrashModuleKey, string> = {
@@ -31,6 +48,10 @@ export const TRASH_MODULE_LABEL: Record<TrashModuleKey, string> = {
   forms: "Forms",
   passwords: "Passwords",
   clients: "Client Accounts",
+  socialClients: "Social Media Clients",
+  socialContent: "Social Media Content",
+  socialAds: "Social Media Ads",
+  socialReports: "Social Media Reports",
 };
 
 /** One row in the Trash page — the same shape regardless of which module it came from. */

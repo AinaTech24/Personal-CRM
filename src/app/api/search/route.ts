@@ -133,19 +133,19 @@ export async function GET(req: NextRequest) {
     }),
     // Social Media content items (posts/reels/etc.), scoped via their client.
     db.socialContentItem.findMany({
-      where: { AND: [{ client: clientVisibility }, { OR: [{ title: { contains: q } }, { caption: { contains: q } }, { hashtags: { contains: q } }] }] },
+      where: { AND: [{ client: clientVisibility }, { deletedAt: null }, { OR: [{ title: { contains: q } }, { caption: { contains: q } }, { hashtags: { contains: q } }] }] },
       select: { id: true, title: true, clientId: true, client: { select: { name: true } } },
       take: TAKE,
     }),
     // Social Media ad campaigns, scoped via their client.
     db.socialAdCampaign.findMany({
-      where: { AND: [{ client: clientVisibility }, { OR: [{ name: { contains: q } }, { targetAudience: { contains: q } }, { location: { contains: q } }] }] },
+      where: { AND: [{ client: clientVisibility }, { deletedAt: null }, { OR: [{ name: { contains: q } }, { targetAudience: { contains: q } }, { location: { contains: q } }] }] },
       select: { id: true, name: true, clientId: true, client: { select: { name: true } } },
       take: TAKE,
     }),
     // Social Media monthly reports, scoped via their client.
     db.socialMonthlyReport.findMany({
-      where: { AND: [{ client: clientVisibility }, { OR: [{ title: { contains: q } }, { description: { contains: q } }, { insights: { contains: q } }] }] },
+      where: { AND: [{ client: clientVisibility }, { deletedAt: null }, { OR: [{ title: { contains: q } }, { description: { contains: q } }, { insights: { contains: q } }] }] },
       select: { id: true, title: true, clientId: true, client: { select: { name: true } } },
       take: TAKE,
     }),

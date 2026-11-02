@@ -152,11 +152,11 @@ export async function GET() {
           })
         : Promise.resolve([]),
       socialAccess
-        ? db.socialClient.count({ where: { OR: [{ createdById: user.id }, { assignedToId: user.id }] } })
+        ? db.socialClient.count({ where: { OR: [{ createdById: user.id }, { assignedToId: user.id }], deletedAt: null } })
         : Promise.resolve(0),
       socialAccess
         ? db.socialContentItem.findMany({
-            where: { createdById: user.id, stage: { notIn: ["PUBLISHED", "CANCELLED"] } },
+            where: { createdById: user.id, stage: { notIn: ["PUBLISHED", "CANCELLED"] }, deletedAt: null },
             select: {
               id: true,
               title: true,
@@ -170,7 +170,7 @@ export async function GET() {
           })
         : Promise.resolve([]),
       socialAccess
-        ? db.socialContentItem.count({ where: { createdById: user.id, stage: { notIn: ["PUBLISHED", "CANCELLED"] } } })
+        ? db.socialContentItem.count({ where: { createdById: user.id, stage: { notIn: ["PUBLISHED", "CANCELLED"] }, deletedAt: null } })
         : Promise.resolve(0),
       // Every status (not just the "still open" subset the lists above use)
       // — the Overview charts show the full distribution, not just a to-do.

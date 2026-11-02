@@ -1,10 +1,11 @@
 import { db } from "@/lib/db";
 import { isAdmin, type PermissionUser } from "@/lib/permissions";
-import { canAccessSocialClient, isSocialMediaLead, isSocialMediaOnlyUser, type SocialMembership } from "@/lib/social-media-permissions";
-import { moduleAccessScope, isModuleBlocked, getHiddenModules } from "@/lib/module-permissions-store";
+import { canAccessSocialClient, isSocialMediaLead, isSocialMediaOnlyUser, socialClientListWhere, type SocialMembership } from "@/lib/social-media-permissions";
+import { moduleAccessScope, isModuleBlocked, getHiddenModules, canManageModule } from "@/lib/module-permissions-store";
 import type { ModuleAction } from "@/lib/module-permissions";
 import { getTeamMembershipBySlug, getTeamUserIdsBySlug, broadcastTeamChangeBySlug } from "@/lib/teams";
 import { getCrmMembership, hasCrmAccess } from "@/lib/crm-team";
+import { TRASH_RETENTION_DAYS, trashExpiresAt, type TrashActionResult, type TrashItem } from "@/lib/trash-types";
 
 /** The "Social Media" row in the generic Team table (seeded by scripts/migrate-social-crm-to-teams.ts) that this module reads/writes through — see the Teams unification plan. */
 const TEAM_SLUG = "social-media";
@@ -135,7 +136,7 @@ export async function getSocialClientForUser(
     where: { id: clientId },
     include: { createdBy: { select: { departmentId: true } }, assignedTo: { select: { departmentId: true } } },
   });
-  if (!client) return null;
+  if (!client || client.deletedAt) return null;
   if (await isModuleBlocked(user, "CLIENTS")) return "forbidden" as const;
   if (canAccessSocialClient(user, membership, client)) return client;
 
@@ -172,7 +173,7 @@ export async function getSocialClientForUser(
  */
 export async function getSocialContentForUser(user: PermissionUser, membership: SocialMembership | null, contentId: string) {
   const content = await db.socialContentItem.findUnique({ where: { id: contentId } });
-  if (!content) return null;
+  if (!content || content.deletedAt) return null;
   const client = await getSocialClientForUser(user, membership, content.clientId);
   if (client === "forbidden" || !client) return client;
   return content;
@@ -181,7 +182,7 @@ export async function getSocialContentForUser(user: PermissionUser, membership: 
 /** Same parent-client-inherited access pattern as getSocialContentForUser, for ad campaigns. */
 export async function getSocialAdForUser(user: PermissionUser, membership: SocialMembership | null, adId: string) {
   const ad = await db.socialAdCampaign.findUnique({ where: { id: adId } });
-  if (!ad) return null;
+  if (!ad || ad.deletedAt) return null;
   const client = await getSocialClientForUser(user, membership, ad.clientId);
   if (client === "forbidden" || !client) return client;
   return ad;
@@ -190,7 +191,7 @@ export async function getSocialAdForUser(user: PermissionUser, membership: Socia
 /** Same parent-client-inherited access pattern as getSocialContentForUser, for monthly reports. */
 export async function getSocialReportForUser(user: PermissionUser, membership: SocialMembership | null, reportId: string) {
   const report = await db.socialMonthlyReport.findUnique({ where: { id: reportId } });
-  if (!report) return null;
+  if (!report || report.deletedAt) return null;
   const client = await getSocialClientForUser(user, membership, report.clientId);
   if (client === "forbidden" || !client) return client;
   return report;
@@ -220,6 +221,229 @@ export async function getSocialImageForUser(user: PermissionUser, membership: So
 
 export async function logSocialClientActivity(clientId: string, actorId: string, action: string, meta?: object) {
   await db.socialClientActivity.create({ data: { clientId, actorId, action, meta } });
+}
+
+/* ------------------------------- Trash ------------------------------- */
+
+/** Deletion is a lead/admin action across Clients, Content, and Ad Campaigns — see each live DELETE route's own comment. */
+async function canManageSocialTrash(user: PermissionUser, membership: SocialMembership | null): Promise<boolean> {
+  return isSocialMediaLead(user, membership) || (await canManageModule(user, "CLIENTS", "DELETE"));
+}
+
+/** Every trashed client this user is allowed to manage. */
+export async function listTrashedSocialClientsFor(user: PermissionUser): Promise<TrashItem[]> {
+  const membership = await getSocialMembership(user.id);
+  if (!(await canManageSocialTrash(user, membership))) return [];
+  const clients = await db.socialClient.findMany({
+    where: { deletedAt: { not: null } },
+    include: { deletedBy: { select: { id: true, name: true } } },
+    orderBy: { deletedAt: "desc" },
+  });
+  return clients.map((c) => ({
+    id: c.id,
+    module: "socialClients",
+    moduleLabel: "Social Media Clients",
+    title: c.name,
+    subtitle: c.companyName,
+    deletedAt: c.deletedAt!.toISOString(),
+    deletedBy: c.deletedBy,
+    expiresAt: trashExpiresAt(c.deletedAt!).toISOString(),
+  }));
+}
+
+/** Clears the trash flag, putting the client back exactly as it was. */
+export async function restoreSocialClient(user: PermissionUser, clientId: string): Promise<TrashActionResult> {
+  const membership = await getSocialMembership(user.id);
+  if (!(await canManageSocialTrash(user, membership))) return "forbidden";
+  const client = await db.socialClient.findUnique({ where: { id: clientId } });
+  if (!client || !client.deletedAt) return "not_found";
+
+  await db.socialClient.update({ where: { id: clientId }, data: { deletedAt: null, deletedById: null } });
+  await broadcastSocialChange("social_client_created", { clientId });
+  return "ok";
+}
+
+/** Same permission as deleting it in the first place — cascades to its content/ads/reports, like the live DELETE route. */
+export async function purgeSocialClient(user: PermissionUser, clientId: string): Promise<TrashActionResult> {
+  const membership = await getSocialMembership(user.id);
+  if (!(await canManageSocialTrash(user, membership))) return "forbidden";
+  const client = await db.socialClient.findUnique({ where: { id: clientId } });
+  if (!client || !client.deletedAt) return "not_found";
+
+  await db.socialClient.delete({ where: { id: clientId } });
+  return "ok";
+}
+
+/** The 30-day auto-purge job's actual work. */
+export async function purgeExpiredSocialClients(): Promise<number> {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await db.socialClient.deleteMany({ where: { deletedAt: { lte: cutoff } } });
+  return count;
+}
+
+/** Every trashed content item under a client this user is allowed to manage. */
+export async function listTrashedSocialContentFor(user: PermissionUser): Promise<TrashItem[]> {
+  const membership = await getSocialMembership(user.id);
+  if (!(await canManageSocialTrash(user, membership))) return [];
+  const items = await db.socialContentItem.findMany({
+    where: { deletedAt: { not: null }, client: socialClientListWhere(user, membership) },
+    include: { deletedBy: { select: { id: true, name: true } }, client: { select: { name: true } } },
+    orderBy: { deletedAt: "desc" },
+  });
+  return items.map((c) => ({
+    id: c.id,
+    module: "socialContent",
+    moduleLabel: "Social Media Content",
+    title: c.title,
+    subtitle: c.client.name,
+    deletedAt: c.deletedAt!.toISOString(),
+    deletedBy: c.deletedBy,
+    expiresAt: trashExpiresAt(c.deletedAt!).toISOString(),
+  }));
+}
+
+/** Clears the trash flag, putting the content item back exactly as it was. */
+export async function restoreSocialContent(user: PermissionUser, contentId: string): Promise<TrashActionResult> {
+  const content = await db.socialContentItem.findUnique({ where: { id: contentId } });
+  if (!content || !content.deletedAt) return "not_found";
+  const membership = await getSocialMembership(user.id);
+  const client = await getSocialClientForUser(user, membership, content.clientId);
+  if (client === "forbidden" || !client) return "forbidden";
+  if (!(await canManageSocialTrash(user, membership))) return "forbidden";
+
+  await db.socialContentItem.update({ where: { id: contentId }, data: { deletedAt: null, deletedById: null } });
+  return "ok";
+}
+
+/** Same permission as deleting it in the first place. */
+export async function purgeSocialContent(user: PermissionUser, contentId: string): Promise<TrashActionResult> {
+  const content = await db.socialContentItem.findUnique({ where: { id: contentId } });
+  if (!content || !content.deletedAt) return "not_found";
+  const membership = await getSocialMembership(user.id);
+  const client = await getSocialClientForUser(user, membership, content.clientId);
+  if (client === "forbidden" || !client) return "forbidden";
+  if (!(await canManageSocialTrash(user, membership))) return "forbidden";
+
+  await db.socialContentItem.delete({ where: { id: contentId } });
+  return "ok";
+}
+
+/** The 30-day auto-purge job's actual work. */
+export async function purgeExpiredSocialContent(): Promise<number> {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await db.socialContentItem.deleteMany({ where: { deletedAt: { lte: cutoff } } });
+  return count;
+}
+
+/** Every trashed ad campaign under a client this user is allowed to manage. */
+export async function listTrashedSocialAdsFor(user: PermissionUser): Promise<TrashItem[]> {
+  const membership = await getSocialMembership(user.id);
+  if (!(await canManageSocialTrash(user, membership))) return [];
+  const ads = await db.socialAdCampaign.findMany({
+    where: { deletedAt: { not: null }, client: socialClientListWhere(user, membership) },
+    include: { deletedBy: { select: { id: true, name: true } }, client: { select: { name: true } } },
+    orderBy: { deletedAt: "desc" },
+  });
+  return ads.map((a) => ({
+    id: a.id,
+    module: "socialAds",
+    moduleLabel: "Social Media Ads",
+    title: a.name,
+    subtitle: a.client.name,
+    deletedAt: a.deletedAt!.toISOString(),
+    deletedBy: a.deletedBy,
+    expiresAt: trashExpiresAt(a.deletedAt!).toISOString(),
+  }));
+}
+
+/** Clears the trash flag, putting the ad campaign back exactly as it was. */
+export async function restoreSocialAd(user: PermissionUser, adId: string): Promise<TrashActionResult> {
+  const ad = await db.socialAdCampaign.findUnique({ where: { id: adId } });
+  if (!ad || !ad.deletedAt) return "not_found";
+  const membership = await getSocialMembership(user.id);
+  const client = await getSocialClientForUser(user, membership, ad.clientId);
+  if (client === "forbidden" || !client) return "forbidden";
+  if (!(await canManageSocialTrash(user, membership))) return "forbidden";
+
+  await db.socialAdCampaign.update({ where: { id: adId }, data: { deletedAt: null, deletedById: null } });
+  return "ok";
+}
+
+/** Same permission as deleting it in the first place. */
+export async function purgeSocialAd(user: PermissionUser, adId: string): Promise<TrashActionResult> {
+  const ad = await db.socialAdCampaign.findUnique({ where: { id: adId } });
+  if (!ad || !ad.deletedAt) return "not_found";
+  const membership = await getSocialMembership(user.id);
+  const client = await getSocialClientForUser(user, membership, ad.clientId);
+  if (client === "forbidden" || !client) return "forbidden";
+  if (!(await canManageSocialTrash(user, membership))) return "forbidden";
+
+  await db.socialAdCampaign.delete({ where: { id: adId } });
+  return "ok";
+}
+
+/** The 30-day auto-purge job's actual work. */
+export async function purgeExpiredSocialAds(): Promise<number> {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await db.socialAdCampaign.deleteMany({ where: { deletedAt: { lte: cutoff } } });
+  return count;
+}
+
+/**
+ * Every trashed monthly report under a client this user can see — reports
+ * have no lead/grant-only delete gate on the live route (unlike content/ads),
+ * so this lists whatever the caller can otherwise access, not just what a
+ * lead/grant holder could.
+ */
+export async function listTrashedSocialReportsFor(user: PermissionUser): Promise<TrashItem[]> {
+  const membership = await getSocialMembership(user.id);
+  const scope = await moduleAccessScope(user, "CLIENTS", "READ");
+  const reports = await db.socialMonthlyReport.findMany({
+    where: { deletedAt: { not: null }, client: socialClientListWhere(user, membership, scope) },
+    include: { deletedBy: { select: { id: true, name: true } }, client: { select: { name: true } } },
+    orderBy: { deletedAt: "desc" },
+  });
+  return reports.map((r) => ({
+    id: r.id,
+    module: "socialReports",
+    moduleLabel: "Social Media Reports",
+    title: r.title || `${r.client.name} — ${r.year}-${String(r.month).padStart(2, "0")}`,
+    subtitle: r.client.name,
+    deletedAt: r.deletedAt!.toISOString(),
+    deletedBy: r.deletedBy,
+    expiresAt: trashExpiresAt(r.deletedAt!).toISOString(),
+  }));
+}
+
+/** Clears the trash flag, putting the report back exactly as it was. Same access as deleting it in the first place — just the parent client's. */
+export async function restoreSocialReport(user: PermissionUser, reportId: string): Promise<TrashActionResult> {
+  const report = await db.socialMonthlyReport.findUnique({ where: { id: reportId } });
+  if (!report || !report.deletedAt) return "not_found";
+  const membership = await getSocialMembership(user.id);
+  const client = await getSocialClientForUser(user, membership, report.clientId);
+  if (client === "forbidden" || !client) return "forbidden";
+
+  await db.socialMonthlyReport.update({ where: { id: reportId }, data: { deletedAt: null, deletedById: null } });
+  return "ok";
+}
+
+/** Same permission as deleting it in the first place — just the parent client's. */
+export async function purgeSocialReport(user: PermissionUser, reportId: string): Promise<TrashActionResult> {
+  const report = await db.socialMonthlyReport.findUnique({ where: { id: reportId } });
+  if (!report || !report.deletedAt) return "not_found";
+  const membership = await getSocialMembership(user.id);
+  const client = await getSocialClientForUser(user, membership, report.clientId);
+  if (client === "forbidden" || !client) return "forbidden";
+
+  await db.socialMonthlyReport.delete({ where: { id: reportId } });
+  return "ok";
+}
+
+/** The 30-day auto-purge job's actual work. */
+export async function purgeExpiredSocialReports(): Promise<number> {
+  const cutoff = new Date(Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await db.socialMonthlyReport.deleteMany({ where: { deletedAt: { lte: cutoff } } });
+  return count;
 }
 
 /**
