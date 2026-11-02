@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { getSocialMembership, isSocialMediaLead } from "@/lib/social-media";
 import { BirthdayBanner } from "@/components/birthdays/birthday-banner";
 import { DashboardStats } from "@/components/dashboard/dashboard-stats";
 import { UserDashboard } from "@/components/dashboard/user-dashboard";
+import { TodayTimeline } from "@/components/dashboard/today-timeline";
 import { ClientPipeline } from "@/components/social-media/client-pipeline";
 
 const modules = [
@@ -29,6 +30,7 @@ export default async function DashboardHomePage() {
       <div className="flex min-h-full flex-col gap-6">
         <BirthdayBanner />
         <DashboardStats />
+        <TodayTimeline />
         <div>
           <h2 className="text-lg font-semibold">Social Media pipeline</h2>
           <p className="mb-3 text-sm text-muted-foreground">Every client with content in flight, and where each piece stands.</p>
@@ -43,11 +45,16 @@ export default async function DashboardHomePage() {
   // a company Admin's dashboard or inside the Team console.
   const membership = user ? await getSocialMembership(user.id) : null;
   const socialLead = user ? isSocialMediaLead(user, membership) : false;
+  // A Department Admin keeps their own personal dashboard, but also gets the
+  // same company-admin-only timeline widget, scoped to their department —
+  // the API enforces that scoping itself (see /api/dashboard/today-timeline).
+  const deptAdmin = user ? isDepartmentAdmin(user) : false;
 
   return (
     <div className="flex min-h-full flex-col gap-6">
       <BirthdayBanner />
       <UserDashboard firstName={user?.name.split(" ")[0] ?? "there"} />
+      {deptAdmin && <TodayTimeline />}
       {socialLead && (
         <div>
           <h2 className="text-lg font-semibold">Social Media pipeline</h2>

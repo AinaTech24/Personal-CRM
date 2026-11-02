@@ -30,6 +30,20 @@ export function dateFromKey(key: string): Date {
   return new Date(`${key}T00:00:00.000Z`);
 }
 
+/**
+ * The real UTC instants bounding `instant`'s IST calendar day — `[start, end)`,
+ * start inclusive. Unlike dateFromKey (a DATE-column round-trip, deliberately
+ * at UTC midnight regardless of timezone), this is for filtering a real
+ * DATETIME column — "every row whose instant falls on this IST day" — e.g. a
+ * Task's dueDate, which carries a real time of day, not just a date.
+ */
+export function istDayBoundsUtc(instant: Date = new Date()): { start: Date; end: Date } {
+  const key = istDateKey(instant);
+  const start = new Date(dateFromKey(key).getTime() - IST_OFFSET_MINUTES * 60_000);
+  const end = new Date(start.getTime() + 24 * 60 * 60_000);
+  return { start, end };
+}
+
 /** The stored DATE (UTC midnight) back to its "YYYY-MM-DD" key. */
 export function keyFromDate(date: Date): string {
   return date.toISOString().slice(0, 10);
