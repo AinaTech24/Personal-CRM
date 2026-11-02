@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
         if (!teamUserIds) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         const status = STATUSES.find((s) => s === params.get("status"));
         const rows = await db.leaveRequest.findMany({
-          where: { ...(status ? { status } : {}), userId: { in: teamUserIds } },
+          where: { ...(status ? { status } : {}), userId: { in: teamUserIds }, deletedAt: null },
           include: leaveRequestInclude,
           orderBy: { createdAt: "desc" },
           take: 500,
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
 
     const status = STATUSES.find((s) => s === params.get("status"));
     const rows = await db.leaveRequest.findMany({
-      where: { ...(status ? { status } : {}), ...scopeFilter },
+      where: { ...(status ? { status } : {}), ...scopeFilter, deletedAt: null },
       include: leaveRequestInclude,
       orderBy: { createdAt: "desc" },
       take: 500,
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 
   const year = Number(istDateKey().slice(0, 4));
   const [rows, summary] = await Promise.all([
-    db.leaveRequest.findMany({ where: { userId: user.id }, include: leaveRequestInclude, orderBy: { createdAt: "desc" }, take: 200 }),
+    db.leaveRequest.findMany({ where: { userId: user.id, deletedAt: null }, include: leaveRequestInclude, orderBy: { createdAt: "desc" }, take: 200 }),
     leaveSummary(user.id, year),
   ]);
   return NextResponse.json({ requests: rows.map(serializeLeaveRequest), summary, year });
@@ -125,6 +125,7 @@ export async function POST(req: NextRequest) {
       status: { in: ["PENDING", "APPROVED"] },
       startDate: { lte: dateFromKey(d.endDate) },
       endDate: { gte: dateFromKey(d.startDate) },
+      deletedAt: null,
     },
     select: { id: true },
   });

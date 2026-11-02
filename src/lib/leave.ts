@@ -120,7 +120,7 @@ export interface LeaveSummary {
 /** The dashboard numbers for one person's year. */
 export async function leaveSummary(userId: string, year: number): Promise<LeaveSummary> {
   const rows = await db.leaveRequest.findMany({
-    where: { userId, startDate: { gte: dateFromKey(`${year}-01-01`), lte: dateFromKey(`${year}-12-31`) } },
+    where: { userId, startDate: { gte: dateFromKey(`${year}-01-01`), lte: dateFromKey(`${year}-12-31`) }, deletedAt: null },
     select: { status: true, days: true, category: true },
   });
   let taken = 0;

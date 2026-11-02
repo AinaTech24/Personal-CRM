@@ -237,6 +237,7 @@ model User {
   leaves                UserLeave[]            @relation("UserLeaves")
   leaveRequests         LeaveRequest[]         @relation("LeaveRequestUser")
   leaveDecisions        LeaveRequest[]         @relation("LeaveRequestDecider")
+  leaveRequestsDeleted  LeaveRequest[]         @relation("LeaveRequestDeletedBy")
   expenses              Expense[]              @relation("ExpenseUser")
   expenseDecisions      Expense[]              @relation("ExpenseDecider")
   expensesDeleted       Expense[]              @relation("ExpenseDeletedBy")
@@ -2003,8 +2004,14 @@ model LeaveRequest {
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
+  /// Soft delete for the Trash module — see Lead.deletedAt for the full reasoning.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?              @relation("LeaveRequestDeletedBy", fields: [deletedById], references: [id])
+
   @@index([userId, startDate])
   @@index([status])
+  @@index([deletedAt])
 }
 
 enum ExpenseCategory {

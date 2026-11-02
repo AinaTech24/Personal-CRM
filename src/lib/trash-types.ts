@@ -32,6 +32,7 @@ export const TRASH_MODULE_KEYS = [
   "socialContent",
   "socialAds",
   "socialReports",
+  "leaveRequests",
 ] as const;
 export type TrashModuleKey = (typeof TRASH_MODULE_KEYS)[number];
 
@@ -52,6 +53,7 @@ export const TRASH_MODULE_LABEL: Record<TrashModuleKey, string> = {
   socialContent: "Social Media Content",
   socialAds: "Social Media Ads",
   socialReports: "Social Media Reports",
+  leaveRequests: "Leave Requests",
 };
 
 /** One row in the Trash page — the same shape regardless of which module it came from. */

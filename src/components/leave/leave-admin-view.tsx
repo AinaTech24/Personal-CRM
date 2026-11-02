@@ -390,8 +390,8 @@ export function LeaveAdminView({
         title="Delete this leave request?"
         description={
           deletingRequest
-            ? `${deletingRequest.user.name}'s request for ${leaveDatesLabel(deletingRequest.startDate, deletingRequest.endDate)} will be permanently deleted.` +
-              (deletingRequest.status === "APPROVED" ? " This also removes the leave from their attendance." : "")
+            ? `${deletingRequest.user.name}'s request for ${leaveDatesLabel(deletingRequest.startDate, deletingRequest.endDate)} will be moved to Trash, where it'll stay recoverable for 30 days before being permanently deleted.` +
+              (deletingRequest.status === "APPROVED" ? " This also removes the leave from their attendance until restored." : "")
             : ""
         }
         confirmLabel="Delete"

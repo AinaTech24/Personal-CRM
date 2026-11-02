@@ -25,6 +25,7 @@ import {
   restoreSocialReport,
   purgeSocialReport,
 } from "@/lib/social-media";
+import { listTrashedLeaveRequestsFor, restoreLeaveRequest, purgeLeaveRequest } from "@/lib/leave-requests";
 import { TRASH_MODULE_KEYS, TRASH_MODULE_LABEL, type TrashActionResult, type TrashItem, type TrashModuleKey } from "@/lib/trash-types";
 
 export { TRASH_MODULE_KEYS, TRASH_MODULE_LABEL, type TrashItem, type TrashModuleKey };
@@ -58,6 +59,7 @@ const TRASH_PROVIDERS: Record<TrashModuleKey, TrashProvider> = {
   socialContent: { list: listTrashedSocialContentFor, restore: restoreSocialContent, purge: purgeSocialContent },
   socialAds: { list: listTrashedSocialAdsFor, restore: restoreSocialAd, purge: purgeSocialAd },
   socialReports: { list: listTrashedSocialReportsFor, restore: restoreSocialReport, purge: purgeSocialReport },
+  leaveRequests: { list: listTrashedLeaveRequestsFor, restore: restoreLeaveRequest, purge: purgeLeaveRequest },
 };
 
 export function trashProviderFor(module: string): TrashProvider | null {

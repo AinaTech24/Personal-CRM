@@ -7,7 +7,7 @@ import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { sharesLedTeamWith } from "@/lib/teams";
 import { dateFromKey, keyFromDate } from "@/lib/attendance";
 import { grantLeaveDay, leaveWorkingDays, revokeLeaveDay } from "@/lib/leave";
-import { leaveRequestInclude, serializeLeaveRequest } from "@/lib/leave-requests";
+import { leaveRequestInclude, serializeLeaveRequest, CATEGORY_LABEL } from "@/lib/leave-requests";
 import { notifyAndPush } from "@/lib/notify";
 import { emitToAdmins } from "@/lib/socket-emit";
 
@@ -23,8 +23,6 @@ const patchSchema = z.object({
   isHalfDay: z.boolean().optional(),
   reason: z.string().trim().min(1).max(1000).optional(),
 });
-
-const CATEGORY_LABEL: Record<string, string> = { CASUAL: "Casual", SICK: "Sick", EARNED: "Earned", UNPAID: "Unpaid", OTHER: "Other" };
 
 /**
  * Approve / reject (admins, LEAVE grantees, or the lead of any team the
@@ -44,7 +42,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const request = await db.leaveRequest.findUnique({ where: { id }, include: { user: { select: { departmentId: true } } } });
-  if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!request || request.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const leaveScope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "LEAVE", "UPDATE");
   const canManageLeave = leaveScope === "all" || (leaveScope !== null && request.user.departmentId === leaveScope.departmentId);
@@ -159,14 +157,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ request: serializeLeaveRequest(updated) });
 }
 
-/** Admins and a LEAVE grantee for their own department. An approved request's attendance stamp is undone first, so nothing is left stuck marked as leave. */
+/**
+ * Admins and a LEAVE grantee for their own department. An approved request's
+ * attendance stamp is undone first, so nothing is left stuck marked as leave
+ * — restoring it from Trash re-stamps it (see restoreLeaveRequest).
+ * Soft delete — moves the request to Trash rather than removing it.
+ */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   const request = await db.leaveRequest.findUnique({ where: { id }, include: { user: { select: { departmentId: true } } } });
-  if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!request || request.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const leaveScope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "LEAVE", "DELETE");
   if (leaveScope !== "all" && !(leaveScope !== null && request.user.departmentId === leaveScope.departmentId)) {
@@ -180,7 +183,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     }
   }
 
-  await db.leaveRequest.delete({ where: { id } });
+  await db.leaveRequest.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
   emitToAdmins("leave_request_changed", { id });
   return NextResponse.json({ ok: true });
 }
