@@ -225,8 +225,14 @@ export async function logSocialClientActivity(clientId: string, actorId: string,
 
 /* ------------------------------- Trash ------------------------------- */
 
-/** Deletion is a lead/admin action across Clients, Content, and Ad Campaigns — see each live DELETE route's own comment. */
+/**
+ * Deletion is a lead/admin action across Clients, Content, and Ad Campaigns —
+ * see each live DELETE route's own comment. Checks the company-wide CLIENTS
+ * block first, same as getSocialClientForUser, so an explicitly blocked user
+ * can't reach Trash actions through a stale permission-row grant.
+ */
 async function canManageSocialTrash(user: PermissionUser, membership: SocialMembership | null): Promise<boolean> {
+  if (await isModuleBlocked(user, "CLIENTS")) return false;
   return isSocialMediaLead(user, membership) || (await canManageModule(user, "CLIENTS", "DELETE"));
 }
 
@@ -285,8 +291,13 @@ export async function purgeExpiredSocialClients(): Promise<number> {
 export async function listTrashedSocialContentFor(user: PermissionUser): Promise<TrashItem[]> {
   const membership = await getSocialMembership(user.id);
   if (!(await canManageSocialTrash(user, membership))) return [];
+  // canManageSocialTrash's grant check is company-wide (not department-scoped),
+  // so a grant holder needs that same breadth reflected here — otherwise
+  // they'd pass the gate above but still only see content under clients
+  // they personally created or are assigned to.
+  const scope = await moduleAccessScope(user, "CLIENTS", "DELETE");
   const items = await db.socialContentItem.findMany({
-    where: { deletedAt: { not: null }, client: socialClientListWhere(user, membership) },
+    where: { deletedAt: { not: null }, client: socialClientListWhere(user, membership, scope) },
     include: { deletedBy: { select: { id: true, name: true } }, client: { select: { name: true } } },
     orderBy: { deletedAt: "desc" },
   });
@@ -312,6 +323,7 @@ export async function restoreSocialContent(user: PermissionUser, contentId: stri
   if (!(await canManageSocialTrash(user, membership))) return "forbidden";
 
   await db.socialContentItem.update({ where: { id: contentId }, data: { deletedAt: null, deletedById: null } });
+  await logSocialClientActivity(content.clientId, user.id, "content_restored", { contentId, title: content.title });
   return "ok";
 }
 
@@ -325,6 +337,7 @@ export async function purgeSocialContent(user: PermissionUser, contentId: string
   if (!(await canManageSocialTrash(user, membership))) return "forbidden";
 
   await db.socialContentItem.delete({ where: { id: contentId } });
+  await logSocialClientActivity(content.clientId, user.id, "content_purged", { contentId, title: content.title });
   return "ok";
 }
 
@@ -339,8 +352,11 @@ export async function purgeExpiredSocialContent(): Promise<number> {
 export async function listTrashedSocialAdsFor(user: PermissionUser): Promise<TrashItem[]> {
   const membership = await getSocialMembership(user.id);
   if (!(await canManageSocialTrash(user, membership))) return [];
+  // Same reasoning as listTrashedSocialContentFor — widen to the grant's
+  // actual (company-wide) breadth instead of just this user's own clients.
+  const scope = await moduleAccessScope(user, "CLIENTS", "DELETE");
   const ads = await db.socialAdCampaign.findMany({
-    where: { deletedAt: { not: null }, client: socialClientListWhere(user, membership) },
+    where: { deletedAt: { not: null }, client: socialClientListWhere(user, membership, scope) },
     include: { deletedBy: { select: { id: true, name: true } }, client: { select: { name: true } } },
     orderBy: { deletedAt: "desc" },
   });
@@ -366,6 +382,7 @@ export async function restoreSocialAd(user: PermissionUser, adId: string): Promi
   if (!(await canManageSocialTrash(user, membership))) return "forbidden";
 
   await db.socialAdCampaign.update({ where: { id: adId }, data: { deletedAt: null, deletedById: null } });
+  await logSocialClientActivity(ad.clientId, user.id, "ad_campaign_restored", { adId, name: ad.name });
   return "ok";
 }
 
@@ -379,6 +396,7 @@ export async function purgeSocialAd(user: PermissionUser, adId: string): Promise
   if (!(await canManageSocialTrash(user, membership))) return "forbidden";
 
   await db.socialAdCampaign.delete({ where: { id: adId } });
+  await logSocialClientActivity(ad.clientId, user.id, "ad_campaign_purged", { adId, name: ad.name });
   return "ok";
 }
 
@@ -424,6 +442,7 @@ export async function restoreSocialReport(user: PermissionUser, reportId: string
   if (client === "forbidden" || !client) return "forbidden";
 
   await db.socialMonthlyReport.update({ where: { id: reportId }, data: { deletedAt: null, deletedById: null } });
+  await logSocialClientActivity(report.clientId, user.id, "monthly_report_restored", { year: report.year, month: report.month });
   return "ok";
 }
 
@@ -436,6 +455,7 @@ export async function purgeSocialReport(user: PermissionUser, reportId: string):
   if (client === "forbidden" || !client) return "forbidden";
 
   await db.socialMonthlyReport.delete({ where: { id: reportId } });
+  await logSocialClientActivity(report.clientId, user.id, "monthly_report_purged", { year: report.year, month: report.month });
   return "ok";
 }
 

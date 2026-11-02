@@ -2161,13 +2161,19 @@ const ACTIVITY_LABELS: Record<string, string> = {
   content_updated: "Content updated",
   content_stage_changed: "Content stage changed",
   content_deleted: "Content deleted",
+  content_restored: "Content restored from Trash",
+  content_purged: "Content permanently deleted",
   ad_campaign_created: "Ad campaign created",
   ad_campaign_updated: "Ad campaign updated",
   ad_stage_changed: "Ad campaign stage changed",
   ad_campaign_deleted: "Ad campaign deleted",
+  ad_campaign_restored: "Ad campaign restored from Trash",
+  ad_campaign_purged: "Ad campaign permanently deleted",
   monthly_report_created: "Monthly report created",
   monthly_report_updated: "Monthly report updated",
   monthly_report_deleted: "Monthly report deleted",
+  monthly_report_restored: "Monthly report restored from Trash",
+  monthly_report_purged: "Monthly report permanently deleted",
   calendar_slot_updated: "Calendar slot added/updated",
   calendar_slot_cleared: "Calendar slot cleared",
   folder_created: "Folder created",
@@ -2186,8 +2192,8 @@ function activityLabel(action: string): string {
 type ActivityKind = "created" | "updated" | "deleted" | "viewed" | "other";
 
 function activityKind(action: string): ActivityKind {
-  if (action.includes("deleted") || action.includes("removed") || action.includes("cleared")) return "deleted";
-  if (action.includes("created") || action.includes("uploaded")) return "created";
+  if (action.includes("deleted") || action.includes("removed") || action.includes("cleared") || action.includes("purged")) return "deleted";
+  if (action.includes("created") || action.includes("uploaded") || action.includes("restored")) return "created";
   if (action.includes("updated") || action.includes("changed") || action.includes("renamed") || action.includes("moved")) return "updated";
   if (action.includes("viewed")) return "viewed";
   return "other";
