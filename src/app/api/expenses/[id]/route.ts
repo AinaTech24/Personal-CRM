@@ -6,7 +6,7 @@ import { isAdmin } from "@/lib/permissions";
 import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { sharesLedTeamWith } from "@/lib/teams";
 import { dateFromKey } from "@/lib/attendance";
-import { expenseInclude, serializeExpense } from "@/lib/expenses";
+import { expenseInclude, serializeExpense, canDeleteExpense } from "@/lib/expenses";
 import { notifyAndPush } from "@/lib/notify";
 import { emitToAdmins } from "@/lib/socket-emit";
 
@@ -128,7 +128,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ expense: serializeExpense(updated) });
 }
 
-/** Admins and an EXPENSES grantee for their own department. Soft delete — moves the claim to Trash rather than removing it. */
+/**
+ * The claimant themselves (removing it from their own "My Expenses" history),
+ * or an admin/EXPENSES grantee for their department. Soft delete — moves the
+ * claim to Trash rather than removing it.
+ */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -137,8 +141,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const expense = await db.expense.findUnique({ where: { id }, include: { user: { select: { departmentId: true } } } });
   if (!expense || expense.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const expenseScope = isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "EXPENSES", "DELETE");
-  if (expenseScope !== "all" && !(expenseScope !== null && expense.user.departmentId === expenseScope.departmentId)) {
+  if (!(await canDeleteExpense(user, expense))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

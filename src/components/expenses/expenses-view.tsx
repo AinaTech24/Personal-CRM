@@ -8,7 +8,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Dropdown } from "@/components/ui/dropdown";
 import { SkeletonCards, SkeletonTable } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
-import { IconCheck, IconClock, IconPaperclip, IconPlus, IconWallet, IconX } from "@/components/icons";
+import { IconCheck, IconClock, IconPaperclip, IconPlus, IconTrash, IconWallet, IconX } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { SubmitExpenseDialog } from "@/components/expenses/submit-expense-dialog";
@@ -45,6 +45,7 @@ export function ExpensesView() {
   const [customTo, setCustomTo] = useState("");
   const [submitOpen, setSubmitOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<ExpenseRow | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ExpenseRow | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/expenses");
@@ -70,6 +71,16 @@ export function ExpensesView() {
       const d = await res.json().catch(() => ({}));
       toast.error("Couldn't cancel the claim", d.error);
     }
+    load();
+  }
+
+  async function del(e: ExpenseRow) {
+    const res = await fetch(`/api/expenses/${e.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      toast.error("Couldn't delete the claim", d.error);
+    }
+    setDeleteTarget(null);
     load();
   }
 
@@ -181,11 +192,22 @@ export function ExpensesView() {
                           <ExpenseStatusBadge status={e.status} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">
-                          {e.status === "PENDING" && (
-                            <Button type="button" size="sm" variant="outline" onClick={() => setCancelTarget(e)}>
-                              Cancel
+                          <div className="flex items-center justify-end gap-2">
+                            {e.status === "PENDING" && (
+                              <Button type="button" size="sm" variant="outline" onClick={() => setCancelTarget(e)}>
+                                Cancel
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              aria-label="Delete expense claim"
+                              onClick={() => setDeleteTarget(e)}
+                            >
+                              <IconTrash className="h-4 w-4" />
                             </Button>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -206,6 +228,14 @@ export function ExpensesView() {
         confirmLabel="Cancel claim"
         loadingLabel="Cancelling…"
         onConfirm={() => (cancelTarget ? cancel(cancelTarget) : undefined)}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete this expense claim?"
+        description={deleteTarget ? `Your claim for ${fmtAmount(deleteTarget.amount)} will be moved to Trash, where it'll stay recoverable for 30 days before being permanently deleted.` : ""}
+        confirmLabel="Delete"
+        onConfirm={() => (deleteTarget ? del(deleteTarget) : undefined)}
       />
     </div>
   );

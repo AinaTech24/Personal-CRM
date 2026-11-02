@@ -51,11 +51,23 @@ async function expenseDeleteScope(user: PermissionUser) {
   return isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "EXPENSES", "DELETE");
 }
 
-/** Every trashed expense claim this user is allowed to manage. */
+/** The claimant themselves (removing their own history), or an admin/EXPENSES grantee for their department. */
+export async function canDeleteExpense(user: PermissionUser, expense: { userId: string; user: { departmentId: string } }): Promise<boolean> {
+  if (expense.userId === user.id) return true;
+  const scope = await expenseDeleteScope(user);
+  return scope === "all" || (scope !== null && expense.user.departmentId === scope.departmentId);
+}
+
+/** Every trashed expense claim this user is allowed to manage — their own, plus whatever their admin/grant scope covers. */
 export async function listTrashedExpensesFor(user: PermissionUser): Promise<TrashItem[]> {
   const scope = await expenseDeleteScope(user);
-  if (scope === null) return [];
-  const where = scope === "all" ? { deletedAt: { not: null } } : { deletedAt: { not: null }, user: { departmentId: scope.departmentId } };
+  const where =
+    scope === "all"
+      ? { deletedAt: { not: null } }
+      : {
+          deletedAt: { not: null },
+          OR: [{ userId: user.id }, ...(scope ? [{ user: { departmentId: scope.departmentId } }] : [])],
+        };
 
   const expenses = await db.expense.findMany({
     where,
@@ -78,9 +90,7 @@ export async function listTrashedExpensesFor(user: PermissionUser): Promise<Tras
 export async function restoreExpense(user: PermissionUser, expenseId: string): Promise<TrashActionResult> {
   const expense = await db.expense.findUnique({ where: { id: expenseId }, include: { user: { select: { departmentId: true } } } });
   if (!expense || !expense.deletedAt) return "not_found";
-
-  const scope = await expenseDeleteScope(user);
-  if (scope === null || (scope !== "all" && expense.user.departmentId !== scope.departmentId)) return "forbidden";
+  if (!(await canDeleteExpense(user, expense))) return "forbidden";
 
   await db.expense.update({ where: { id: expenseId }, data: { deletedAt: null, deletedById: null } });
   return "ok";
@@ -90,9 +100,7 @@ export async function restoreExpense(user: PermissionUser, expenseId: string): P
 export async function purgeExpense(user: PermissionUser, expenseId: string): Promise<TrashActionResult> {
   const expense = await db.expense.findUnique({ where: { id: expenseId }, include: { user: { select: { departmentId: true } } } });
   if (!expense || !expense.deletedAt) return "not_found";
-
-  const scope = await expenseDeleteScope(user);
-  if (scope === null || (scope !== "all" && expense.user.departmentId !== scope.departmentId)) return "forbidden";
+  if (!(await canDeleteExpense(user, expense))) return "forbidden";
 
   await db.expense.delete({ where: { id: expenseId } });
   return "ok";
