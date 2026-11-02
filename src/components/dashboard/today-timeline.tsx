@@ -53,15 +53,44 @@ function fmtDueTime(dueDate: string) {
   return d.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" });
 }
 
+/**
+ * Tasks due within ~9 minutes of each other would render as one dot sitting
+ * exactly on top of another with no way to reach the one underneath. Cluster
+ * near-neighbors (by due-time %) and spread them with a small alternating
+ * vertical offset so every dot stays independently hoverable.
+ */
+const CLUSTER_THRESHOLD_PCT = 0.6;
+function layoutTaskDots(tasks: TimelineTask[]) {
+  const sorted = tasks.map((t) => ({ t, pct: taskPct(t.dueDate) })).sort((a, b) => a.pct - b.pct);
+  let clusterStart = 0;
+  return sorted.map((entry, i) => {
+    if (i === 0 || entry.pct - sorted[i - 1].pct > CLUSTER_THRESHOLD_PCT) clusterStart = i;
+    // Cycle through a bounded set of offsets (rather than growing unbounded) so a
+    // dot never drifts outside the track's own height, however big the cluster.
+    const n = (i - clusterStart) % 3;
+    const offsetY = n === 0 ? 0 : n === 1 ? 5 : -5;
+    return { ...entry, offsetY };
+  });
+}
+
 export function TodayTimeline() {
   const [users, setUsers] = useState<TimelineUser[] | null>(null);
+  const [error, setError] = useState(false);
   const [nowPct, setNowPct] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/dashboard/today-timeline")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setUsers(d?.users ?? []))
-      .catch(() => setUsers([]));
+    const load = () =>
+      fetch("/api/dashboard/today-timeline")
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("request failed"))))
+        .then((d) => {
+          setUsers(d?.users ?? []);
+          setError(false);
+        })
+        .catch(() => setError(true));
+    load();
+    // Re-pull every 2 minutes so a task added/edited elsewhere shows up without a manual reload.
+    const id = setInterval(load, 120_000);
+    return () => clearInterval(id);
   }, []);
 
   // The "now" line — recomputed every minute so it actually moves while the page sits open.
@@ -93,9 +122,11 @@ export function TodayTimeline() {
         </HelpDialog>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {users === null ? (
+        {users === null && !error ? (
           <SkeletonList rows={4} />
-        ) : users.length === 0 ? (
+        ) : error ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Couldn&apos;t load today&apos;s tasks. Try reloading the page.</p>
+        ) : users && users.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No one to show here.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -124,22 +155,22 @@ export function TodayTimeline() {
                         <UserAvatar name={u.name} avatarDataUrl={u.avatarDataUrl} className="h-5 w-5" />
                         <span className="truncate text-xs font-medium">{u.name}</span>
                       </div>
-                      <div className="relative h-6 flex-1 rounded bg-muted/40">
+                      <div className="relative h-6 flex-1 overflow-hidden rounded bg-muted/40">
                         {HOUR_MARKS.slice(1, -1).map((h) => (
                           <div key={h} className="absolute inset-y-0 border-l border-border/40" style={{ left: `${(h / 24) * 100}%` }} />
                         ))}
                         {nowPct !== null && (
                           <div className="absolute inset-y-0 w-px bg-destructive/70" style={{ left: `${nowPct}%` }} />
                         )}
-                        {u.tasks.map((t) => (
+                        {layoutTaskDots(u.tasks).map(({ t, pct, offsetY }) => (
                           <Tooltip key={t.id} label={`${t.title} · ${fmtDueTime(t.dueDate)}`}>
                             <div
                               className={cn(
-                                "absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-background",
+                                "absolute top-1/2 h-2.5 w-2.5 rounded-full ring-2 ring-background",
                                 PRIORITY_DOT[t.priority],
-                                t.status === "COMPLETED" && "opacity-40"
+                                (t.status === "COMPLETED" || t.status === "CANCELLED") && "opacity-40"
                               )}
-                              style={{ left: `${taskPct(t.dueDate)}%` }}
+                              style={{ left: `${pct}%`, transform: `translate(-50%, calc(-50% + ${offsetY}px))` }}
                             />
                           </Tooltip>
                         ))}

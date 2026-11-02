@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
       // project relies on; the app does not opt into the React Compiler.
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/refs": "off",
+      // The `const { secret, ...rest } = obj` idiom (drop a field before
+      // sending a response) always leaves the destructured field unused.
+      "@typescript-eslint/no-unused-vars": ["warn", { ignoreRestSiblings: true }],
     },
   },
   // Override default ignores of eslint-config-next.
