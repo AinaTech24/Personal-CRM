@@ -179,7 +179,7 @@ export function NotificationBell() {
                       <Icon className="h-3.5 w-3.5" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="leading-snug">{notificationMessage(n)}</p>
+                      <p className="line-clamp-2 leading-snug">{notificationMessage(n)}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
                       </p>
