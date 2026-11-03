@@ -127,6 +127,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     select: { id: true },
   });
 
+  // Best-effort "who filled this in" for the notification — the first field
+  // whose label reads as a name (full/first/your name, etc.), falling back to
+  // the first short-text-ish answer given (email/phone included) so most
+  // submissions still get a real name instead of staying anonymous.
+  const nameFieldOrder = ["SHORT_TEXT", "EMAIL", "PHONE"];
+  const nameField =
+    form.fields.find((f) => nameFieldOrder.includes(f.type) && /name/i.test(f.label) && resolvedAnswers[f.id]) ??
+    form.fields.find((f) => nameFieldOrder.includes(f.type) && resolvedAnswers[f.id]);
+  const submitterName = nameField ? resolvedAnswers[nameField.id] : null;
+
   // Tell whoever can see this form's submissions — its creator, plus anyone
   // in a department it was shared with — that a fresh one's waiting.
   const departmentIds = form.viewerDepartments.map((v) => v.departmentId);
@@ -134,13 +144,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     ? await db.user.findMany({ where: { isActive: true, departmentId: { in: departmentIds } }, select: { id: true } })
     : [];
   const recipientIds = new Set([form.createdById, ...viewers.map((v) => v.id)]);
+  const pushBody = submitterName ? `${submitterName} just submitted a response to "${form.title}"` : `${form.title} just received a new response`;
   await Promise.all(
     Array.from(recipientIds).map((userId) =>
       notifyAndPush(
         userId,
         "form_submitted",
-        { formId: form.id, submissionId: submission.id },
-        { title: "New form submission", body: `${form.title} just received a new response`, url: `/forms/${form.id}/submissions`, tag: "form-submitted" }
+        { formId: form.id, formTitle: form.title, submissionId: submission.id, submitterName },
+        { title: "New form submission", body: pushBody, url: `/forms/${form.id}/submissions`, tag: "form-submitted" }
       )
     )
   );

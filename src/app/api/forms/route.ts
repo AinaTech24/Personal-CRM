@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageForms, isUniqueConstraintError, uniqueFormSlug } from "@/lib/forms";
+import { notifyAndPush } from "@/lib/notify";
 
 /**
  * Admins and department admins (Social Media/CRM leads) see every form (to
@@ -71,6 +72,25 @@ export async function POST(req: NextRequest) {
         data: { title: d.title, description: d.description || null, slug, createdById: user.id },
         select: { id: true, slug: true },
       });
+
+      // Every other active company Admin hears about a new form — same "keep
+      // the other decision-makers in the loop" reasoning as quotation_submitted/
+      // leave_requested, not just whoever happens to open the Forms list.
+      const admins = await db.user.findMany({
+        where: { isActive: true, role: { in: ["ADMIN", "SUPER_ADMIN"] }, NOT: { id: user.id } },
+        select: { id: true },
+      });
+      await Promise.all(
+        admins.map((a) =>
+          notifyAndPush(
+            a.id,
+            "form_created",
+            { formId: form.id, formTitle: d.title, actorName: user.name },
+            { title: "New form created", body: `${user.name} created the form "${d.title}"`, url: `/forms/${form.id}/edit`, tag: "form-created" }
+          )
+        )
+      );
+
       return NextResponse.json({ form }, { status: 201 });
     } catch (err) {
       if (!isUniqueConstraintError(err)) throw err;

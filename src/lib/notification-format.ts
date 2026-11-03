@@ -14,6 +14,7 @@ import {
   IconCake,
   IconCoffee,
   IconBuildingCog,
+  IconWallet,
 } from "@/components/icons";
 
 export interface NotificationLike {
@@ -50,7 +51,12 @@ export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?:
   call_assigned: IconPhone,
   leave_requested: IconCalendar,
   leave_decided: IconCalendar,
+  expense_requested: IconWallet,
+  expense_decided: IconWallet,
+  expense_paid: IconWallet,
   form_submitted: IconFileSpreadsheet,
+  form_created: IconFileSpreadsheet,
+  form_edited: IconFileSpreadsheet,
   invoice_overdue: IconInvoices,
   password_rotation_due: IconKey,
   password_entry_shared: IconKey,
@@ -84,7 +90,12 @@ export const NOTIFICATION_CATEGORY: Record<string, string> = {
   call_assigned: "calls",
   leave_requested: "attendance",
   leave_decided: "attendance",
+  expense_requested: "expenses",
+  expense_decided: "expenses",
+  expense_paid: "expenses",
   form_submitted: "forms",
+  form_created: "forms",
+  form_edited: "forms",
   invoice_overdue: "billing",
   password_rotation_due: "passwords",
   password_entry_shared: "passwords",
@@ -104,6 +115,7 @@ export const NOTIFICATION_CATEGORY_LABEL: Record<string, string> = {
   attendance: "Attendance",
   social: "Social Media",
   calls: "Calls",
+  expenses: "Expenses",
   forms: "Forms",
   billing: "Billing",
   passwords: "Passwords",
@@ -199,8 +211,27 @@ export function notificationMessage(n: NotificationLike): string {
       return `${actor} applied for leave`;
     case "leave_decided":
       return `${actor} ${n.payload.decision === "APPROVED" ? "approved" : "rejected"} your leave request`;
+    case "expense_requested":
+      return `${actor} submitted a reimbursement claim`;
+    case "expense_decided":
+      return `${actor} ${n.payload.decision === "APPROVED" ? "approved" : "rejected"} your expense claim`;
+    case "expense_paid":
+      return `${actor} marked your expense claim as paid`;
+    case "form_created": {
+      const formTitle = typeof n.payload.formTitle === "string" ? n.payload.formTitle : "a form";
+      return `${actor} created the form "${formTitle}"`;
+    }
+    case "form_edited": {
+      const formTitle = typeof n.payload.formTitle === "string" ? n.payload.formTitle : "a form";
+      const change = typeof n.payload.change === "string" ? n.payload.change : "made a change";
+      return `${actor} ${change} on "${formTitle}"`;
+    }
     case "form_submitted": {
-      return "A form you manage just received a new response";
+      const formTitle = typeof n.payload.formTitle === "string" ? n.payload.formTitle : "A form you manage";
+      const submitterName = typeof n.payload.submitterName === "string" && n.payload.submitterName ? n.payload.submitterName : null;
+      return submitterName
+        ? `${submitterName} just submitted a response to "${formTitle}"`
+        : `${formTitle} just received a new response`;
     }
     case "invoice_overdue": {
       const number = typeof n.payload.invoiceNumber === "string" ? n.payload.invoiceNumber : "An invoice";
@@ -294,8 +325,13 @@ export function notificationHref(n: NotificationLike): string | null {
   if (n.type === "call_assigned") return "/calls";
   if (n.type === "leave_requested") return "/admin/leave";
   if (n.type === "leave_decided") return "/leave";
+  if (n.type === "expense_requested") return "/admin/expenses";
+  if (n.type === "expense_decided" || n.type === "expense_paid") return "/expenses";
   if (n.type === "form_submitted") {
     return typeof n.payload.formId === "string" ? `/forms/${n.payload.formId}/submissions` : "/forms";
+  }
+  if (n.type === "form_created" || n.type === "form_edited") {
+    return typeof n.payload.formId === "string" ? `/forms/${n.payload.formId}/edit` : "/forms";
   }
   if (n.type === "invoice_overdue") return "/invoices";
   if (n.type === "password_rotation_due" || n.type === "password_entry_shared" || n.type === "password_entry_revoked") {

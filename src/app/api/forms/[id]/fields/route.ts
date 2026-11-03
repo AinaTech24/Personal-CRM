@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageForms } from "@/lib/forms";
 import { DEFAULT_FIELD_PATTERNS, FORM_FIELD_TYPES, serializeFieldOptions } from "@/lib/form-fields";
+import { notifyFormEdited } from "@/lib/form-notify";
 
 const bodySchema = z.object({
   type: z.enum(FORM_FIELD_TYPES),
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!user || !(await canManageForms(user, "UPDATE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: formId } = await params;
-  const form = await db.form.findUnique({ where: { id: formId }, select: { id: true, deletedAt: true } });
+  const form = await db.form.findUnique({ where: { id: formId }, select: { id: true, title: true, createdById: true, deletedAt: true } });
   if (!form || form.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
@@ -44,6 +45,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       order: (last?.order ?? -1) + 1,
     },
   });
+
+  await notifyFormEdited(user, form, `added the field "${d.label}"`);
 
   return NextResponse.json({ field }, { status: 201 });
 }

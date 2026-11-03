@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageForms } from "@/lib/forms";
 import { CONDITION_OPERATORS, serializeFieldOptions } from "@/lib/form-fields";
+import { notifyFormEdited } from "@/lib/form-notify";
 
 const CONDITION_OPERATOR_VALUES = CONDITION_OPERATORS.map((o) => o.value) as [string, ...string[]];
 
@@ -107,9 +108,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!user || !(await canManageForms(user, "DELETE"))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: formId, fieldId } = await params;
-  const existing = await db.formField.findFirst({ where: { id: fieldId, formId, form: { deletedAt: null } }, select: { id: true } });
+  const existing = await db.formField.findFirst({
+    where: { id: fieldId, formId, form: { deletedAt: null } },
+    select: { id: true, label: true, form: { select: { id: true, title: true, createdById: true } } },
+  });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await db.formField.delete({ where: { id: fieldId } });
+  await notifyFormEdited(user, existing.form, `removed the field "${existing.label}"`);
   return NextResponse.json({ ok: true });
 }
