@@ -1,6 +1,6 @@
 import type { LeaveRequest, User } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
-import { isAdmin, type PermissionUser } from "@/lib/permissions";
+import type { PermissionUser } from "@/lib/permissions";
 import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { keyFromDate } from "@/lib/attendance";
 import { grantLeaveDay, leaveWorkingDays } from "@/lib/leave";
@@ -46,21 +46,16 @@ export function serializeLeaveRequest(r: WithRelations) {
 
 /* ------------------------------- Trash ------------------------------- */
 
-/** Same scope as who's actually allowed to delete/restore/purge a leave request — see the DELETE route. */
-async function leaveDeleteScope(user: PermissionUser) {
-  return isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "LEAVE", "DELETE");
-}
-
 /** The requester themselves (removing their own history), or an admin/LEAVE grantee for the requester's department. */
 export async function canDeleteLeaveRequest(user: PermissionUser, request: { userId: string; user: { departmentId: string | null } }): Promise<boolean> {
   if (request.userId === user.id) return true;
-  const scope = await leaveDeleteScope(user);
+  const scope = await moduleAccessScope(user, "LEAVE", "DELETE");
   return scope === "all" || (scope !== null && request.user.departmentId === scope.departmentId);
 }
 
 /** Every trashed leave request this user is allowed to manage — their own, plus whatever their admin/grant scope covers. */
 export async function listTrashedLeaveRequestsFor(user: PermissionUser): Promise<TrashItem[]> {
-  const scope = await leaveDeleteScope(user);
+  const scope = await moduleAccessScope(user, "LEAVE", "DELETE");
   const where =
     scope === "all"
       ? { deletedAt: { not: null } }
@@ -101,9 +96,13 @@ export async function restoreLeaveRequest(user: PermissionUser, requestId: strin
   if (request.status === "APPROVED") {
     const days = await leaveWorkingDays(keyFromDate(request.startDate), keyFromDate(request.endDate));
     const reason = `${CATEGORY_LABEL[request.category]} leave: ${request.reason}`.slice(0, 300);
-    for (const key of days) {
-      await grantLeaveDay({ userId: request.userId, dateKey: key, type: request.isHalfDay ? "HALF_DAY" : "FULL_DAY", reason, actorId: user.id });
-    }
+    // Each day is its own independent upsert (keyed by userId+date), so these
+    // can run in parallel instead of paying one round-trip pair per day.
+    await Promise.all(
+      days.map((key) =>
+        grantLeaveDay({ userId: request.userId, dateKey: key, type: request.isHalfDay ? "HALF_DAY" : "FULL_DAY", reason, actorId: user.id })
+      )
+    );
   }
 
   return "ok";

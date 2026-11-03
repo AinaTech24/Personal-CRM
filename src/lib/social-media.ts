@@ -126,18 +126,27 @@ export async function crmClientsScopeFor(user: PermissionUser): Promise<{ depart
  * here, since they don't separately distinguish their own CRUD level yet)
  * or UPDATE for editing the client record itself.
  */
-export async function getSocialClientForUser(
+type SocialClientAccessRow = {
+  createdById: string;
+  assignedToId: string | null;
+  createdBy: { departmentId: string | null };
+  assignedTo: { departmentId: string | null } | null;
+};
+
+/**
+ * The access-check half of getSocialClientForUser, pulled apart from the
+ * fetch so a caller that's already loaded the client as a relation (e.g. a
+ * trash restore/purge function loading the content/ad/report + its client in
+ * one query) doesn't have to pay for a second, independent client lookup
+ * just to run this same check.
+ */
+async function canAccessSocialClientWithScope<T extends SocialClientAccessRow>(
   user: PermissionUser,
   membership: SocialMembership | null,
-  clientId: string,
+  client: T,
   action: Extract<ModuleAction, "READ" | "UPDATE"> = "READ"
-) {
-  const client = await db.socialClient.findUnique({
-    where: { id: clientId },
-    include: { createdBy: { select: { departmentId: true } }, assignedTo: { select: { departmentId: true } } },
-  });
-  if (!client || client.deletedAt) return null;
-  if (await isModuleBlocked(user, "CLIENTS")) return "forbidden" as const;
+): Promise<T | "forbidden"> {
+  if (await isModuleBlocked(user, "CLIENTS")) return "forbidden";
   if (canAccessSocialClient(user, membership, client)) return client;
 
   // The company-wide "Sidebar modules" hide (Admin > Settings) only ever
@@ -145,7 +154,7 @@ export async function getSocialClientForUser(
   // Media team member's own access, just checked above, is never subject to
   // it. isAdmin(user) isn't checked separately here: an admin's grant check
   // (moduleAccessScope) already returns "all" regardless of the hide list.
-  if ((await getHiddenModules()).includes("clients") && !isAdmin(user)) return "forbidden" as const;
+  if ((await getHiddenModules()).includes("clients") && !isAdmin(user)) return "forbidden";
 
   const scope = await moduleAccessScope(user, "CLIENTS", action);
   if (scope === "all") return client;
@@ -160,7 +169,21 @@ export async function getSocialClientForUser(
     }
   }
 
-  return "forbidden" as const;
+  return "forbidden";
+}
+
+export async function getSocialClientForUser(
+  user: PermissionUser,
+  membership: SocialMembership | null,
+  clientId: string,
+  action: Extract<ModuleAction, "READ" | "UPDATE"> = "READ"
+) {
+  const client = await db.socialClient.findUnique({
+    where: { id: clientId },
+    include: { createdBy: { select: { departmentId: true } }, assignedTo: { select: { departmentId: true } } },
+  });
+  if (!client || client.deletedAt) return null;
+  return canAccessSocialClientWithScope(user, membership, client, action);
 }
 
 /**
@@ -313,14 +336,30 @@ export async function listTrashedSocialContentFor(user: PermissionUser): Promise
   }));
 }
 
+const trashedClientAccessInclude = {
+  client: { include: { createdBy: { select: { departmentId: true } }, assignedTo: { select: { departmentId: true } } } },
+} as const;
+
+/**
+ * Fetches a trashed content item with its parent client in one query and
+ * runs the same two checks restoreSocialContent/purgeSocialContent/the live
+ * DELETE route all require — client access, then the lead/grant trash gate —
+ * without a second, independent client lookup.
+ */
+async function loadTrashedContentForUser(user: PermissionUser, contentId: string) {
+  const content = await db.socialContentItem.findUnique({ where: { id: contentId }, include: trashedClientAccessInclude });
+  if (!content || !content.deletedAt) return "not_found" as const;
+  const membership = await getSocialMembership(user.id);
+  const access = await canAccessSocialClientWithScope(user, membership, content.client);
+  if (access === "forbidden") return "forbidden" as const;
+  if (!(await canManageSocialTrash(user, membership))) return "forbidden" as const;
+  return content;
+}
+
 /** Clears the trash flag, putting the content item back exactly as it was. */
 export async function restoreSocialContent(user: PermissionUser, contentId: string): Promise<TrashActionResult> {
-  const content = await db.socialContentItem.findUnique({ where: { id: contentId } });
-  if (!content || !content.deletedAt) return "not_found";
-  const membership = await getSocialMembership(user.id);
-  const client = await getSocialClientForUser(user, membership, content.clientId);
-  if (client === "forbidden" || !client) return "forbidden";
-  if (!(await canManageSocialTrash(user, membership))) return "forbidden";
+  const content = await loadTrashedContentForUser(user, contentId);
+  if (content === "not_found" || content === "forbidden") return content;
 
   await db.socialContentItem.update({ where: { id: contentId }, data: { deletedAt: null, deletedById: null } });
   await logSocialClientActivity(content.clientId, user.id, "content_restored", { contentId, title: content.title });
@@ -329,12 +368,8 @@ export async function restoreSocialContent(user: PermissionUser, contentId: stri
 
 /** Same permission as deleting it in the first place. */
 export async function purgeSocialContent(user: PermissionUser, contentId: string): Promise<TrashActionResult> {
-  const content = await db.socialContentItem.findUnique({ where: { id: contentId } });
-  if (!content || !content.deletedAt) return "not_found";
-  const membership = await getSocialMembership(user.id);
-  const client = await getSocialClientForUser(user, membership, content.clientId);
-  if (client === "forbidden" || !client) return "forbidden";
-  if (!(await canManageSocialTrash(user, membership))) return "forbidden";
+  const content = await loadTrashedContentForUser(user, contentId);
+  if (content === "not_found" || content === "forbidden") return content;
 
   await db.socialContentItem.delete({ where: { id: contentId } });
   await logSocialClientActivity(content.clientId, user.id, "content_purged", { contentId, title: content.title });
@@ -372,14 +407,21 @@ export async function listTrashedSocialAdsFor(user: PermissionUser): Promise<Tra
   }));
 }
 
+/** Same combined fetch+authorize shape as loadTrashedContentForUser, for ad campaigns. */
+async function loadTrashedAdForUser(user: PermissionUser, adId: string) {
+  const ad = await db.socialAdCampaign.findUnique({ where: { id: adId }, include: trashedClientAccessInclude });
+  if (!ad || !ad.deletedAt) return "not_found" as const;
+  const membership = await getSocialMembership(user.id);
+  const access = await canAccessSocialClientWithScope(user, membership, ad.client);
+  if (access === "forbidden") return "forbidden" as const;
+  if (!(await canManageSocialTrash(user, membership))) return "forbidden" as const;
+  return ad;
+}
+
 /** Clears the trash flag, putting the ad campaign back exactly as it was. */
 export async function restoreSocialAd(user: PermissionUser, adId: string): Promise<TrashActionResult> {
-  const ad = await db.socialAdCampaign.findUnique({ where: { id: adId } });
-  if (!ad || !ad.deletedAt) return "not_found";
-  const membership = await getSocialMembership(user.id);
-  const client = await getSocialClientForUser(user, membership, ad.clientId);
-  if (client === "forbidden" || !client) return "forbidden";
-  if (!(await canManageSocialTrash(user, membership))) return "forbidden";
+  const ad = await loadTrashedAdForUser(user, adId);
+  if (ad === "not_found" || ad === "forbidden") return ad;
 
   await db.socialAdCampaign.update({ where: { id: adId }, data: { deletedAt: null, deletedById: null } });
   await logSocialClientActivity(ad.clientId, user.id, "ad_campaign_restored", { adId, name: ad.name });
@@ -388,12 +430,8 @@ export async function restoreSocialAd(user: PermissionUser, adId: string): Promi
 
 /** Same permission as deleting it in the first place. */
 export async function purgeSocialAd(user: PermissionUser, adId: string): Promise<TrashActionResult> {
-  const ad = await db.socialAdCampaign.findUnique({ where: { id: adId } });
-  if (!ad || !ad.deletedAt) return "not_found";
-  const membership = await getSocialMembership(user.id);
-  const client = await getSocialClientForUser(user, membership, ad.clientId);
-  if (client === "forbidden" || !client) return "forbidden";
-  if (!(await canManageSocialTrash(user, membership))) return "forbidden";
+  const ad = await loadTrashedAdForUser(user, adId);
+  if (ad === "not_found" || ad === "forbidden") return ad;
 
   await db.socialAdCampaign.delete({ where: { id: adId } });
   await logSocialClientActivity(ad.clientId, user.id, "ad_campaign_purged", { adId, name: ad.name });
@@ -433,13 +471,25 @@ export async function listTrashedSocialReportsFor(user: PermissionUser): Promise
   }));
 }
 
+/**
+ * Same combined fetch+authorize shape as loadTrashedContentForUser, for
+ * monthly reports — but no canManageSocialTrash gate, since reports have no
+ * lead/grant-only delete restriction on the live route either (see
+ * listTrashedSocialReportsFor's own comment).
+ */
+async function loadTrashedReportForUser(user: PermissionUser, reportId: string) {
+  const report = await db.socialMonthlyReport.findUnique({ where: { id: reportId }, include: trashedClientAccessInclude });
+  if (!report || !report.deletedAt) return "not_found" as const;
+  const membership = await getSocialMembership(user.id);
+  const access = await canAccessSocialClientWithScope(user, membership, report.client);
+  if (access === "forbidden") return "forbidden" as const;
+  return report;
+}
+
 /** Clears the trash flag, putting the report back exactly as it was. Same access as deleting it in the first place — just the parent client's. */
 export async function restoreSocialReport(user: PermissionUser, reportId: string): Promise<TrashActionResult> {
-  const report = await db.socialMonthlyReport.findUnique({ where: { id: reportId } });
-  if (!report || !report.deletedAt) return "not_found";
-  const membership = await getSocialMembership(user.id);
-  const client = await getSocialClientForUser(user, membership, report.clientId);
-  if (client === "forbidden" || !client) return "forbidden";
+  const report = await loadTrashedReportForUser(user, reportId);
+  if (report === "not_found" || report === "forbidden") return report;
 
   await db.socialMonthlyReport.update({ where: { id: reportId }, data: { deletedAt: null, deletedById: null } });
   await logSocialClientActivity(report.clientId, user.id, "monthly_report_restored", { year: report.year, month: report.month });
@@ -448,11 +498,8 @@ export async function restoreSocialReport(user: PermissionUser, reportId: string
 
 /** Same permission as deleting it in the first place — just the parent client's. */
 export async function purgeSocialReport(user: PermissionUser, reportId: string): Promise<TrashActionResult> {
-  const report = await db.socialMonthlyReport.findUnique({ where: { id: reportId } });
-  if (!report || !report.deletedAt) return "not_found";
-  const membership = await getSocialMembership(user.id);
-  const client = await getSocialClientForUser(user, membership, report.clientId);
-  if (client === "forbidden" || !client) return "forbidden";
+  const report = await loadTrashedReportForUser(user, reportId);
+  if (report === "not_found" || report === "forbidden") return report;
 
   await db.socialMonthlyReport.delete({ where: { id: reportId } });
   await logSocialClientActivity(report.clientId, user.id, "monthly_report_purged", { year: report.year, month: report.month });

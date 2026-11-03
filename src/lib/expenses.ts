@@ -1,6 +1,6 @@
 import type { Expense, User } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
-import { isAdmin, type PermissionUser } from "@/lib/permissions";
+import type { PermissionUser } from "@/lib/permissions";
 import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { keyFromDate } from "@/lib/attendance";
 import { toNumber } from "@/lib/billing";
@@ -46,21 +46,16 @@ export function serializeExpense(e: WithRelations) {
 
 /* ------------------------------- Trash ------------------------------- */
 
-/** Same scope as who's actually allowed to delete/restore/purge an expense — see the DELETE route. */
-async function expenseDeleteScope(user: PermissionUser) {
-  return isAdmin(user) ? ("all" as const) : await moduleAccessScope(user, "EXPENSES", "DELETE");
-}
-
 /** The claimant themselves (removing their own history), or an admin/EXPENSES grantee for their department. */
 export async function canDeleteExpense(user: PermissionUser, expense: { userId: string; user: { departmentId: string | null } }): Promise<boolean> {
   if (expense.userId === user.id) return true;
-  const scope = await expenseDeleteScope(user);
+  const scope = await moduleAccessScope(user, "EXPENSES", "DELETE");
   return scope === "all" || (scope !== null && expense.user.departmentId === scope.departmentId);
 }
 
 /** Every trashed expense claim this user is allowed to manage — their own, plus whatever their admin/grant scope covers. */
 export async function listTrashedExpensesFor(user: PermissionUser): Promise<TrashItem[]> {
-  const scope = await expenseDeleteScope(user);
+  const scope = await moduleAccessScope(user, "EXPENSES", "DELETE");
   const where =
     scope === "all"
       ? { deletedAt: { not: null } }
