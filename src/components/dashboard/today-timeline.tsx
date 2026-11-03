@@ -257,6 +257,10 @@ export function TodayTimeline() {
         <Dropdown size="sm" value={view} onChange={(v) => setView(v as ViewMode)} options={VIEW_OPTIONS} className="ml-auto w-36" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {/* A fixed height, regardless of the view/filter or how many rows it holds, so switching
+            between Today/Yesterday/Week/Month (or a shorter/taller result) never resizes the card
+            around it — anything past it scrolls inside instead. */}
+        <div className="h-[420px] overflow-y-auto overflow-x-hidden pr-1">
         {users === null && !error ? (
           <SkeletonList rows={4} />
         ) : error ? (
@@ -396,6 +400,7 @@ export function TodayTimeline() {
             </div>
           </div>
         )}
+        </div>
       </CardContent>
     </Card>
   );
