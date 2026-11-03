@@ -7,15 +7,22 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { istMinutesOfDay } from "@/lib/attendance";
+import { recencyLabel } from "@/lib/recency";
+import { TASK_STATUSES } from "@/components/tasks/types";
 import { cn } from "@/lib/utils";
 
 interface TimelineTask {
   id: string;
   title: string;
   dueDate: string;
+  createdAt: string;
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   status: string;
+  /** Still IN_PROGRESS/REVIEW past its own due date — carried forward onto today's strip until it's actually completed, rather than just vanishing. */
+  isCarriedOver: boolean;
 }
+
+const TASK_STATUS_LABEL: Record<string, string> = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.label]));
 
 interface TimelineUser {
   id: string;
@@ -51,6 +58,19 @@ function taskPct(dueDate: string) {
 function fmtDueTime(dueDate: string) {
   const d = new Date(dueDate);
   return d.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" });
+}
+
+function fmtDueDateTime(dueDate: string) {
+  const d = new Date(dueDate);
+  return d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}
+
+/** "Title · Status · Due ... · Added ..." — one line for the tooltip. */
+function taskTooltipLabel(t: TimelineTask) {
+  const due = t.isCarriedOver ? `Was due ${fmtDueDateTime(t.dueDate)}` : `Due ${fmtDueTime(t.dueDate)}`;
+  const age = recencyLabel(t.createdAt);
+  const added = age && (age.isNew ? "Added today" : `Added ${age.text.toLowerCase()}`);
+  return [t.title, TASK_STATUS_LABEL[t.status] ?? t.status, due, added].filter(Boolean).join(" · ");
 }
 
 /**
@@ -117,7 +137,10 @@ export function TodayTimeline() {
         <CardTitle>Today&apos;s tasks</CardTitle>
         <HelpDialog title="Today's tasks — help">
           <HelpSection heading="What this shows">
-            <p>Every active user, grouped by department, with each of today&apos;s tasks placed on a 24-hour strip at its due time. The vertical line marks the current time.</p>
+            <p>Every active user, grouped by department, with each of today&apos;s tasks placed on a 24-hour strip at its due time. The vertical line marks the current time. Hover a dot for its title, status, due time, and when it was added.</p>
+          </HelpSection>
+          <HelpSection heading="Carried-over tasks">
+            <p>A task still In Progress or In Review past its due date keeps showing up here, at its original due time, every day until it&apos;s marked Completed — marked with a dashed outline so it&apos;s clear it&apos;s not due today.</p>
           </HelpSection>
         </HelpDialog>
       </CardHeader>
@@ -163,12 +186,15 @@ export function TodayTimeline() {
                           <div className="absolute inset-y-0 w-px bg-destructive/70" style={{ left: `${nowPct}%` }} />
                         )}
                         {layoutTaskDots(u.tasks).map(({ t, pct, offsetY }) => (
-                          <Tooltip key={t.id} label={`${t.title} · ${fmtDueTime(t.dueDate)}`}>
+                          <Tooltip key={t.id} label={taskTooltipLabel(t)}>
                             <div
                               className={cn(
                                 "absolute top-1/2 h-2.5 w-2.5 rounded-full ring-2 ring-background",
                                 PRIORITY_DOT[t.priority],
-                                (t.status === "COMPLETED" || t.status === "CANCELLED") && "opacity-40"
+                                (t.status === "COMPLETED" || t.status === "CANCELLED") && "opacity-40",
+                                // Carried over from a past due date, still open — a dashed
+                                // outline marks it as "still showing up" rather than new today.
+                                t.isCarriedOver && "outline outline-2 outline-dashed outline-offset-1 outline-foreground/50"
                               )}
                               style={{ left: `${pct}%`, transform: `translate(-50%, calc(-50% + ${offsetY}px))` }}
                             />

@@ -7,9 +7,16 @@ import { istDayBoundsUtc } from "@/lib/attendance";
 /**
  * One row per active user — company-wide for an Admin/Super Admin, their
  * own department only for a Department Admin — each carrying today's tasks
- * (by dueDate, IST calendar day) so the dashboard can place them on an
- * hour-of-day strip. A task with several assignees appears under every one
- * of them, same as the task board itself treats "my tasks."
+ * so the dashboard can place them on an hour-of-day strip. A task with
+ * several assignees appears under every one of them, same as the task
+ * board itself treats "my tasks."
+ *
+ * "Today's tasks" is every task due today, PLUS any still-open task
+ * (IN_PROGRESS/REVIEW) whose due date has already passed — it keeps
+ * showing up, day after day, until it's actually marked COMPLETED (or
+ * CANCELLED), rather than silently dropping off the moment its due date
+ * is behind it. `isCarriedOver` tells the UI which case it is, since a
+ * carried-over task's "due" time is no longer today's.
  */
 export async function GET() {
   const user = await getCurrentUser();
@@ -30,8 +37,14 @@ export async function GET() {
       avatarDataUrl: true,
       department: { select: { name: true } },
       tasksAssignedTo: {
-        where: { dueDate: { gte: start, lt: end }, deletedAt: null },
-        select: { id: true, title: true, dueDate: true, priority: true, status: true },
+        where: {
+          deletedAt: null,
+          OR: [
+            { dueDate: { gte: start, lt: end } },
+            { dueDate: { lt: start }, status: { in: ["IN_PROGRESS", "REVIEW"] } },
+          ],
+        },
+        select: { id: true, title: true, dueDate: true, priority: true, status: true, createdAt: true },
         orderBy: { dueDate: "asc" },
       },
     },
@@ -50,8 +63,10 @@ export async function GET() {
         id: t.id,
         title: t.title,
         dueDate: t.dueDate!.toISOString(),
+        createdAt: t.createdAt.toISOString(),
         priority: t.priority,
         status: t.status,
+        isCarriedOver: t.dueDate! < start,
       })),
     })),
   });
