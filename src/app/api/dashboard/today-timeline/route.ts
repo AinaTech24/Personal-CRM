@@ -2,28 +2,28 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
-import { istDayBoundsUtc } from "@/lib/attendance";
+import { istWeekBoundsUtc } from "@/lib/attendance";
 
 /**
  * One row per active user — company-wide for an Admin/Super Admin, their
- * own department only for a Department Admin — each carrying today's tasks
- * so the dashboard can place them on an hour-of-day strip. A task with
- * several assignees appears under every one of them, same as the task
- * board itself treats "my tasks."
+ * own department only for a Department Admin — each carrying the tasks
+ * whose bar (created date → due date) overlaps the current IST week, so the
+ * dashboard can lay them out as a weekly Gantt-style timeline. A task with
+ * several assignees appears under every one of them, same as the task board
+ * itself treats "my tasks."
  *
- * "Today's tasks" is every task due today, PLUS any still-open task
- * (IN_PROGRESS/REVIEW) whose due date has already passed — it keeps
- * showing up, day after day, until it's actually marked COMPLETED (or
- * CANCELLED), rather than silently dropping off the moment its due date
- * is behind it. `isCarriedOver` tells the UI which case it is, since a
- * carried-over task's "due" time is no longer today's.
+ * A task still IN_PROGRESS or REVIEW past its due date keeps its bar
+ * growing — one column further for every day it stays open — instead of
+ * stopping dead at the original due date; `days` is what the client lays
+ * its columns out against, and "today" (computed client-side) is where that
+ * growing edge currently is.
  */
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdmin(user) && !isDepartmentAdmin(user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { start, end } = istDayBoundsUtc();
+  const { start, end, days } = istWeekBoundsUtc();
 
   const users = await db.user.findMany({
     where: {
@@ -39,21 +39,23 @@ export async function GET() {
       tasksAssignedTo: {
         where: {
           deletedAt: null,
-          OR: [
-            { dueDate: { gte: start, lt: end } },
-            { dueDate: { lt: start }, status: { in: ["IN_PROGRESS", "REVIEW"] } },
-          ],
+          dueDate: { not: null },
+          createdAt: { lt: end },
+          // A task whose own due date falls on/after this week is relevant
+          // outright; one still open (IN_PROGRESS/REVIEW) stays relevant
+          // regardless of how old its due date is, since its bar keeps
+          // growing toward today until it's actually marked Completed.
+          OR: [{ dueDate: { gte: start } }, { status: { in: ["IN_PROGRESS", "REVIEW"] } }],
         },
-        select: { id: true, title: true, dueDate: true, priority: true, status: true, createdAt: true },
-        orderBy: { dueDate: "asc" },
+        select: { id: true, title: true, dueDate: true, createdAt: true, priority: true, status: true },
+        orderBy: { createdAt: "asc" },
       },
     },
     orderBy: [{ department: { name: "asc" } }, { name: "asc" }],
   });
 
   return NextResponse.json({
-    windowStart: start.toISOString(),
-    windowEnd: end.toISOString(),
+    days,
     users: users.map((u) => ({
       id: u.id,
       name: [u.name, u.surname].filter(Boolean).join(" "),
@@ -66,7 +68,6 @@ export async function GET() {
         createdAt: t.createdAt.toISOString(),
         priority: t.priority,
         status: t.status,
-        isCarriedOver: t.dueDate! < start,
       })),
     })),
   });

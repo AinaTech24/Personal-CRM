@@ -6,7 +6,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
-import { istMinutesOfDay } from "@/lib/attendance";
+import { istMinutesOfDay, istDateKey, dateFromKey } from "@/lib/attendance";
 import { recencyLabel } from "@/lib/recency";
 import { TASK_STATUSES } from "@/components/tasks/types";
 import { cn } from "@/lib/utils";
@@ -18,11 +18,7 @@ interface TimelineTask {
   createdAt: string;
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   status: string;
-  /** Still IN_PROGRESS/REVIEW past its own due date — carried forward onto today's strip until it's actually completed, rather than just vanishing. */
-  isCarriedOver: boolean;
 }
-
-const TASK_STATUS_LABEL: Record<string, string> = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.label]));
 
 interface TimelineUser {
   id: string;
@@ -32,78 +28,90 @@ interface TimelineUser {
   tasks: TimelineTask[];
 }
 
-/** Same palette every other priority dot/badge in the app uses — just as a filled marker instead of a <Badge>. */
-const PRIORITY_DOT: Record<TimelineTask["priority"], string> = {
+const TASK_STATUS_LABEL: Record<string, string> = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.label]));
+
+/** Same palette every other priority dot/badge in the app uses — as a filled bar instead of a <Badge>. */
+const PRIORITY_BAR: Record<TimelineTask["priority"], string> = {
   LOW: "bg-muted-foreground",
   MEDIUM: "bg-primary",
   HIGH: "bg-amber-500",
   URGENT: "bg-destructive",
 };
 
-const HOUR_MARKS = [0, 3, 6, 9, 12, 15, 18, 21, 24];
+const DAY_WIDTH_PCT = 100 / 7;
+const LANE_HEIGHT = 20;
+const LANE_GAP = 3;
+const ROW_V_PADDING = 8;
 
-function hourLabel(h: number) {
-  if (h === 0 || h === 24) return "12 AM";
-  if (h === 12) return "12 PM";
-  return h < 12 ? `${h} AM` : `${h - 12} PM`;
-}
-
-/** Minutes-past-midnight (IST) for a task's due time, as a 0–100 position on the 24h strip. */
-function taskPct(dueDate: string) {
-  const d = new Date(dueDate);
-  const istMinutes = istMinutesOfDay(d);
-  return (istMinutes / (24 * 60)) * 100;
-}
-
-function fmtDueTime(dueDate: string) {
-  const d = new Date(dueDate);
-  return d.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" });
+function dayHeaderLabel(key: string) {
+  return dateFromKey(key).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", timeZone: "UTC" });
 }
 
 function fmtDueDateTime(dueDate: string) {
-  const d = new Date(dueDate);
-  return d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  return new Date(dueDate).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}
+
+/**
+ * Where a task's bar sits on the week grid: `createdAt`'s day through its
+ * due day — except a task still IN_PROGRESS/REVIEW past its due date keeps
+ * growing one column further for every day it stays open, instead of
+ * stopping dead at the original due date. Clipped to the 7 displayed days;
+ * returns null for a task whose bar doesn't actually overlap this week
+ * (shouldn't happen given the API's own filter, but kept defensive).
+ */
+function layoutTaskBar(t: TimelineTask, days: string[], todayKey: string) {
+  const createdKey = istDateKey(new Date(t.createdAt));
+  const dueKey = istDateKey(new Date(t.dueDate));
+  const isOpen = t.status === "IN_PROGRESS" || t.status === "REVIEW";
+  const endKey = isOpen && dueKey < todayKey ? todayKey : dueKey;
+  const startKey = createdKey < endKey ? createdKey : endKey;
+  const firstDay = days[0];
+  const lastDay = days[days.length - 1];
+  if (endKey < firstDay || startKey > lastDay) return null;
+  const clippedStart = startKey < firstDay ? firstDay : startKey;
+  const clippedEnd = endKey > lastDay ? lastDay : endKey;
+  const startIdx = days.indexOf(clippedStart);
+  const endIdx = days.indexOf(clippedEnd);
+  return { t, startIdx, endIdx, isCarriedOver: endKey > dueKey };
+}
+
+type PositionedTask = NonNullable<ReturnType<typeof layoutTaskBar>>;
+
+/** Interval-graph lane assignment — the classic Gantt/calendar stacking, so overlapping bars never cover each other. */
+function assignLanes(bars: PositionedTask[]): (PositionedTask & { lane: number })[] {
+  const sorted = [...bars].sort((a, b) => a.startIdx - b.startIdx);
+  const laneEndIdx: number[] = [];
+  return sorted.map((bar) => {
+    let lane = laneEndIdx.findIndex((end) => end < bar.startIdx);
+    if (lane === -1) {
+      lane = laneEndIdx.length;
+      laneEndIdx.push(bar.endIdx);
+    } else {
+      laneEndIdx[lane] = bar.endIdx;
+    }
+    return { ...bar, lane };
+  });
 }
 
 /** "Title · Status · Due ... · Added ..." — one line for the tooltip. */
-function taskTooltipLabel(t: TimelineTask) {
-  const due = t.isCarriedOver ? `Was due ${fmtDueDateTime(t.dueDate)}` : `Due ${fmtDueTime(t.dueDate)}`;
+function taskTooltipLabel(t: TimelineTask, isCarriedOver: boolean) {
+  const due = isCarriedOver ? `Was due ${fmtDueDateTime(t.dueDate)}` : `Due ${fmtDueDateTime(t.dueDate)}`;
   const age = recencyLabel(t.createdAt);
   const added = age && (age.isNew ? "Added today" : `Added ${age.text.toLowerCase()}`);
   return [t.title, TASK_STATUS_LABEL[t.status] ?? t.status, due, added].filter(Boolean).join(" · ");
 }
 
-/**
- * Tasks due within ~9 minutes of each other would render as one dot sitting
- * exactly on top of another with no way to reach the one underneath. Cluster
- * near-neighbors (by due-time %) and spread them with a small alternating
- * vertical offset so every dot stays independently hoverable.
- */
-const CLUSTER_THRESHOLD_PCT = 0.6;
-function layoutTaskDots(tasks: TimelineTask[]) {
-  const sorted = tasks.map((t) => ({ t, pct: taskPct(t.dueDate) })).sort((a, b) => a.pct - b.pct);
-  let clusterStart = 0;
-  return sorted.map((entry, i) => {
-    if (i === 0 || entry.pct - sorted[i - 1].pct > CLUSTER_THRESHOLD_PCT) clusterStart = i;
-    // Cycle through a bounded set of offsets (rather than growing unbounded) so a
-    // dot never drifts outside the track's own height, however big the cluster.
-    const n = (i - clusterStart) % 3;
-    const offsetY = n === 0 ? 0 : n === 1 ? 5 : -5;
-    return { ...entry, offsetY };
-  });
-}
-
 export function TodayTimeline() {
-  const [users, setUsers] = useState<TimelineUser[] | null>(null);
+  const [data, setData] = useState<{ days: string[]; users: TimelineUser[] } | null>(null);
   const [error, setError] = useState(false);
-  const [nowPct, setNowPct] = useState<number | null>(null);
+  const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
     const load = () =>
       fetch("/api/dashboard/today-timeline")
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error("request failed"))))
         .then((d) => {
-          setUsers(d?.users ?? []);
+          setData({ days: d?.days ?? [], users: d?.users ?? [] });
           setError(false);
         })
         .catch(() => setError(true));
@@ -115,11 +123,17 @@ export function TodayTimeline() {
 
   // The "now" line — recomputed every minute so it actually moves while the page sits open.
   useEffect(() => {
-    const update = () => setNowPct((istMinutesOfDay() / (24 * 60)) * 100);
+    const update = () => setNow(new Date());
     update();
     const id = setInterval(update, 60_000);
     return () => clearInterval(id);
   }, []);
+
+  const days = data?.days ?? [];
+  const users = data?.users ?? null;
+  const todayKey = now ? istDateKey(now) : null;
+  const todayIdx = todayKey ? days.indexOf(todayKey) : -1;
+  const nowPct = now && todayIdx >= 0 ? ((todayIdx + istMinutesOfDay(now) / 1440) / 7) * 100 : null;
 
   const groups = users
     ? Object.entries(
@@ -137,10 +151,18 @@ export function TodayTimeline() {
         <CardTitle>Today&apos;s tasks</CardTitle>
         <HelpDialog title="Today's tasks — help">
           <HelpSection heading="What this shows">
-            <p>Every active user, grouped by department, with each of today&apos;s tasks placed on a 24-hour strip at its due time. The vertical line marks the current time. Hover a dot for its title, status, due time, and when it was added.</p>
+            <p>
+              Every active user, grouped by department, with each of this week&apos;s tasks laid out as a bar from the day it
+              was added through its due day. The vertical line marks the current day and time. Hover a bar for its title,
+              status, due date, and when it was added.
+            </p>
           </HelpSection>
           <HelpSection heading="Carried-over tasks">
-            <p>A task still In Progress or In Review past its due date keeps showing up here, at its original due time, every day until it&apos;s marked Completed — marked with a dashed outline so it&apos;s clear it&apos;s not due today.</p>
+            <p>
+              A task still In Progress or In Review past its due date keeps growing — one day further every day it stays
+              open — instead of stopping at the original due date, until it&apos;s actually marked Completed. Marked with a
+              dashed outline.
+            </p>
           </HelpSection>
         </HelpDialog>
       </CardHeader>
@@ -154,55 +176,77 @@ export function TodayTimeline() {
         ) : (
           <div className="overflow-x-auto">
             <div className="min-w-[640px]">
-              {/* Hour axis */}
+              {/* Day axis */}
               <div className="mb-2 flex pl-40">
-                <div className="relative h-4 flex-1">
-                  {HOUR_MARKS.map((h) => (
-                    <span
-                      key={h}
-                      className="absolute -translate-x-1/2 text-[10px] text-muted-foreground"
-                      style={{ left: `${(h / 24) * 100}%` }}
-                    >
-                      {hourLabel(h)}
-                    </span>
-                  ))}
-                </div>
+                {days.map((key, i) => (
+                  <div
+                    key={key}
+                    className={cn(
+                      "rounded text-center text-[10px] font-medium text-muted-foreground",
+                      i === todayIdx && "bg-primary/10 text-primary"
+                    )}
+                    style={{ width: `${DAY_WIDTH_PCT}%` }}
+                  >
+                    {dayHeaderLabel(key)}
+                  </div>
+                ))}
               </div>
 
               {groups.map(([department, deptUsers]) => (
                 <div key={department} className="mb-3 last:mb-0">
                   <p className="mb-1 pl-40 text-xs font-semibold text-muted-foreground">{department}</p>
-                  {deptUsers.map((u) => (
-                    <div key={u.id} className="flex items-center gap-2 border-t border-border/50 py-1.5 first:border-t-0">
-                      <div className="flex w-40 shrink-0 items-center gap-1.5 pr-2">
-                        <UserAvatar name={u.name} avatarDataUrl={u.avatarDataUrl} className="h-5 w-5" />
-                        <span className="truncate text-xs font-medium">{u.name}</span>
-                      </div>
-                      <div className="relative h-6 flex-1 overflow-hidden rounded bg-muted/40">
-                        {HOUR_MARKS.slice(1, -1).map((h) => (
-                          <div key={h} className="absolute inset-y-0 border-l border-border/40" style={{ left: `${(h / 24) * 100}%` }} />
-                        ))}
-                        {nowPct !== null && (
-                          <div className="absolute inset-y-0 w-px bg-destructive/70" style={{ left: `${nowPct}%` }} />
-                        )}
-                        {layoutTaskDots(u.tasks).map(({ t, pct, offsetY }) => (
-                          <Tooltip key={t.id} label={taskTooltipLabel(t)}>
+                  {deptUsers.map((u) => {
+                    const bars = assignLanes(
+                      u.tasks
+                        .map((t) => (todayKey ? layoutTaskBar(t, days, todayKey) : null))
+                        .filter((b): b is PositionedTask => b !== null)
+                    );
+                    const lanes = Math.max(1, ...bars.map((b) => b.lane + 1));
+                    const rowHeight = lanes * LANE_HEIGHT + (lanes - 1) * LANE_GAP + ROW_V_PADDING * 2;
+
+                    return (
+                      <div key={u.id} className="flex items-center gap-2 border-t border-border/50 py-1.5 first:border-t-0">
+                        <div className="flex w-40 shrink-0 items-center gap-1.5 pr-2">
+                          <UserAvatar name={u.name} avatarDataUrl={u.avatarDataUrl} className="h-5 w-5" />
+                          <span className="truncate text-xs font-medium">{u.name}</span>
+                        </div>
+                        <div className="relative flex-1 overflow-hidden rounded bg-muted/40" style={{ height: rowHeight }}>
+                          {todayIdx >= 0 && (
                             <div
-                              className={cn(
-                                "absolute top-1/2 h-2.5 w-2.5 rounded-full ring-2 ring-background",
-                                PRIORITY_DOT[t.priority],
-                                (t.status === "COMPLETED" || t.status === "CANCELLED") && "opacity-40",
-                                // Carried over from a past due date, still open — a dashed
-                                // outline marks it as "still showing up" rather than new today.
-                                t.isCarriedOver && "outline outline-2 outline-dashed outline-offset-1 outline-foreground/50"
-                              )}
-                              style={{ left: `${pct}%`, transform: `translate(-50%, calc(-50% + ${offsetY}px))` }}
+                              className="absolute inset-y-0 bg-primary/5"
+                              style={{ left: `${todayIdx * DAY_WIDTH_PCT}%`, width: `${DAY_WIDTH_PCT}%` }}
                             />
-                          </Tooltip>
-                        ))}
+                          )}
+                          {Array.from({ length: 6 }, (_, i) => i + 1).map((i) => (
+                            <div key={i} className="absolute inset-y-0 border-l border-border/40" style={{ left: `${i * DAY_WIDTH_PCT}%` }} />
+                          ))}
+                          {nowPct !== null && <div className="absolute inset-y-0 w-px bg-destructive/70" style={{ left: `${nowPct}%` }} />}
+                          {bars.map(({ t, startIdx, endIdx, lane, isCarriedOver }) => (
+                            <Tooltip key={t.id} label={taskTooltipLabel(t, isCarriedOver)}>
+                              <div
+                                className={cn(
+                                  "absolute flex items-center truncate rounded px-1.5 text-[10px] font-medium text-white",
+                                  PRIORITY_BAR[t.priority],
+                                  (t.status === "COMPLETED" || t.status === "CANCELLED") && "opacity-40",
+                                  // Carried over from a past due date, still open — a dashed outline
+                                  // marks it as "still showing up" rather than newly due this week.
+                                  isCarriedOver && "outline outline-2 outline-dashed outline-offset-1 outline-foreground/50"
+                                )}
+                                style={{
+                                  left: `calc(${startIdx * DAY_WIDTH_PCT}% + 2px)`,
+                                  width: `calc(${(endIdx - startIdx + 1) * DAY_WIDTH_PCT}% - 4px)`,
+                                  top: ROW_V_PADDING + lane * (LANE_HEIGHT + LANE_GAP),
+                                  height: LANE_HEIGHT,
+                                }}
+                              >
+                                {t.title}
+                              </div>
+                            </Tooltip>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ))}
             </div>

@@ -44,6 +44,23 @@ export function istDayBoundsUtc(instant: Date = new Date()): { start: Date; end:
   return { start, end };
 }
 
+/**
+ * The IST calendar week (Monday–Sunday) containing `instant`: the real UTC
+ * instants bounding it — `[start, end)` — plus each day's own "YYYY-MM-DD"
+ * key, Monday first, for a multi-day grid (e.g. a weekly task timeline) to
+ * lay its columns out against.
+ */
+export function istWeekBoundsUtc(instant: Date = new Date()): { start: Date; end: Date; days: string[] } {
+  const shifted = istShift(instant);
+  const mondayOffsetDays = (shifted.getUTCDay() + 6) % 7; // JS getDay(): 0=Sun..6=Sat → days since Monday
+  const mondayUtcMidnight = new Date(dateFromKey(istDateKey(instant)).getTime() - mondayOffsetDays * 24 * 60 * 60_000);
+  const mondayKey = keyFromDate(mondayUtcMidnight);
+  const start = new Date(dateFromKey(mondayKey).getTime() - IST_OFFSET_MINUTES * 60_000);
+  const end = new Date(start.getTime() + 7 * 24 * 60 * 60_000);
+  const days = Array.from({ length: 7 }, (_, i) => keyFromDate(new Date(mondayUtcMidnight.getTime() + i * 24 * 60 * 60_000)));
+  return { start, end, days };
+}
+
 /** The stored DATE (UTC midnight) back to its "YYYY-MM-DD" key. */
 export function keyFromDate(date: Date): string {
   return date.toISOString().slice(0, 10);
