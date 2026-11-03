@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -84,7 +85,17 @@ export default function NotificationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Only "Unread" narrows server-side (?unreadOnly=1) — "All" and "Read" both
+  // want the same underlying fetch, with "Read" just filtered from it
+  // client-side (see `filtered` below). Re-fetching on every tab click,
+  // including All<->Read switches that need no new data, was what made
+  // switching tabs feel like a stutter: a full network round trip and a
+  // skeleton flash for a click that didn't actually need either.
+  const loadedScopeRef = useRef<"all" | "unread" | null>(null);
   useEffect(() => {
+    const desiredScope = tab === "unread" ? "unread" : "all";
+    if (loadedScopeRef.current === desiredScope) return;
+    loadedScopeRef.current = desiredScope;
     load(tab);
   }, [tab, load]);
 
@@ -182,17 +193,24 @@ export default function NotificationsPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-1 rounded-md border border-border p-0.5">
+        <div className="relative flex gap-1 rounded-md border border-border p-0.5">
           {TABS.map((t) => (
             <button
               key={t.key}
               type="button"
               onClick={() => setTab(t.key)}
               className={cn(
-                "rounded px-3 py-1.5 text-sm transition-colors",
-                tab === t.key ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:text-foreground"
+                "relative z-10 rounded px-3 py-1.5 text-sm transition-colors",
+                tab === t.key ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
             >
+              {tab === t.key && (
+                <motion.span
+                  layoutId="notif-tab-indicator"
+                  className="absolute inset-0 -z-10 rounded bg-accent"
+                  transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                />
+              )}
               {t.label}
               {t.key === "unread" && unreadCount > 0 && <span className="ml-1.5 text-xs">({unreadCount})</span>}
             </button>
@@ -209,68 +227,83 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {loading ? (
-        <SkeletonList rows={6} />
-      ) : filtered.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
-            <IconBell className="h-6 w-6 text-muted-foreground" />
-            <p className="text-sm font-medium">
-              {notifications.length === 0 ? "You're all caught up" : "Nothing matches these filters"}
-            </p>
-            {notifications.length === 0 && <p className="text-sm text-muted-foreground">No notifications to show here.</p>}
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="flex min-h-0 flex-1 flex-col">
-          <CardContent className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto p-0">
-            {filtered.map((n) => {
-              const { Icon, badgeClassName, accentClassName } = notificationVisual(n);
-              return (
-                <div
-                  key={n.id}
-                  className={cn(
-                    "flex items-start gap-3 px-4 py-3 transition-colors hover:bg-primary/5",
-                    !n.readAt && "bg-accent/30",
-                    accentClassName
-                  )}
-                >
-                  <button type="button" onClick={() => openNotification(n)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
-                    <span className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", badgeClassName)}>
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm leading-snug">{notificationMessage(n)}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground" title={format(parseISO(n.createdAt), "dd MMM yyyy, HH:mm")}>
-                        {formatDistanceToNow(parseISO(n.createdAt), { addSuffix: true })}
-                      </p>
-                    </div>
-                    {!n.readAt && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
-                  </button>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      aria-label={n.readAt ? "Mark as unread" : "Mark as read"}
-                      onClick={() => markRead(n, !n.readAt)}
-                      className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
-                    >
-                      {n.readAt ? <IconMail className="h-4 w-4" /> : <IconMailCheck className="h-4 w-4" />}
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Dismiss"
-                      onClick={() => dismiss(n)}
-                      className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive"
-                    >
-                      <IconTrash className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      )}
+      <AnimatePresence mode="wait" initial={false}>
+        {loading ? (
+          <motion.div key="skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+            <SkeletonList rows={6} />
+          </motion.div>
+        ) : filtered.length === 0 ? (
+          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+            <Card>
+              <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
+                <IconBell className="h-6 w-6 text-muted-foreground" />
+                <p className="text-sm font-medium">
+                  {notifications.length === 0 ? "You're all caught up" : "Nothing matches these filters"}
+                </p>
+                {notifications.length === 0 && <p className="text-sm text-muted-foreground">No notifications to show here.</p>}
+              </CardContent>
+            </Card>
+          </motion.div>
+        ) : (
+          <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex min-h-0 flex-1 flex-col">
+            <Card className="flex min-h-0 flex-1 flex-col">
+              <CardContent className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto p-0">
+                <AnimatePresence initial={false}>
+                  {filtered.map((n) => {
+                    const { Icon, badgeClassName, accentClassName } = notificationVisual(n);
+                    return (
+                      <motion.div
+                        key={n.id}
+                        layout
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0 }}
+                        transition={{ duration: 0.18, ease: "easeOut" }}
+                        className={cn(
+                          "flex items-start gap-3 overflow-hidden px-4 py-3 transition-colors hover:bg-primary/5",
+                          !n.readAt && "bg-accent/30",
+                          accentClassName
+                        )}
+                      >
+                        <button type="button" onClick={() => openNotification(n)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                          <span className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", badgeClassName)}>
+                            <Icon className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm leading-snug">{notificationMessage(n)}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground" title={format(parseISO(n.createdAt), "dd MMM yyyy, HH:mm")}>
+                              {formatDistanceToNow(parseISO(n.createdAt), { addSuffix: true })}
+                            </p>
+                          </div>
+                          {!n.readAt && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+                        </button>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            aria-label={n.readAt ? "Mark as unread" : "Mark as read"}
+                            onClick={() => markRead(n, !n.readAt)}
+                            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
+                          >
+                            {n.readAt ? <IconMail className="h-4 w-4" /> : <IconMailCheck className="h-4 w-4" />}
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Dismiss"
+                            onClick={() => dismiss(n)}
+                            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive"
+                          >
+                            <IconTrash className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* `hasMore` reflects the raw fetch (only "Unread" is filtered server-side) — on
           "Read", or with a category/date/search filter active, the fetched page can be
