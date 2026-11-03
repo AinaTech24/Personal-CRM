@@ -165,7 +165,7 @@ export default function NotificationsPage() {
   }, [notifications, tab, category, from, to, query]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-1.5">
           <h1 className="text-xl font-semibold">Notifications</h1>
@@ -222,8 +222,8 @@ export default function NotificationsPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="flex flex-col divide-y divide-border p-0">
+        <Card className="flex min-h-0 flex-1 flex-col">
+          <CardContent className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto p-0">
             {filtered.map((n) => {
               const { Icon, badgeClassName, accentClassName } = notificationVisual(n);
               return (
@@ -272,7 +272,11 @@ export default function NotificationsPage() {
         </Card>
       )}
 
-      {!loading && hasMore && (
+      {/* `hasMore` reflects the raw fetch (only "Unread" is filtered server-side) — on
+          "Read", or with a category/date/search filter active, the fetched page can be
+          non-empty while nothing in it matches, and offering to load more of what's
+          already shown nothing from would be misleading. */}
+      {!loading && hasMore && filtered.length > 0 && (
         <Button type="button" variant="outline" className="self-center" onClick={loadMore} disabled={loadingMore}>
           {loadingMore ? "Loading…" : "Load more"}
         </Button>
