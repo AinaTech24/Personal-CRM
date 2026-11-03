@@ -170,11 +170,7 @@ export function NotificationBell() {
                     accentClassName
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => onNotificationClick(n)}
-                    className="flex min-w-0 flex-1 items-start gap-2.5 text-left transition-[padding] duration-300 ease-in-out group-hover:pr-16"
-                  >
+                  <button type="button" onClick={() => onNotificationClick(n)} className="flex min-w-0 flex-1 items-start gap-2.5 text-left">
                     <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full", badgeClassName)}>
                       <Icon className="h-3.5 w-3.5" />
                     </span>
