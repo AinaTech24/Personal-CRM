@@ -83,6 +83,11 @@ export function NotificationBell() {
     });
   }
 
+  async function deleteOne(id: string) {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    await fetch(`/api/notifications?id=${id}`, { method: "DELETE" });
+  }
+
   function onNotificationClick(n: Notification) {
     if (!n.readAt) markOneRead(n.id);
     const href = notificationHref(n);
@@ -157,26 +162,63 @@ export function NotificationBell() {
             {notifications.map((n) => {
               const { Icon, badgeClassName, accentClassName } = notificationVisual(n);
               return (
-                <button
+                <div
                   key={n.id}
-                  onClick={() => onNotificationClick(n)}
                   className={cn(
-                    "flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-primary/5",
+                    "group flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-sm hover:bg-primary/5",
                     !n.readAt && "bg-accent/50",
                     accentClassName
                   )}
                 >
-                  <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full", badgeClassName)}>
-                    <Icon className="h-3.5 w-3.5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="leading-snug">{notificationMessage(n)}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
-                    </p>
+                  <button
+                    type="button"
+                    onClick={() => onNotificationClick(n)}
+                    className="flex min-w-0 flex-1 items-start gap-2.5 text-left transition-[padding] duration-300 ease-in-out group-hover:pr-16"
+                  >
+                    <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full", badgeClassName)}>
+                      <Icon className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="leading-snug">{notificationMessage(n)}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                      </p>
+                    </div>
+                    {!n.readAt && (
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary opacity-100 transition-opacity duration-200 group-hover:opacity-0" />
+                    )}
+                  </button>
+                  <div className="flex max-w-0 shrink-0 items-center gap-0.5 self-center overflow-hidden opacity-0 transition-[max-width,opacity] duration-300 ease-in-out group-hover:max-w-[4.5rem] group-hover:opacity-100">
+                    {!n.readAt && (
+                      <Tooltip label="Mark as read" side="top">
+                        <button
+                          type="button"
+                          aria-label="Mark as read"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            markOneRead(n.id);
+                          }}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/10 hover:text-foreground"
+                        >
+                          <IconCheck className="h-3.5 w-3.5" />
+                        </button>
+                      </Tooltip>
+                    )}
+                    <Tooltip label="Delete" side="top">
+                      <button
+                        type="button"
+                        aria-label="Delete notification"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteOne(n.id);
+                        }}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <IconTrash className="h-3.5 w-3.5" />
+                      </button>
+                    </Tooltip>
                   </div>
-                  {!n.readAt && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
-                </button>
+                </div>
               );
             })}
           </div>
