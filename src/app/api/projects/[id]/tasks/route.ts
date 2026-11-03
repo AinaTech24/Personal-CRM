@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getProjectForUser, logProjectActivity } from "@/lib/projects";
-import { broadcastTaskChange } from "@/lib/tasks";
+import { broadcastTaskChange, completedAtFor } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
 
 const bodySchema = z.object({
@@ -61,6 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       title: task.title,
       description: task.description,
       status: task.status,
+      completedAt: completedAtFor(task.status),
       dueDate: task.dueDate,
       assignedToId: task.assignedToId,
       createdById: user.id,

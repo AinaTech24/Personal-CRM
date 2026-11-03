@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getProjectForUser, logProjectActivity } from "@/lib/projects";
-import { broadcastTaskChange } from "@/lib/tasks";
+import { broadcastTaskChange, completedAtFor } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
 
 const patchSchema = z.object({
@@ -91,7 +91,7 @@ export async function PATCH(
       data: {
         ...(data.title !== undefined && { title: task.title }),
         ...(data.description !== undefined && { description: task.description }),
-        ...(data.status !== undefined && { status: task.status }),
+        ...(data.status !== undefined && { status: task.status, completedAt: completedAtFor(task.status) }),
         ...(data.assignedToId !== undefined && { assignedToId: task.assignedToId }),
         ...(data.dueDate !== undefined && { dueDate: task.dueDate }),
       },

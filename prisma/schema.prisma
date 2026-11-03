@@ -540,6 +540,9 @@ model Task {
   status              TaskStatus   @default(TODO)
   priority            Priority     @default(MEDIUM)
   dueDate             DateTime?
+  /// Stamped the moment `status` most recently became COMPLETED; cleared if
+  /// reopened. Not "when it was first completed" — "when it currently is."
+  completedAt         DateTime?
   /// The primary assignee — kept in sync as the first entry of `assignees`
   /// below (set/cleared together), so every existing single-assignee reader
   /// (reminders, the dashboard's "my tasks" widget, the activity feed, a
