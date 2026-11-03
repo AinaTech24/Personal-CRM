@@ -254,13 +254,12 @@ export default function NotificationsPage() {
                     return (
                       <motion.div
                         key={n.id}
-                        layout
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        exit={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0 }}
-                        transition={{ duration: 0.18, ease: "easeOut" }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15, ease: "easeOut" }}
                         className={cn(
-                          "flex items-start gap-3 overflow-hidden px-4 py-3 transition-colors hover:bg-primary/5",
+                          "flex items-start gap-3 px-4 py-3 transition-colors hover:bg-primary/5",
                           !n.readAt && "bg-accent/30",
                           accentClassName
                         )}
