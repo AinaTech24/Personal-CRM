@@ -68,23 +68,6 @@ export default function NotificationsPage() {
   const [to, setTo] = useState("");
   const [query, setQuery] = useState("");
 
-  const load = useCallback(async (tabParam: Tab) => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ take: String(PAGE_SIZE) });
-      if (tabParam === "unread") params.set("unreadOnly", "1");
-      const res = await fetch(`/api/notifications?${params.toString()}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) return toast.error("Couldn't load notifications", data.error);
-      setNotifications(data.notifications ?? []);
-      setUnreadCount(data.unreadCount ?? 0);
-      setHasMore(!!data.hasMore);
-    } finally {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Only "Unread" narrows server-side (?unreadOnly=1) — "All" and "Read" both
   // want the same underlying fetch, with "Read" just filtered from it
   // client-side (see `filtered` below). Re-fetching on every tab click,
@@ -92,11 +75,40 @@ export default function NotificationsPage() {
   // switching tabs feel like a stutter: a full network round trip and a
   // skeleton flash for a click that didn't actually need either.
   const loadedScopeRef = useRef<"all" | "unread" | null>(null);
+  // Guards against a slower, stale request's response overwriting a faster,
+  // newer one if the user switches tabs again before the first fetch resolves.
+  const requestIdRef = useRef(0);
+
+  const load = useCallback(
+    async (tabParam: Tab, scope: "all" | "unread") => {
+      const requestId = ++requestIdRef.current;
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({ take: String(PAGE_SIZE) });
+        if (tabParam === "unread") params.set("unreadOnly", "1");
+        const res = await fetch(`/api/notifications?${params.toString()}`);
+        const data = await res.json().catch(() => ({}));
+        if (requestId !== requestIdRef.current) return;
+        if (!res.ok) return toast.error("Couldn't load notifications", data.error);
+        setNotifications(data.notifications ?? []);
+        setUnreadCount(data.unreadCount ?? 0);
+        setHasMore(!!data.hasMore);
+        // Only mark this scope loaded once the fetch actually succeeded — if it
+        // fails, the ref stays as-is so clicking the same tab again retries
+        // instead of leaving it permanently stuck on an empty/stale list.
+        loadedScopeRef.current = scope;
+      } finally {
+        if (requestId === requestIdRef.current) setLoading(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
   useEffect(() => {
     const desiredScope = tab === "unread" ? "unread" : "all";
     if (loadedScopeRef.current === desiredScope) return;
-    loadedScopeRef.current = desiredScope;
-    load(tab);
+    load(tab, desiredScope);
   }, [tab, load]);
 
   // A new notification arriving live (e.g. from another tab/device acting on
@@ -227,27 +239,33 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      <AnimatePresence mode="wait" initial={false}>
-        {loading ? (
-          <motion.div key="skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-            <SkeletonList rows={6} />
-          </motion.div>
-        ) : filtered.length === 0 ? (
-          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-            <Card>
-              <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
-                <IconBell className="h-6 w-6 text-muted-foreground" />
-                <p className="text-sm font-medium">
-                  {notifications.length === 0 ? "You're all caught up" : "Nothing matches these filters"}
-                </p>
-                {notifications.length === 0 && <p className="text-sm text-muted-foreground">No notifications to show here.</p>}
-              </CardContent>
-            </Card>
-          </motion.div>
-        ) : (
-          <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex min-h-0 flex-1 flex-col">
-            <Card className="flex min-h-0 flex-1 flex-col">
-              <CardContent className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto p-0">
+      {/* A relative/absolute overlay (rather than AnimatePresence's default
+          "mode=wait") lets the outgoing and incoming panes crossfade at the
+          same time instead of one fully finishing before the next starts —
+          mode="wait" made a tab switch that needs a real fetch (Unread) feel
+          like two fades back to back instead of one smooth transition. */}
+      <div className="relative min-h-0 flex-1">
+        <AnimatePresence initial={false}>
+          {loading ? (
+            <motion.div key="skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="absolute inset-0">
+              <SkeletonList rows={6} />
+            </motion.div>
+          ) : filtered.length === 0 ? (
+            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="absolute inset-0">
+              <Card>
+                <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
+                  <IconBell className="h-6 w-6 text-muted-foreground" />
+                  <p className="text-sm font-medium">
+                    {notifications.length === 0 ? "You're all caught up" : "Nothing matches these filters"}
+                  </p>
+                  {notifications.length === 0 && <p className="text-sm text-muted-foreground">No notifications to show here.</p>}
+                </CardContent>
+              </Card>
+            </motion.div>
+          ) : (
+            <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="absolute inset-0 flex flex-col">
+              <Card className="flex min-h-0 flex-1 flex-col">
+                <CardContent className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto p-0">
                 <AnimatePresence initial={false}>
                   {filtered.map((n) => {
                     const { Icon, badgeClassName, accentClassName } = notificationVisual(n);
@@ -300,9 +318,10 @@ export default function NotificationsPage() {
                 </AnimatePresence>
               </CardContent>
             </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* `hasMore` reflects the raw fetch (only "Unread" is filtered server-side) — on
           "Read", or with a category/date/search filter active, the fetched page can be

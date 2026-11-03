@@ -12,6 +12,7 @@ export type NotificationCategory =
   | "attendance"
   | "social"
   | "calls"
+  | "expenses"
   | "forms"
   | "billing"
   | "passwords"
@@ -42,7 +43,12 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   call_assigned: "calls",
   leave_requested: "attendance",
   leave_decided: "attendance",
+  expense_requested: "expenses",
+  expense_decided: "expenses",
+  expense_paid: "expenses",
   form_submitted: "forms",
+  form_created: "forms",
+  form_edited: "forms",
   invoice_overdue: "billing",
   password_rotation_due: "passwords",
   password_entry_shared: "passwords",
@@ -73,7 +79,16 @@ export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: stri
   { value: "attendance", label: "Attendance", description: "Reminders to check in or check out before your shift window closes" },
   { value: "social", label: "Social Media", description: "When a social media client is assigned to you" },
   { value: "calls", label: "Calls", description: "When a call is logged with you as the owner" },
-  { value: "forms", label: "Forms", description: "When a form you created or can view gets a new submission" },
+  {
+    value: "expenses",
+    label: "Expenses",
+    description: "When someone submits a reimbursement claim, or one of yours is approved, rejected, or paid",
+  },
+  {
+    value: "forms",
+    label: "Forms",
+    description: "When a form you manage gets a new submission, or one is created or edited",
+  },
   { value: "billing", label: "Billing", description: "When an invoice you created goes overdue" },
   {
     value: "passwords",
@@ -92,19 +107,30 @@ export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: stri
  * Creates + broadcasts a notification unless the recipient has turned that
  * category off. A missing preference row means "on" (default-on, matching the
  * app's behavior before per-category preferences existed).
+ *
+ * Best-effort: a DB hiccup or socket failure here shouldn't turn into a false
+ * failure of whatever the caller is actually doing (creating a form, saving a
+ * field, submitting an expense) — every call site treats notifying as a side
+ * effect of a successful action, not a precondition for one, so this logs and
+ * returns null instead of throwing.
  */
 export async function notifyUser(userId: string, type: string, payload: InputJsonObject) {
-  const category = TYPE_TO_CATEGORY[type];
-  if (category) {
-    const pref = await db.notificationPreference.findUnique({
-      where: { userId_category: { userId, category } },
-    });
-    if (pref && !pref.inApp) return null;
-  }
+  try {
+    const category = TYPE_TO_CATEGORY[type];
+    if (category) {
+      const pref = await db.notificationPreference.findUnique({
+        where: { userId_category: { userId, category } },
+      });
+      if (pref && !pref.inApp) return null;
+    }
 
-  const notification = await db.notification.create({ data: { userId, type, payload } });
-  emitToUser(userId, "notification", notification);
-  return notification;
+    const notification = await db.notification.create({ data: { userId, type, payload } });
+    emitToUser(userId, "notification", notification);
+    return notification;
+  } catch (err) {
+    console.error(`[notify] Failed to notify user ${userId} of ${type}:`, err);
+    return null;
+  }
 }
 
 /**
@@ -122,7 +148,11 @@ export async function notifyUser(userId: string, type: string, payload: InputJso
 export async function notifyAndPush(userId: string, type: string, payload: InputJsonObject, push: PushPayload) {
   const notification = await notifyUser(userId, type, payload);
   if (notification) {
-    await sendPushToUsers([userId], push);
+    try {
+      await sendPushToUsers([userId], push);
+    } catch (err) {
+      console.error(`[notify] Failed to push to user ${userId} of ${type}:`, err);
+    }
   }
   return notification;
 }

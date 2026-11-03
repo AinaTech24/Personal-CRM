@@ -43,7 +43,9 @@ async function main() {
 
   let updated = 0;
   let skipped = 0;
+  let failed = 0;
 
+  const bySubmissionId = new Map<string, (typeof toBackfill)[number][]>();
   for (const n of toBackfill) {
     const payload = n.payload as Record<string, unknown>;
     const submissionId = typeof payload.submissionId === "string" ? payload.submissionId : null;
@@ -51,17 +53,26 @@ async function main() {
       skipped++;
       continue;
     }
+    const group = bySubmissionId.get(submissionId);
+    if (group) group.push(n);
+    else bySubmissionId.set(submissionId, [n]);
+  }
 
-    const submission = await prisma.formSubmission.findUnique({
-      where: { id: submissionId },
-      select: {
-        form: { select: { title: true, fields: { orderBy: { order: "asc" }, select: { id: true, type: true, label: true } } } },
-        answers: { select: { fieldId: true, value: true } },
-      },
-    });
+  const submissions = await prisma.formSubmission.findMany({
+    where: { id: { in: [...bySubmissionId.keys()] } },
+    select: {
+      id: true,
+      form: { select: { title: true, fields: { orderBy: { order: "asc" }, select: { id: true, type: true, label: true } } } },
+      answers: { select: { fieldId: true, value: true } },
+    },
+  });
+  const submissionById = new Map(submissions.map((s) => [s.id, s]));
+
+  for (const [submissionId, group] of bySubmissionId) {
+    const submission = submissionById.get(submissionId);
     if (!submission) {
       // The form or submission was deleted/purged since — nothing left to name it with.
-      skipped++;
+      skipped += group.length;
       continue;
     }
 
@@ -71,18 +82,33 @@ async function main() {
       submission.form.fields.find((f) => NAME_FIELD_TYPES.has(f.type) && answerByField.get(f.id));
     const submitterName = nameField ? (answerByField.get(nameField.id) ?? null) : null;
 
-    await prisma.notification.update({
-      where: { id: n.id },
-      data: { payload: { ...payload, formTitle: submission.form.title, submitterName } },
-    });
-    updated++;
+    for (const n of group) {
+      const payload = n.payload as Record<string, unknown>;
+      try {
+        await prisma.notification.update({
+          where: { id: n.id },
+          data: { payload: { ...payload, formTitle: submission.form.title, submitterName } },
+        });
+        updated++;
+      } catch (err) {
+        // One bad row shouldn't fail the whole build — this is a nice-to-have
+        // backfill, not a migration the app depends on to function.
+        console.error(`[backfill-form-submission-names] Failed to update notification ${n.id}:`, err);
+        failed++;
+      }
+    }
   }
 
-  console.log(`[backfill-form-submission-names] Done — updated ${updated}, skipped ${skipped} (deleted form/submission).`);
+  console.log(
+    `[backfill-form-submission-names] Done — updated ${updated}, skipped ${skipped} (deleted form/submission), failed ${failed}.`
+  );
   await prisma.$disconnect();
 }
 
 main().catch(async (err) => {
+  // A per-row update failure is caught inside the loop and never reaches here —
+  // this only fires for something structural (e.g. the DB connection itself),
+  // which is worth still failing the build over.
   console.error("[backfill-form-submission-names] Failed:", err);
   process.exit(1);
 });
