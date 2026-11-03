@@ -35,6 +35,18 @@ export function canManageTask(user: PermissionUser, task: { createdById: string 
   return isAdmin(user) || task.createdById === user.id || assigneeIdsOf(task).includes(user.id);
 }
 
+/**
+ * `completedAt` tracks the moment a task actually became COMPLETED — stamped
+ * fresh every time a status change lands on COMPLETED, cleared the moment it
+ * moves away again (reopened), so it's always "when it was most recently
+ * completed," not "when it was first ever completed." Every place that sets
+ * `status` (task create/update, and the project-task mirror in both
+ * directions) goes through this instead of setting `completedAt` by hand.
+ */
+export function completedAtFor(status: string): Date | null {
+  return status === "COMPLETED" ? new Date() : null;
+}
+
 /** `action` is READ for viewing, UPDATE for editing — only which action a Tasks module grant must carry to widen access; ownership/team access is unaffected by it. */
 export async function getTaskForUser(user: PermissionUser, taskId: string, action: Extract<ModuleAction, "READ" | "UPDATE"> = "READ") {
   const task = await db.task.findUnique({

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { broadcastTaskChange, canDeleteTask, taskListWhere } from "@/lib/tasks";
+import { broadcastTaskChange, canDeleteTask, completedAtFor, taskListWhere } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
 import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
       description: data.description || null,
       priority: data.priority,
       status: data.status,
+      completedAt: completedAtFor(data.status),
       dueDate: data.dueDate ? new Date(data.dueDate) : null,
       assignedToId: assigneeIds[0] ?? null,
       assignees: { connect: assigneeIds.map((id) => ({ id })) },

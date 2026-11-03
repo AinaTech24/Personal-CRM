@@ -61,6 +61,25 @@ export function istWeekBoundsUtc(instant: Date = new Date()): { start: Date; end
   return { start, end, days };
 }
 
+/**
+ * The IST calendar month containing `instant`: the real UTC instants
+ * bounding it — `[start, end)` — plus every day's own "YYYY-MM-DD" key, 1st
+ * first, for a multi-day grid (e.g. a monthly task timeline) to lay its
+ * columns out against.
+ */
+export function istMonthBoundsUtc(instant: Date = new Date()): { start: Date; end: Date; days: string[] } {
+  const shifted = istShift(instant);
+  const year = shifted.getUTCFullYear();
+  const month = shifted.getUTCMonth(); // 0-based
+  const firstOfMonthUtcMidnight = new Date(Date.UTC(year, month, 1));
+  const firstKey = keyFromDate(firstOfMonthUtcMidnight);
+  const start = new Date(dateFromKey(firstKey).getTime() - IST_OFFSET_MINUTES * 60_000);
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate(); // day 0 of next month = last day of this one
+  const end = new Date(start.getTime() + daysInMonth * 24 * 60 * 60_000);
+  const days = Array.from({ length: daysInMonth }, (_, i) => keyFromDate(new Date(firstOfMonthUtcMidnight.getTime() + i * 24 * 60 * 60_000)));
+  return { start, end, days };
+}
+
 /** The stored DATE (UTC midnight) back to its "YYYY-MM-DD" key. */
 export function keyFromDate(date: Date): string {
   return date.toISOString().slice(0, 10);

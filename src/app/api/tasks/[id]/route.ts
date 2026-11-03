@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { broadcastTaskChange, canDeleteTask, getTaskForUser } from "@/lib/tasks";
+import { broadcastTaskChange, canDeleteTask, completedAtFor, getTaskForUser } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
 import { emitToUser } from "@/lib/socket-emit";
 
@@ -69,7 +69,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(data.title !== undefined && { title: data.title }),
       ...(data.description !== undefined && { description: data.description }),
       ...(data.priority !== undefined && { priority: data.priority }),
-      ...(data.status !== undefined && { status: data.status }),
+      ...(data.status !== undefined && { status: data.status, completedAt: completedAtFor(data.status) }),
       ...(data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
       ...(assigneeIds !== undefined && {
         assignedToId: assigneeIds[0] ?? null,
