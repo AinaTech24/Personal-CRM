@@ -140,30 +140,56 @@ export default function NotificationsPage() {
     }
   }
 
+  /** Re-pulls the current tab's scope from the server, discarding whatever optimistic state is in memory. */
+  function resync() {
+    load(tab, tab === "unread" ? "unread" : "all");
+  }
+
+  // Each mutation applies optimistically, then re-syncs from the server on
+  // failure (network error or non-2xx) instead of leaving the UI silently
+  // out of step with what's actually stored.
   async function markRead(n: Notification, read: boolean) {
     setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, readAt: read ? new Date().toISOString() : null } : x)));
     setUnreadCount((c) => Math.max(0, c + (read ? -1 : 1)));
-    await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: n.id, read }),
-    });
+    try {
+      const res = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: n.id, read }),
+      });
+      if (!res.ok) throw new Error("request failed");
+    } catch {
+      toast.error("Couldn't update notification");
+      resync();
+    }
   }
 
   async function markAllRead() {
     setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
     setUnreadCount(0);
-    await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
+    try {
+      const res = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error("request failed");
+    } catch {
+      toast.error("Couldn't mark all as read");
+      resync();
+    }
   }
 
   async function dismiss(n: Notification) {
     setNotifications((prev) => prev.filter((x) => x.id !== n.id));
     if (!n.readAt) setUnreadCount((c) => Math.max(0, c - 1));
-    await fetch(`/api/notifications?id=${n.id}`, { method: "DELETE" });
+    try {
+      const res = await fetch(`/api/notifications?id=${n.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("request failed");
+    } catch {
+      toast.error("Couldn't dismiss notification");
+      resync();
+    }
   }
 
   function openNotification(n: Notification) {
@@ -178,6 +204,7 @@ export default function NotificationsPage() {
     const toDate = to ? parseISO(to) : null;
     return notifications.filter((n) => {
       if (tab === "read" && !n.readAt) return false;
+      if (tab === "unread" && n.readAt) return false;
       if (category && NOTIFICATION_CATEGORY[n.type] !== category) return false;
       const created = parseISO(n.createdAt);
       if (fromDate && created < fromDate) return false;
