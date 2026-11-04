@@ -28,6 +28,19 @@ function isPickedFile(v: unknown): v is PickedFile {
 const LIMIT = 8;
 const WINDOW_MS = 10 * 60 * 1000;
 
+/**
+ * The CORS preflight for a cross-origin fetch() POST (the standalone form
+ * export, hosted on any third-party site, submits here directly — see
+ * src/lib/forms/standalone-export.ts). The actual Access-Control-* response
+ * headers come from next.config.ts's `/api/forms/by-slug/:path*` rule, which
+ * applies to every response from this route including this one; this handler
+ * only needs to exist so the OPTIONS verb itself gets a 2xx instead of the
+ * framework's default 405.
+ */
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204 });
+}
+
 /** Public — no login required. Validates and stores one visitor's answers to a live form. */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
