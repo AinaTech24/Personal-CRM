@@ -20,6 +20,7 @@ export async function GET() {
       surname: user.surname,
       mobile: user.mobile,
       avatarDataUrl: user.avatarDataUrl,
+      status: user.status,
       birthday: user.birthday,
       designation: user.designation,
       dateOfJoining: user.dateOfJoining,

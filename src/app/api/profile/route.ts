@@ -47,6 +47,7 @@ const bodySchema = z.object({
   locale: z.string().max(10).optional(),
   defaultLandingPage: z.enum(LANDING_PAGES).nullable().optional(),
   density: z.enum(["comfortable", "compact"]).optional(),
+  status: z.string().trim().max(100).nullable().optional(),
 });
 
 export async function PUT(req: NextRequest) {
@@ -141,6 +142,7 @@ export async function PUT(req: NextRequest) {
         ...(data.locale !== undefined && { locale: data.locale }),
         ...(data.defaultLandingPage !== undefined && { defaultLandingPage: data.defaultLandingPage }),
         ...(data.density !== undefined && { density: data.density }),
+        ...(data.status !== undefined && { status: data.status || null }),
         ...(passwordHash && { passwordHash }),
         ...(pinHash && { pinHash }),
       },
@@ -158,6 +160,7 @@ export async function PUT(req: NextRequest) {
         locale: true,
         defaultLandingPage: true,
         density: true,
+        status: true,
       },
     });
   } catch (err) {

@@ -158,6 +158,12 @@ model User {
   // rule as designation/birthday.
   dateOfJoining         DateTime?   @db.Date
   avatarDataUrl         String?     @db.LongText
+  // A short free-text status the user sets for themselves (e.g. "Hitting
+  // Targets!"), shown next to their name in the account menu — purely
+  // self-service, unlike designation/birthday/dateOfJoining above: no
+  // "once set, admin-only" rule, since there's nothing to protect against
+  // a wrong entry here the way there is for those.
+  status                String?     @db.VarChar(100)
   role                  Role        @default(DEPARTMENT_USER)
   departmentId          String?
   department            Department? @relation(fields: [departmentId], references: [id])

@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { IconBuildingCog, IconLogOut, IconSettings, IconUser } from "@/components/icons";
+import { IconBuildingCog, IconLogOut, IconPencil, IconSettings, IconTrash, IconUser } from "@/components/icons";
 import { SettingsDialog } from "@/components/layout/settings-dialog";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { cn } from "@/lib/utils";
+
+const MAX_STATUS_LENGTH = 100;
 
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -34,8 +36,13 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
   const [isDepartmentAdmin, setIsDepartmentAdmin] = useState(false);
   const [departmentName, setDepartmentName] = useState<string | null>(null);
   const [designation, setDesignation] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [statusEditing, setStatusEditing] = useState(false);
+  const [statusDraft, setStatusDraft] = useState("");
+  const [savingStatus, setSavingStatus] = useState(false);
+  const statusInputRef = useRef<HTMLInputElement>(null);
 
-  // Load the current user's avatar + role/department/designation for the menu.
+  // Load the current user's avatar + role/department/designation/status for the menu.
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
@@ -45,9 +52,14 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
         setIsDepartmentAdmin(!!d.user?.isDepartmentAdmin);
         setDepartmentName(d.user?.department?.name ?? null);
         setDesignation(d.user?.designation ?? null);
+        setStatus(d.user?.status ?? null);
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (statusEditing) statusInputRef.current?.select();
+  }, [statusEditing]);
 
   async function onLogout() {
     try {
@@ -72,8 +84,38 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
         setIsDepartmentAdmin(!!d.user?.isDepartmentAdmin);
         setDepartmentName(d.user?.department?.name ?? null);
         setDesignation(d.user?.designation ?? null);
+        setStatus(d.user?.status ?? null);
       })
       .catch(() => {});
+  }
+
+  function startEditingStatus() {
+    setStatusDraft(status ?? "");
+    setStatusEditing(true);
+  }
+
+  async function saveStatus(value: string | null) {
+    const trimmed = value?.trim() || null;
+    if (trimmed === status) {
+      setStatusEditing(false);
+      return;
+    }
+    setSavingStatus(true);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: trimmed }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't update status", d.error);
+      setStatus(trimmed);
+      setStatusEditing(false);
+    } catch {
+      toast.error("Couldn't update status", "Check your connection and try again.");
+    } finally {
+      setSavingStatus(false);
+    }
   }
 
   return (
@@ -141,6 +183,65 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
                 )}
               </div>
             )}
+            <div className="px-3.5 pb-3.5">
+              {statusEditing ? (
+                <input
+                  ref={statusInputRef}
+                  value={statusDraft}
+                  onChange={(e) => setStatusDraft(e.target.value)}
+                  onBlur={() => saveStatus(statusDraft)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      saveStatus(statusDraft);
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      setStatusEditing(false);
+                    }
+                  }}
+                  disabled={savingStatus}
+                  maxLength={MAX_STATUS_LENGTH}
+                  placeholder="Set a status…"
+                  autoFocus
+                  className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                />
+              ) : status ? (
+                <div className="group/status flex items-center gap-1 rounded-md px-0.5">
+                  <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{status}</p>
+                  <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/status:opacity-100">
+                    <Tooltip label="Edit status" side="bottom">
+                      <button
+                        type="button"
+                        aria-label="Edit status"
+                        onClick={startEditingStatus}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/10 hover:text-foreground"
+                      >
+                        <IconPencil className="h-3.5 w-3.5" />
+                      </button>
+                    </Tooltip>
+                    <Tooltip label="Remove status" side="bottom">
+                      <button
+                        type="button"
+                        aria-label="Remove status"
+                        onClick={() => saveStatus(null)}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <IconTrash className="h-3.5 w-3.5" />
+                      </button>
+                    </Tooltip>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startEditingStatus}
+                  className="text-xs text-muted-foreground outline-none hover:text-foreground hover:underline"
+                >
+                  + Set a status
+                </button>
+              )}
+            </div>
             <DropdownMenu.Separator className="h-px bg-border" />
             <div className="p-1.5">
               <DropdownMenu.Item
