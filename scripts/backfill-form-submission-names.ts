@@ -2,6 +2,7 @@ import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { buildPoolConfig } from "../src/lib/mysql-pool-config";
+import { detectSubmitterName } from "../src/lib/form-fields";
 
 /**
  * One-off migration: form_submitted notifications used to store only
@@ -11,16 +12,13 @@ import { buildPoolConfig } from "../src/lib/mysql-pool-config";
  * store {formTitle, submitterName} (see src/app/api/forms/by-slug/[slug]/
  * submit/route.ts), so this backfills the same two fields onto every
  * existing form_submitted notification by re-deriving them from the
- * submission's own stored answers — same "first field whose label reads as
- * a name, else the first short-text/email/phone answer" logic the live
- * route uses.
+ * submission's own stored answers, via the same detectSubmitterName() the
+ * live route uses.
  *
  * Idempotent and safe to leave in the build chain: only a notification
  * whose payload doesn't already have a formTitle key is touched, so
  * re-running this only ever acts on one that's never been backfilled.
  */
-
-const NAME_FIELD_TYPES = new Set(["SHORT_TEXT", "EMAIL", "PHONE"]);
 
 async function main() {
   const adapter = new PrismaMariaDb(buildPoolConfig(process.env.DATABASE_URL!));
@@ -77,10 +75,7 @@ async function main() {
     }
 
     const answerByField = new Map(submission.answers.map((a) => [a.fieldId, a.value]));
-    const nameField =
-      submission.form.fields.find((f) => NAME_FIELD_TYPES.has(f.type) && /name/i.test(f.label) && answerByField.get(f.id)) ??
-      submission.form.fields.find((f) => NAME_FIELD_TYPES.has(f.type) && answerByField.get(f.id));
-    const submitterName = nameField ? (answerByField.get(nameField.id) ?? null) : null;
+    const submitterName = detectSubmitterName(submission.form.fields, (id) => answerByField.get(id));
 
     for (const n of group) {
       const payload = n.payload as Record<string, unknown>;

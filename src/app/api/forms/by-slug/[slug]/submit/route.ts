@@ -10,7 +10,8 @@ import {
 import { notifyAndPush } from "@/lib/notify";
 import { requestDevice } from "@/lib/request-info";
 import { rateLimit } from "@/lib/rate-limit";
-import { isFieldVisible, parseFieldOptions, validateFieldValue } from "@/lib/form-fields";
+import { detectSubmitterName, isFieldVisible, parseFieldOptions, validateFieldValue } from "@/lib/form-fields";
+import { formManagerIds } from "@/lib/form-notify";
 
 interface PickedFile {
   fileName: string;
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   const form = await db.form.findUnique({
     where: { slug },
-    include: { fields: { orderBy: { order: "asc" } }, viewerDepartments: { select: { departmentId: true } } },
+    include: { fields: { orderBy: { order: "asc" } } },
   });
   if (!form || !form.isActive || form.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -127,23 +128,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     select: { id: true },
   });
 
-  // Best-effort "who filled this in" for the notification — the first field
-  // whose label reads as a name (full/first/your name, etc.), falling back to
-  // the first short-text-ish answer given (email/phone included) so most
-  // submissions still get a real name instead of staying anonymous.
-  const nameFieldOrder = ["SHORT_TEXT", "EMAIL", "PHONE"];
-  const nameField =
-    form.fields.find((f) => nameFieldOrder.includes(f.type) && /name/i.test(f.label) && resolvedAnswers[f.id]) ??
-    form.fields.find((f) => nameFieldOrder.includes(f.type) && resolvedAnswers[f.id]);
-  const submitterName = nameField ? resolvedAnswers[nameField.id] : null;
+  const submitterName = detectSubmitterName(form.fields, (id) => resolvedAnswers[id]);
 
   // Tell whoever can see this form's submissions — its creator, plus anyone
   // in a department it was shared with — that a fresh one's waiting.
-  const departmentIds = form.viewerDepartments.map((v) => v.departmentId);
-  const viewers = departmentIds.length
-    ? await db.user.findMany({ where: { isActive: true, departmentId: { in: departmentIds } }, select: { id: true } })
-    : [];
-  const recipientIds = new Set([form.createdById, ...viewers.map((v) => v.id)]);
+  const recipientIds = await formManagerIds(form);
   const pushBody = submitterName ? `${submitterName} just submitted a response to "${form.title}"` : `${form.title} just received a new response`;
   await Promise.all(
     Array.from(recipientIds).map((userId) =>

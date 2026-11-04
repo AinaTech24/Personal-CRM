@@ -16,6 +16,7 @@ import {
   IconBuildingCog,
   IconWallet,
 } from "@/components/icons";
+import { NOTIFICATION_CATEGORIES, TYPE_TO_CATEGORY } from "@/lib/notification-categories";
 
 export interface NotificationLike {
   type: string;
@@ -66,62 +67,13 @@ export const NOTIFICATION_ICON: Record<string, React.ComponentType<{ className?:
   consulting_update: IconBuildingCog,
 };
 
-/** The Settings > Notifications category each type is toggled under — mirrors src/lib/notify.ts's TYPE_TO_CATEGORY, duplicated here because that file imports db.ts and can't be used client-side. Used for the full notifications page's category filter. */
-export const NOTIFICATION_CATEGORY: Record<string, string> = {
-  lead_assigned: "leads",
-  lead_reminder: "leads",
-  task_assigned: "tasks",
-  task_comment: "tasks",
-  task_attachment_added: "tasks",
-  task_reminder: "tasks",
-  project_assigned: "projects",
-  project_member_added: "projects",
-  project_supporter_added: "projects",
-  project_task_assigned: "projects",
-  project_document_added: "projects",
-  quotation_decided: "quotations",
-  quotation_submitted: "quotations",
-  meeting_invited: "meetings",
-  meeting_reminder: "meetings",
-  check_in_reminder: "attendance",
-  check_out_reminder: "attendance",
-  lunch_break_reminder: "attendance",
-  social_client_assigned: "social",
-  call_assigned: "calls",
-  leave_requested: "attendance",
-  leave_decided: "attendance",
-  expense_requested: "expenses",
-  expense_decided: "expenses",
-  expense_paid: "expenses",
-  form_submitted: "forms",
-  form_created: "forms",
-  form_edited: "forms",
-  invoice_overdue: "billing",
-  password_rotation_due: "passwords",
-  password_entry_shared: "passwords",
-  password_entry_revoked: "passwords",
-  birthday_gift_due: "birthdays",
-  birthday_today: "birthdays",
-  consulting_update: "consulting",
-};
+/** The Settings > Notifications category each type is toggled under. Used for the full notifications page's category filter. */
+export const NOTIFICATION_CATEGORY: Record<string, string> = TYPE_TO_CATEGORY;
 
-/** Mirrors notify.ts's NOTIFICATION_CATEGORIES labels — duplicated for the same client-safety reason as NOTIFICATION_CATEGORY above. */
-export const NOTIFICATION_CATEGORY_LABEL: Record<string, string> = {
-  leads: "Leads",
-  tasks: "Tasks",
-  projects: "Projects",
-  meetings: "Meetings",
-  quotations: "Quotations",
-  attendance: "Attendance",
-  social: "Social Media",
-  calls: "Calls",
-  expenses: "Expenses",
-  forms: "Forms",
-  billing: "Billing",
-  passwords: "Passwords",
-  birthdays: "Birthdays",
-  consulting: "Command Centre",
-};
+/** Category value -> display label, derived from the same list notify.ts's Settings UI is built from. */
+export const NOTIFICATION_CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
+  NOTIFICATION_CATEGORIES.map((c) => [c.value, c.label])
+);
 
 export function notificationMessage(n: NotificationLike): string {
   const actor = typeof n.payload.actorName === "string" && n.payload.actorName ? n.payload.actorName : "Someone";

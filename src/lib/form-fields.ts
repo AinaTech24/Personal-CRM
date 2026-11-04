@@ -205,6 +205,33 @@ export function validateFieldValue(field: FieldValidationRules, value: string): 
   return null;
 }
 
+/** The subset of a FormField's columns name-detection needs. */
+export interface NameDetectionField {
+  id: string;
+  type: FormFieldType;
+  label: string;
+}
+
+const NAME_DETECTION_TYPES = new Set<FormFieldType>(["SHORT_TEXT", "EMAIL", "PHONE"]);
+
+/**
+ * Best-effort "who filled this in": the first field whose label reads as a
+ * name (full/first/your name, etc.), falling back to the first short-text-ish
+ * answer given (email/phone included) so most submissions still get a real
+ * name instead of staying anonymous. Shared by the live submit route and the
+ * historical-notification backfill script, which both derive this from a
+ * form's fields plus a submission's answers.
+ */
+export function detectSubmitterName<T extends NameDetectionField>(
+  fields: T[],
+  getAnswer: (fieldId: string) => string | null | undefined
+): string | null {
+  const nameField =
+    fields.find((f) => NAME_DETECTION_TYPES.has(f.type) && /name/i.test(f.label) && getAnswer(f.id)) ??
+    fields.find((f) => NAME_DETECTION_TYPES.has(f.type) && getAnswer(f.id));
+  return nameField ? (getAnswer(nameField.id) ?? null) : null;
+}
+
 export const CONDITION_OPERATORS = [
   { value: "equals", label: "is" },
   { value: "not_equals", label: "is not" },
