@@ -151,6 +151,44 @@ export function pinResetByAdminEmailHtml(opts: { name: string; adminName: string
   `;
 }
 
+/** Short "Browser on OS" label from a raw user-agent string — a trimmed-down version of the one the Settings UI uses client-side, since this runs server-side in the mailer. */
+function deviceLabel(userAgent: string | null): string {
+  if (!userAgent) return "an unknown device";
+  const browser = /Edg\//.test(userAgent)
+    ? "Edge"
+    : /Chrome\//.test(userAgent)
+      ? "Chrome"
+      : /Firefox\//.test(userAgent)
+        ? "Firefox"
+        : /Safari\//.test(userAgent)
+          ? "Safari"
+          : "a browser";
+  const os = /Windows/.test(userAgent)
+    ? "Windows"
+    : /Mac OS X/.test(userAgent)
+      ? "macOS"
+      : /Android/.test(userAgent)
+        ? "Android"
+        : /iPhone|iPad/.test(userAgent)
+          ? "iOS"
+          : /Linux/.test(userAgent)
+            ? "Linux"
+            : "";
+  return os ? `${browser} on ${os}` : browser;
+}
+
+export function newSignInEmailHtml(opts: { name: string; userAgent: string | null; ip: string | null }) {
+  const when = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>New sign-in to your Aina CRM account</h2>
+      <p>Hi ${opts.name}, your account was just signed in to from ${deviceLabel(opts.userAgent)}${opts.ip ? ` (${opts.ip})` : ""} at ${when} IST.</p>
+      <p>If this was you, no action is needed. If it wasn't, change your password right away and review your active sessions under Settings &gt; Security.</p>
+      <p style="color:#888;font-size:12px;">Turn these alerts off anytime under Settings &gt; Security &gt; "Email me on a new sign-in".</p>
+    </div>
+  `;
+}
+
 export function inviteEmailHtml(opts: { inviterName: string; acceptUrl: string }) {
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">

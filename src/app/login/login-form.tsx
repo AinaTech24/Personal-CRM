@@ -32,6 +32,8 @@ export function LoginForm() {
 type Mode =
   | "login"
   | "login-pin"
+  | "login-passkey"
+  | "mfa"
   | "forgot-email"
   | "forgot-code"
   | "forgot-pin-mobile"
@@ -40,6 +42,8 @@ type Mode =
 const CARD_COPY: Record<Mode, string> = {
   login: "Sign in with your @ainatech.in account",
   "login-pin": "Sign in with your mobile number and PIN",
+  "login-passkey": "Sign in with a passkey saved on this device",
+  mfa: "Enter the code from your authenticator app",
   "forgot-email": "Enter your account email to receive a sign-in code",
   "forgot-code": "Enter the code we emailed you",
   "forgot-pin-mobile": "Enter your mobile number to receive a reset code",
@@ -61,11 +65,17 @@ function LoginFormInner() {
   const [showPin, setShowPin] = useState(false);
   const [pinResetCode, setPinResetCode] = useState("");
   const [newPin, setNewPin] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaUseBackupCode, setMfaUseBackupCode] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const method: "password" | "pin" =
-    mode === "login-pin" || mode === "forgot-pin-mobile" || mode === "forgot-pin-code" ? "pin" : "password";
+  const method: "password" | "pin" | "passkey" =
+    mode === "login-pin" || mode === "forgot-pin-mobile" || mode === "forgot-pin-code"
+      ? "pin"
+      : mode === "login-passkey"
+        ? "passkey"
+        : "password";
 
   function goNext(welcomeName: string) {
     // The toast outlives the navigation: ToastProvider sits above the router in
@@ -90,6 +100,10 @@ function LoginFormInner() {
         toast.error("Couldn't sign in", data.error ?? "Something went wrong. Please try again.");
         return;
       }
+      if (data.mfaRequired) {
+        switchMode("mfa");
+        return;
+      }
       goNext(email);
     } catch {
       toast.error("Couldn't sign in", "Check your connection and try again.");
@@ -110,6 +124,10 @@ function LoginFormInner() {
       const data = await safeJson(res);
       if (!res.ok) {
         toast.error("Couldn't sign in", data.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+      if (data.mfaRequired) {
+        switchMode("mfa");
         return;
       }
       goNext(mobile);
@@ -157,6 +175,10 @@ function LoginFormInner() {
       const data = await safeJson(res);
       if (!res.ok) {
         toast.error("Couldn't verify code", data.error ?? "Invalid code");
+        return;
+      }
+      if (data.mfaRequired) {
+        switchMode("mfa");
         return;
       }
       goNext(email);
@@ -220,6 +242,69 @@ function LoginFormInner() {
     }
   }
 
+  async function onPasskeyLogin() {
+    setLoading(true);
+    try {
+      const optionsRes = await fetch("/api/auth/passkey/login-options", { method: "POST" });
+      const optionsData = await safeJson(optionsRes);
+      if (!optionsRes.ok) {
+        toast.error("Couldn't start passkey sign-in", optionsData.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+
+      const { startAuthentication } = await import("@simplewebauthn/browser");
+      let authResponse;
+      try {
+        authResponse = await startAuthentication({
+          optionsJSON: optionsData.options as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+        });
+      } catch {
+        // User cancelled the browser's passkey prompt — not a real error.
+        return;
+      }
+
+      const verifyRes = await fetch("/api/auth/passkey/login-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response: authResponse }),
+      });
+      const verifyData = await safeJson(verifyRes);
+      if (!verifyRes.ok) {
+        toast.error("Couldn't sign in", verifyData.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+      const signedInUser = verifyData.user as { name?: string; email?: string } | undefined;
+      goNext(signedInUser?.name ?? signedInUser?.email ?? "there");
+    } catch {
+      toast.error("Couldn't sign in", "Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onVerifyMfa(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/verify-2fa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: mfaCode }),
+      });
+      const data = await safeJson(res);
+      if (!res.ok) {
+        toast.error("Couldn't verify code", data.error ?? "Incorrect code");
+        return;
+      }
+      const signedInUser = data.user as { name?: string; email?: string } | undefined;
+      goNext(signedInUser?.name ?? signedInUser?.email ?? "there");
+    } catch {
+      toast.error("Couldn't verify code", "Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function switchMode(next: Mode) {
     setMode(next);
     setInfo(null);
@@ -228,6 +313,8 @@ function LoginFormInner() {
     setPin("");
     setPinResetCode("");
     setNewPin("");
+    setMfaCode("");
+    setMfaUseBackupCode(false);
   }
 
   return (
@@ -244,8 +331,8 @@ function LoginFormInner() {
             <CardDescription>{CARD_COPY[mode]}</CardDescription>
           </CardHeader>
           <CardContent>
-            {(mode === "login" || mode === "login-pin") && (
-              <div className="mb-4 grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
+            {(mode === "login" || mode === "login-pin" || mode === "login-passkey") && (
+              <div className="mb-4 grid grid-cols-3 gap-1 rounded-md bg-muted p-1">
                 <button
                   type="button"
                   onClick={() => switchMode("login")}
@@ -265,6 +352,16 @@ function LoginFormInner() {
                   )}
                 >
                   Mobile &amp; PIN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchMode("login-passkey")}
+                  className={cn(
+                    "rounded-sm py-1.5 text-sm font-medium transition-colors",
+                    method === "passkey" ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Passkey
                 </button>
               </div>
             )}
@@ -371,6 +468,52 @@ function LoginFormInner() {
                 <Button type="submit" disabled={loading} className="mt-2">
                   {loading ? "Signing in..." : "Sign in"}
                 </Button>
+              </form>
+            )}
+
+            {mode === "login-passkey" && (
+              <div className="flex flex-col gap-4">
+                <p className="text-center text-sm text-muted-foreground">
+                  Use the fingerprint, face, or screen unlock already set up on this device.
+                </p>
+                <Button type="button" onClick={onPasskeyLogin} disabled={loading} className="mt-2">
+                  {loading ? "Waiting for passkey..." : "Continue with a passkey"}
+                </Button>
+              </div>
+            )}
+
+            {mode === "mfa" && (
+              <form onSubmit={onVerifyMfa} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="mfa-code">{mfaUseBackupCode ? "Backup code" : "Authenticator code"}</Label>
+                  <Input
+                    id="mfa-code"
+                    inputMode={mfaUseBackupCode ? "text" : "numeric"}
+                    autoComplete="one-time-code"
+                    placeholder={mfaUseBackupCode ? "XXXX-XXXX" : "123456"}
+                    maxLength={mfaUseBackupCode ? 9 : 6}
+                    className="text-center text-lg tracking-[0.3em]"
+                    value={mfaCode}
+                    onChange={(e) =>
+                      setMfaCode(mfaUseBackupCode ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, ""))
+                    }
+                    required
+                    autoFocus
+                  />
+                </div>
+                <Button type="submit" disabled={loading} className="mt-2">
+                  {loading ? "Verifying..." : "Verify & sign in"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMfaUseBackupCode((v) => !v);
+                    setMfaCode("");
+                  }}
+                  className="text-center text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {mfaUseBackupCode ? "Use authenticator code instead" : "Use a backup code instead"}
+                </button>
               </form>
             )}
 

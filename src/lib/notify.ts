@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { emitToUser } from "@/lib/socket-emit";
 import { sendPushToUsers, type PushPayload } from "@/lib/push";
 import { NOTIFICATION_CATEGORIES, TYPE_TO_CATEGORY, type NotificationCategory } from "@/lib/notification-categories";
+import { istMinutesOfDay, withinWindow } from "@/lib/attendance";
 
 // Re-exported so existing call sites (e.g. the notification-preferences
 // route) can keep importing these from here — the category data itself now
@@ -41,6 +42,18 @@ export async function notifyUser(userId: string, type: string, payload: InputJso
 }
 
 /**
+ * Is `userId` inside their own configured quiet-hours window right now (IST)?
+ * Both `quietHoursStart`/`quietHoursEnd` null (the default — quiet hours
+ * never set up) always returns false; withinWindow itself already handles a
+ * window that wraps past midnight (e.g. 22:00–07:00).
+ */
+async function isInQuietHours(userId: string): Promise<boolean> {
+  const user = await db.user.findUnique({ where: { id: userId }, select: { quietHoursStart: true, quietHoursEnd: true } });
+  if (!user?.quietHoursStart || !user.quietHoursEnd) return false;
+  return withinWindow(istMinutesOfDay(), user.quietHoursStart, user.quietHoursEnd);
+}
+
+/**
  * notifyUser, plus a real OS-level push if it actually created one — so a
  * closed app or backgrounded tab still hears about it, not just an in-app
  * toast/bell. Skipped automatically when notifyUser itself returns null
@@ -51,12 +64,18 @@ export async function notifyUser(userId: string, type: string, payload: InputJso
  * fans the exact same content out to several recipients (a meeting's
  * attendees) with nothing per-recipient in it, where every other call site
  * here is a single targeted "you" notification.
+ *
+ * Quiet hours only withhold the push — the in-app Notification row and
+ * socket emit from notifyUser above still land unconditionally, so nothing
+ * is actually missed, it just won't buzz the device during that window.
  */
 export async function notifyAndPush(userId: string, type: string, payload: InputJsonObject, push: PushPayload) {
   const notification = await notifyUser(userId, type, payload);
   if (notification) {
     try {
-      await sendPushToUsers([userId], push);
+      if (!(await isInQuietHours(userId))) {
+        await sendPushToUsers([userId], push);
+      }
     } catch (err) {
       console.error(`[notify] Failed to push to user ${userId} of ${type}:`, err);
     }

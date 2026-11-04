@@ -151,6 +151,8 @@ export function FilterMenu({ facets, className }: { facets: FilterFacet[]; class
                   <button
                     type="button"
                     onClick={() => setExpanded((k) => (k === facet.key ? null : facet.key))}
+                    aria-expanded={isOpen}
+                    aria-controls={`filter-facet-${facet.key}`}
                     className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-2 text-left text-sm hover:bg-primary/5"
                   >
                     <span className="min-w-0">
@@ -179,10 +181,15 @@ export function FilterMenu({ facets, className }: { facets: FilterFacet[]; class
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.2, ease: EASE }}
                         className="overflow-hidden"
+                        id={`filter-facet-${facet.key}`}
+                        role="listbox"
+                        aria-multiselectable={facet.multiple}
                       >
                         <div className="pb-1">
                           <button
                             type="button"
+                            role="option"
+                            aria-selected={noneSelected}
                             onClick={() => {
                               facet.onChange(facet.multiple ? [] : null);
                               if (!facet.multiple) setExpanded(null);
@@ -201,6 +208,8 @@ export function FilterMenu({ facets, className }: { facets: FilterFacet[]; class
                               <button
                                 key={opt.value}
                                 type="button"
+                                role="option"
+                                aria-selected={isChecked}
                                 onClick={() => {
                                   if (facet.multiple) {
                                     facet.onChange(

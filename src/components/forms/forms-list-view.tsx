@@ -16,7 +16,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { copyTextFromAsync } from "@/lib/clipboard";
-import { IconBuilding, IconCode, IconCopy, IconEye, IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
+import { IconBuilding, IconCode, IconCopy, IconEye, IconFile, IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
 
 interface FormRow {
   id: string;
@@ -110,17 +110,54 @@ export function FormsListView() {
   // Uses the form's current slug as-is — unlike copyLink, this never rotates
   // it. An embed is pasted once into someone else's site and left there;
   // rotating the slug on every copy would break every page it's already on.
-  async function copyEmbedCode(row: FormRow) {
+  function embedSrcAndTitle(row: FormRow) {
     const src = `${window.location.origin}/f/${row.slug}?embedded=true`;
     // Escaped beyond just the attribute quote — a title containing "<" or ">" could
     // otherwise close the attribute/tag early and inject markup into whatever page this gets pasted onto.
     const safeTitle = row.title.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return { src, safeTitle };
+  }
+
+  async function copyIframeCode(row: FormRow) {
+    const { src, safeTitle } = embedSrcAndTitle(row);
     const snippet = `<iframe src="${src}" style="width:100%;max-width:640px;height:800px;border:0" title="${safeTitle}"></iframe>`;
     try {
       await navigator.clipboard.writeText(snippet);
-      toast.success("Embed code copied", "Paste it into any page's HTML.");
+      toast.success("Iframe code copied", "Paste it into any page's HTML.");
     } catch {
-      toast.error("Couldn't copy the embed code");
+      toast.error("Couldn't copy the iframe code");
+    }
+  }
+
+  // A complete, valid document (not just the bare <iframe> tag) for anyone
+  // who wants the form as its own standalone page rather than a snippet
+  // pasted into an existing one — e.g. saved straight to an .html file.
+  async function copyEmbedHtmlPage(row: FormRow) {
+    const { src, safeTitle } = embedSrcAndTitle(row);
+    const page = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${safeTitle}</title>
+  <style>
+    html, body { margin: 0; padding: 0; }
+    .form-embed { display: flex; justify-content: center; padding: 24px; }
+    .form-embed iframe { width: 100%; max-width: 640px; height: 800px; border: 0; }
+  </style>
+</head>
+<body>
+  <div class="form-embed">
+    <iframe src="${src}" title="${safeTitle}"></iframe>
+  </div>
+</body>
+</html>
+`;
+    try {
+      await navigator.clipboard.writeText(page);
+      toast.success("HTML page copied", "A complete page you can save as its own .html file.");
+    } catch {
+      toast.error("Couldn't copy the HTML page");
     }
   }
 
@@ -285,10 +322,16 @@ export function FormsListView() {
                                   onSelect: () => copyLink(r),
                                 },
                                 {
-                                  key: "copy-embed",
-                                  label: "Embed code",
+                                  key: "copy-iframe",
+                                  label: "Copy iframe code",
                                   icon: <IconCode className="h-4 w-4" />,
-                                  onSelect: () => copyEmbedCode(r),
+                                  onSelect: () => copyIframeCode(r),
+                                },
+                                {
+                                  key: "copy-embed-html",
+                                  label: "Copy full HTML page",
+                                  icon: <IconFile className="h-4 w-4" />,
+                                  onSelect: () => copyEmbedHtmlPage(r),
                                 },
                                 {
                                   key: "duplicate",

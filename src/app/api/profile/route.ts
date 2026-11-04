@@ -4,13 +4,9 @@ import { db } from "@/lib/db";
 import { getCurrentUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { isValidMobile, isValidPin, normalizeMobile } from "@/lib/credentials";
 import { isAdmin } from "@/lib/permissions";
+import { LANDING_PAGE_HREFS } from "@/lib/modules";
 
 const MAX_AVATAR = 1_500_000;
-
-/** The dashboard feeds this straight into redirect(), so it must be an allowlist:
-    an arbitrary string would let "/" loop forever and an absolute URL would be an
-    open redirect off-site. null means "the Dashboard", the default. */
-const LANDING_PAGES = ["/leads", "/tasks", "/projects", "/quotations", "/invoices"] as const;
 
 const bodySchema = z.object({
   name: z.string().min(1).max(120).optional(),
@@ -45,9 +41,31 @@ const bodySchema = z.object({
     }, "Enter a valid date of joining")
     .optional(),
   locale: z.string().max(10).optional(),
-  defaultLandingPage: z.enum(LANDING_PAGES).nullable().optional(),
+  // The dashboard feeds this straight into redirect(), so it must be an
+  // allowlist: an arbitrary string would let "/" loop forever and an
+  // absolute URL would be an open redirect off-site. null means "the
+  // Dashboard", the default. LANDING_PAGE_HREFS (modules.ts) is the full
+  // universe of hrefs the picker can ever offer, not scoped to what this
+  // particular user currently has access to — the picker in Settings
+  // already does that narrowing (see /api/auth/me), so this only needs to
+  // reject a value that was never a real choice to begin with.
+  defaultLandingPage: z.enum(LANDING_PAGE_HREFS as [string, ...string[]]).nullable().optional(),
   density: z.enum(["comfortable", "compact"]).optional(),
   status: z.string().trim().max(100).nullable().optional(),
+  notifyOnNewSignIn: z.boolean().optional(),
+  // "HH:mm", 24-hour — same shape src/lib/attendance.ts's hhmmToMinutes parses.
+  // Both null together means "no quiet hours"; one-without-the-other is
+  // rejected since the gate check (isInQuietHours in notify.ts) needs both.
+  quietHoursStart: z
+    .string()
+    .regex(/^([01]?\d|2[0-3]):[0-5]\d$/, "Use 24-hour HH:mm")
+    .nullable()
+    .optional(),
+  quietHoursEnd: z
+    .string()
+    .regex(/^([01]?\d|2[0-3]):[0-5]\d$/, "Use 24-hour HH:mm")
+    .nullable()
+    .optional(),
 });
 
 export async function PUT(req: NextRequest) {
@@ -57,6 +75,10 @@ export async function PUT(req: NextRequest) {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const data = parsed.data;
+
+  if ((data.quietHoursStart !== undefined || data.quietHoursEnd !== undefined) && !!data.quietHoursStart !== !!data.quietHoursEnd) {
+    return NextResponse.json({ error: "Set both a start and an end time, or clear both" }, { status: 400 });
+  }
 
   // A birthday can be set once, self-service — changing (or clearing) it
   // afterward needs an admin (see PATCH /api/users/[id]), so a wrong entry
@@ -143,6 +165,9 @@ export async function PUT(req: NextRequest) {
         ...(data.defaultLandingPage !== undefined && { defaultLandingPage: data.defaultLandingPage }),
         ...(data.density !== undefined && { density: data.density }),
         ...(data.status !== undefined && { status: data.status || null }),
+        ...(data.notifyOnNewSignIn !== undefined && { notifyOnNewSignIn: data.notifyOnNewSignIn }),
+        ...(data.quietHoursStart !== undefined && { quietHoursStart: data.quietHoursStart }),
+        ...(data.quietHoursEnd !== undefined && { quietHoursEnd: data.quietHoursEnd }),
         ...(passwordHash && { passwordHash }),
         ...(pinHash && { pinHash }),
       },
@@ -161,6 +186,9 @@ export async function PUT(req: NextRequest) {
         defaultLandingPage: true,
         density: true,
         status: true,
+        notifyOnNewSignIn: true,
+        quietHoursStart: true,
+        quietHoursEnd: true,
       },
     });
   } catch (err) {

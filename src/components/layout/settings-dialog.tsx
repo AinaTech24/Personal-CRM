@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { RegistrationResponseJSON } from "@simplewebauthn/browser";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -19,13 +20,22 @@ import { ThemeOptionRow } from "@/components/layout/theme-toggle";
 import { birthYearRange } from "@/lib/birthdays";
 import {
   IconBell,
+  IconBuilding,
   IconBuildingCog,
+  IconCalendar,
   IconChevronDown,
+  IconExternalLink,
+  IconListView,
+  IconMail,
   IconPower,
+  IconSettings,
   IconShield,
   IconSliders,
   IconTrash,
   IconUser,
+  IconUserPlus,
+  IconUsers,
+  IconWallet,
   IconX,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -42,7 +52,8 @@ const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
   DEPARTMENT_USER: "Department User",
 };
-function roleLabel(role: string) {
+function roleLabel(role: string, isDepartmentAdmin?: boolean) {
+  if (role === "DEPARTMENT_USER" && isDepartmentAdmin) return "Department Admin";
   return ROLE_LABEL[role] ?? role;
 }
 
@@ -51,14 +62,8 @@ const DENSITY_OPTIONS = [
   { value: "compact", label: "Compact" },
 ];
 
-const LANDING_PAGE_OPTIONS = [
-  { value: "", label: "Dashboard" },
-  { value: "/leads", label: "Leads" },
-  { value: "/tasks", label: "Tasks" },
-  { value: "/projects", label: "Projects" },
-  { value: "/quotations", label: "Quotations" },
-  { value: "/invoices", label: "Invoices" },
-];
+/** Fallback shown only until /api/auth/me's user-specific landingPageOptions loads. */
+const DEFAULT_LANDING_PAGE_OPTIONS = [{ value: "", label: "Dashboard" }];
 
 function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -155,7 +160,7 @@ function PushToggle() {
 }
 
 /** Small reusable toggle switch, matching the one used on the SMTP settings page. */
-type SectionId = "profile" | "preferences" | "notifications" | "security" | "company";
+type SectionId = "profile" | "preferences" | "notifications" | "security" | "company" | "department";
 
 interface NavItem {
   id: SectionId;
@@ -171,7 +176,85 @@ const PERSONAL_ITEMS: NavItem[] = [
   { id: "security", label: "Security", icon: IconShield },
 ];
 
-const WORKSPACE_ITEMS: NavItem[] = [{ id: "company", label: "Company profile", icon: IconBuildingCog, adminOnly: true }];
+// "Workspace" is Company Admin/Super Admin only — company-wide config plus
+// shortcuts into the full admin pages (Users, Permissions, etc.), which live
+// as their own pages rather than being rebuilt inside this dialog.
+const WORKSPACE_ITEMS: NavItem[] = [{ id: "company", label: "Workspace", icon: IconBuildingCog, adminOnly: true }];
+
+// A Department Admin isn't a company Admin (isAdmin is false for them), but
+// isn't a plain Department User either — they get their own lightweight
+// Workspace tier instead of being treated as either extreme.
+const DEPARTMENT_ITEMS: NavItem[] = [{ id: "department", label: "Department", icon: IconUsers }];
+
+interface WorkspaceLink {
+  label: string;
+  description: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const ADMIN_LINKS: WorkspaceLink[] = [
+  { label: "Users & Invites", description: "Add, deactivate, or invite teammates", href: "/admin/users", icon: IconUserPlus },
+  { label: "Permission Manager", description: "Grant module access per person", href: "/admin/permissions", icon: IconShield },
+  { label: "Departments", description: "Create, rename, or remove departments", href: "/admin/departments", icon: IconBuilding },
+  { label: "Email settings", description: "SMTP used for sign-in codes and invites", href: "/admin/email", icon: IconMail },
+  { label: "App settings", description: "App URL and which modules are visible", href: "/admin/settings", icon: IconSettings },
+  { label: "System logs", description: "Audit trail of admin actions", href: "/admin/logs", icon: IconListView },
+];
+
+// Shown to every Department Admin regardless of grants — the destination
+// pages already scope to the caller's own department and 403/empty-state on
+// their own if a company Admin hasn't actually granted that module.
+const DEPARTMENT_LINKS: WorkspaceLink[] = [
+  { label: "Permission Manager", description: "Grant module access to your department", href: "/admin/permissions", icon: IconShield },
+  { label: "Leave approvals", description: "Review your department's leave requests", href: "/admin/leave", icon: IconCalendar },
+  { label: "Expense approvals", description: "Review your department's expense claims", href: "/admin/expenses", icon: IconWallet },
+];
+
+/** A grid of shortcut tiles into full admin pages — this dialog stays for quick personal/workspace settings, not a rebuild of those pages. */
+function WorkspaceLinkGrid({ links, onNavigate }: { links: WorkspaceLink[]; onNavigate: (href: string) => void }) {
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      {links.map((l) => (
+        <button
+          key={l.href}
+          type="button"
+          onClick={() => onNavigate(l.href)}
+          className="flex items-start gap-2.5 rounded-md border border-border p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+        >
+          <l.icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <p className="flex items-center gap-1 text-sm font-medium">
+              {l.label}
+              <IconExternalLink className="h-3 w-3 text-muted-foreground" />
+            </p>
+            <p className="text-xs text-muted-foreground">{l.description}</p>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Buckets the flat Settings-category list into a few readable sections instead of one long uniform stack of 14 toggle rows. A category not covered by any bucket below still shows up, under "Other", instead of silently vanishing. */
+const NOTIF_PREF_GROUPS: { title: string; categories: string[] }[] = [
+  { title: "Work", categories: ["leads", "tasks", "projects", "meetings", "quotations", "forms", "consulting"] },
+  { title: "Attendance & Leaves", categories: ["attendance", "leaves"] },
+  { title: "Money", categories: ["expenses", "billing"] },
+  { title: "People & Security", categories: ["social", "calls", "birthdays", "passwords"] },
+];
+
+function groupNotifPrefs(prefs: NotificationPref[]) {
+  const byCategory = new Map(prefs.map((p) => [p.category, p]));
+  const groups = NOTIF_PREF_GROUPS.map((g) => ({
+    title: g.title,
+    prefs: g.categories.map((c) => byCategory.get(c)).filter((p): p is NotificationPref => !!p),
+  })).filter((g) => g.prefs.length > 0);
+  const covered = new Set(NOTIF_PREF_GROUPS.flatMap((g) => g.categories));
+  const rest = prefs.filter((p) => !covered.has(p.category));
+  if (rest.length) groups.push({ title: "Other", prefs: rest });
+  return groups;
+}
 
 function NavButton({
   item,
@@ -265,15 +348,25 @@ interface SessionRow {
   isCurrent: boolean;
 }
 
+interface PasskeyRow {
+  id: string;
+  name: string | null;
+  deviceType: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
 export function SettingsDialog({
   open,
   onOpenChange,
   isAdmin,
+  isDepartmentAdmin = false,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isAdmin: boolean;
+  isDepartmentAdmin?: boolean;
   onSaved?: () => void;
 }) {
   const router = useRouter();
@@ -300,15 +393,22 @@ export function SettingsDialog({
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [role, setRole] = useState("");
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
   const [departmentName, setDepartmentName] = useState<string | null>(null);
 
   // Preferences
   const [defaultLandingPage, setDefaultLandingPage] = useState("");
   const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
+  const [landingPageOptions, setLandingPageOptions] = useState<{ value: string; label: string }[]>(
+    DEFAULT_LANDING_PAGE_OPTIONS
+  );
 
   // Notifications
   const [notifPrefs, setNotifPrefs] = useState<NotificationPref[]>([]);
   const [loadingNotif, setLoadingNotif] = useState(false);
+  const [quietHoursStart, setQuietHoursStart] = useState("");
+  const [quietHoursEnd, setQuietHoursEnd] = useState("");
+  const [savingQuietHours, setSavingQuietHours] = useState(false);
 
   // Security
   const [currentPassword, setCurrentPassword] = useState("");
@@ -322,6 +422,34 @@ export function SettingsDialog({
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [revokingOthers, setRevokingOthers] = useState(false);
   const otherSessionCount = sessions.filter((s) => !s.isCurrent).length;
+  const [notifyOnNewSignIn, setNotifyOnNewSignIn] = useState(true);
+
+  // Department (Department Admins only)
+  const [myDepartment, setMyDepartment] = useState<{ id: string; name: string; _count: { users: number } } | null>(null);
+  const [loadingDepartment, setLoadingDepartment] = useState(false);
+
+  // Passkeys
+  const [passkeys, setPasskeys] = useState<PasskeyRow[]>([]);
+  const [loadingPasskeys, setLoadingPasskeys] = useState(false);
+  const [addingPasskey, setAddingPasskey] = useState(false);
+  const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
+  const [pendingPasskeyResponse, setPendingPasskeyResponse] = useState<RegistrationResponseJSON | null>(null);
+  const [pendingPasskeyName, setPendingPasskeyName] = useState("");
+
+  // Two-factor authentication (TOTP)
+  const [totpEnabled, setTotpEnabled] = useState(false);
+  const [totpStage, setTotpStage] = useState<"collapsed" | "password" | "scan" | "codes">("collapsed");
+  const [totpPassword, setTotpPassword] = useState("");
+  const [totpQrCode, setTotpQrCode] = useState<string | null>(null);
+  const [totpManualKey, setTotpManualKey] = useState<string | null>(null);
+  const [totpCode, setTotpCode] = useState("");
+  const [totpBackupCodes, setTotpBackupCodes] = useState<string[]>([]);
+  const [totpBusy, setTotpBusy] = useState(false);
+  const [showDisableTotp, setShowDisableTotp] = useState(false);
+  const [disableTotpPassword, setDisableTotpPassword] = useState("");
+  const [showRegenCodes, setShowRegenCodes] = useState(false);
+  const [regenPassword, setRegenPassword] = useState("");
+  const [regenBackupCodes, setRegenBackupCodes] = useState<string[] | null>(null);
 
   // Company profile (admin)
   const [companyLoaded, setCompanyLoaded] = useState(false);
@@ -344,6 +472,19 @@ export function SettingsDialog({
     setNewPassword("");
     setCurrentPin("");
     setNewPin("");
+    setTotpStage("collapsed");
+    setTotpPassword("");
+    setTotpCode("");
+    setTotpQrCode(null);
+    setTotpManualKey(null);
+    setTotpBackupCodes([]);
+    setShowDisableTotp(false);
+    setDisableTotpPassword("");
+    setShowRegenCodes(false);
+    setRegenPassword("");
+    setRegenBackupCodes(null);
+    setPendingPasskeyResponse(null);
+    setPendingPasskeyName("");
     setLoading(true);
     fetch("/api/auth/me")
       .then((r) => r.json())
@@ -358,11 +499,21 @@ export function SettingsDialog({
           setDesignation(u.designation ?? "");
           setDateOfJoining(u.dateOfJoining ? String(u.dateOfJoining).slice(0, 10) : "");
           setRole(u.role ?? "");
+          setDepartmentId(u.departmentId ?? null);
           setDepartmentName(u.department?.name ?? null);
           setAvatarDataUrl(u.avatarDataUrl ?? null);
           setDefaultLandingPage(u.defaultLandingPage ?? "");
+          setLandingPageOptions(
+            Array.isArray(u.landingPageOptions) && u.landingPageOptions.length > 0
+              ? u.landingPageOptions
+              : DEFAULT_LANDING_PAGE_OPTIONS
+          );
           setDensity(u.density === "compact" ? "compact" : "comfortable");
           setHasPin(!!u.hasPin);
+          setTotpEnabled(!!u.totpEnabled);
+          setNotifyOnNewSignIn(u.notifyOnNewSignIn ?? true);
+          setQuietHoursStart(u.quietHoursStart ?? "");
+          setQuietHoursEnd(u.quietHoursEnd ?? "");
         }
       })
       .catch(() => {})
@@ -418,6 +569,39 @@ export function SettingsDialog({
     setLoadingSessions(true);
     loadSessions().finally(() => setLoadingSessions(false));
   }, [open, section, loadSessions]);
+
+  const loadPasskeys = useCallback(async () => {
+    try {
+      const res = await fetch("/api/profile/passkeys");
+      const data = await res.json();
+      setPasskeys(data.passkeys ?? []);
+    } catch {
+      // Leave the list as-is; the pane shows whatever loaded last.
+    }
+  }, []);
+
+  // Passkeys, loaded lazily.
+  useEffect(() => {
+    if (!open || section !== "security") return;
+    setLoadingPasskeys(true);
+    loadPasskeys().finally(() => setLoadingPasskeys(false));
+  }, [open, section, loadPasskeys]);
+
+  // Own department (headcount etc.), loaded lazily — /api/departments lists
+  // every department, not just the caller's own, so this just picks theirs
+  // out of that list rather than needing a dedicated single-department route.
+  useEffect(() => {
+    if (!open || !isDepartmentAdmin || section !== "department" || myDepartment || !departmentId) return;
+    setLoadingDepartment(true);
+    fetch("/api/departments")
+      .then((r) => r.json())
+      .then((data) => {
+        const list: { id: string; name: string; _count: { users: number } }[] = data.departments ?? [];
+        setMyDepartment(list.find((d) => d.id === departmentId) ?? null);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingDepartment(false));
+  }, [open, isDepartmentAdmin, section, myDepartment, departmentId]);
 
   async function onPickImage(file: File | undefined, setter: (v: string | null) => void) {
     if (!file) return;
@@ -481,6 +665,47 @@ export function SettingsDialog({
       setNotifPrefs((prev) => prev.map((p) => (p.category === category ? { ...p, inApp: !inApp } : p)));
       toast.error("Couldn't update notification setting");
     }
+  }
+
+  async function saveQuietHours() {
+    setSavingQuietHours(true);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quietHoursStart: quietHoursStart || null, quietHoursEnd: quietHoursEnd || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't save quiet hours", data.error);
+      toast.success(quietHoursStart ? "Quiet hours saved" : "Quiet hours turned off");
+    } finally {
+      setSavingQuietHours(false);
+    }
+  }
+
+  function clearQuietHours() {
+    setQuietHoursStart("");
+    setQuietHoursEnd("");
+  }
+
+  // Optimistic, same pattern as toggleNotifPref — instant, rolls back on failure.
+  async function toggleNotifyOnNewSignIn(v: boolean) {
+    setNotifyOnNewSignIn(v);
+    const res = await fetch("/api/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notifyOnNewSignIn: v }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      setNotifyOnNewSignIn(!v);
+      toast.error("Couldn't update sign-in alert setting");
+    }
+  }
+
+  /** Workspace/Department shortcut tiles leave the dialog for a full admin page. */
+  function goTo(href: string) {
+    onOpenChange(false);
+    router.push(href);
   }
 
   async function saveSecurity() {
@@ -572,6 +797,159 @@ export function SettingsDialog({
     }
   }
 
+  async function startAddPasskey() {
+    setAddingPasskey(true);
+    try {
+      const optionsRes = await fetch("/api/profile/passkeys/register-options", { method: "POST" });
+      const optionsData = await optionsRes.json();
+      if (!optionsRes.ok) return toast.error("Couldn't start passkey setup", optionsData.error);
+
+      const { startRegistration } = await import("@simplewebauthn/browser");
+      try {
+        const response = await startRegistration({
+          optionsJSON: optionsData.options as Parameters<typeof startRegistration>[0]["optionsJSON"],
+        });
+        setPendingPasskeyResponse(response);
+        setPendingPasskeyName(deviceLabel(navigator.userAgent));
+      } catch {
+        // User cancelled the browser's passkey prompt — not a real error.
+      }
+    } finally {
+      setAddingPasskey(false);
+    }
+  }
+
+  async function savePendingPasskey() {
+    if (!pendingPasskeyResponse) return;
+    setAddingPasskey(true);
+    try {
+      const res = await fetch("/api/profile/passkeys/register-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response: pendingPasskeyResponse, name: pendingPasskeyName || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't add passkey", data.error);
+      toast.success("Passkey added");
+      setPendingPasskeyResponse(null);
+      setPendingPasskeyName("");
+      await loadPasskeys();
+    } finally {
+      setAddingPasskey(false);
+    }
+  }
+
+  async function removePasskey(id: string) {
+    setRemovingPasskeyId(id);
+    try {
+      const res = await fetch("/api/profile/passkeys", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) return toast.error("Couldn't remove passkey");
+      setPasskeys((prev) => prev.filter((p) => p.id !== id));
+      toast.success("Passkey removed");
+    } finally {
+      setRemovingPasskeyId(null);
+    }
+  }
+
+  function cancelTotpSetup() {
+    setTotpStage("collapsed");
+    setTotpPassword("");
+    setTotpCode("");
+    setTotpQrCode(null);
+    setTotpManualKey(null);
+  }
+
+  async function startTotpSetup() {
+    if (!totpPassword) return toast.error("Enter your password");
+    setTotpBusy(true);
+    try {
+      const res = await fetch("/api/profile/2fa/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: totpPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't start setup", data.error);
+      setTotpQrCode(data.qrCodeDataUrl);
+      setTotpManualKey(data.secret);
+      setTotpStage("scan");
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  async function confirmTotpSetup() {
+    if (!/^\d{6}$/.test(totpCode)) return toast.error("Enter the 6-digit code");
+    setTotpBusy(true);
+    try {
+      const res = await fetch("/api/profile/2fa/enable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: totpCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't verify code", data.error);
+      setTotpBackupCodes(data.backupCodes ?? []);
+      setTotpStage("codes");
+      setTotpEnabled(true);
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  function finishTotpSetup() {
+    setTotpStage("collapsed");
+    setTotpPassword("");
+    setTotpCode("");
+    setTotpQrCode(null);
+    setTotpManualKey(null);
+    setTotpBackupCodes([]);
+    toast.success("Two-factor authentication is on");
+  }
+
+  async function disableTotp() {
+    if (!disableTotpPassword) return toast.error("Enter your password");
+    setTotpBusy(true);
+    try {
+      const res = await fetch("/api/profile/2fa/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: disableTotpPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't disable", data.error);
+      setTotpEnabled(false);
+      setShowDisableTotp(false);
+      setDisableTotpPassword("");
+      toast.success("Two-factor authentication is off");
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  async function regenerateBackupCodes() {
+    if (!regenPassword) return toast.error("Enter your password");
+    setTotpBusy(true);
+    try {
+      const res = await fetch("/api/profile/2fa/backup-codes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: regenPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast.error("Couldn't regenerate codes", data.error);
+      setRegenBackupCodes(data.backupCodes ?? []);
+      setShowRegenCodes(false);
+      setRegenPassword("");
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
   async function saveCompany() {
     setSavingCompany(true);
     try {
@@ -613,7 +991,7 @@ export function SettingsDialog({
 
           {/* Phone: the sections become a scrollable strip across the top. */}
           <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-card/40 px-2 py-2 pr-12 sm:hidden">
-            {[...PERSONAL_ITEMS, ...(isAdmin ? WORKSPACE_ITEMS : [])].map((item) => (
+            {[...PERSONAL_ITEMS, ...(isAdmin ? WORKSPACE_ITEMS : isDepartmentAdmin ? DEPARTMENT_ITEMS : [])].map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -631,7 +1009,25 @@ export function SettingsDialog({
 
           {/* Sidebar (tablet and up) */}
           <div className="hidden w-52 shrink-0 flex-col gap-4 overflow-y-auto border-r border-border bg-card/40 p-3 sm:flex">
-            <p className="px-2.5 pt-1 text-sm font-semibold">Settings</p>
+            <div className="flex items-center gap-2.5 px-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-muted-foreground">
+                {avatarDataUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarDataUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <IconUser className="h-4 w-4" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{name || "Settings"}</p>
+                {role && (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {roleLabel(role, isDepartmentAdmin)}
+                    {departmentName ? ` · ${departmentName}` : ""}
+                  </p>
+                )}
+              </div>
+            </div>
             <NavGroup
               title="Personal"
               items={PERSONAL_ITEMS}
@@ -640,10 +1036,10 @@ export function SettingsDialog({
               section={section}
               onSelect={setSection}
             />
-            {isAdmin && (
+            {(isAdmin || isDepartmentAdmin) && (
               <NavGroup
                 title="Workspace"
-                items={WORKSPACE_ITEMS}
+                items={isAdmin ? WORKSPACE_ITEMS : DEPARTMENT_ITEMS}
                 isOpen={openGroups.workspace}
                 onToggle={() => setOpenGroups((prev) => ({ ...prev, workspace: !prev.workspace }))}
                 section={section}
@@ -799,7 +1195,7 @@ export function SettingsDialog({
                       <div className="grid grid-cols-1 gap-3 rounded-md border border-border p-3 sm:grid-cols-3">
                         <div>
                           <p className="text-xs text-muted-foreground">Role</p>
-                          <p className="text-sm font-medium">{roleLabel(role)}</p>
+                          <p className="text-sm font-medium">{roleLabel(role, isDepartmentAdmin)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Department</p>
@@ -846,7 +1242,7 @@ export function SettingsDialog({
                             id="set-landing"
                             value={defaultLandingPage}
                             onChange={setDefaultLandingPage}
-                            options={LANDING_PAGE_OPTIONS}
+                            options={landingPageOptions}
                           />
                         </div>
                         <div className="flex flex-col gap-1.5">
@@ -881,33 +1277,76 @@ export function SettingsDialog({
 
                       <PushToggle />
 
+                      <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+                        <div>
+                          <p className="text-sm font-medium">Quiet hours</p>
+                          <p className="text-xs text-muted-foreground">
+                            Mute push notifications during a daily window — the in-app list and bell still fill up as
+                            normal, so nothing&apos;s missed, it just won&apos;t buzz.
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 sm:w-72">
+                          <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="quiet-start">From</Label>
+                            <Input
+                              id="quiet-start"
+                              type="time"
+                              value={quietHoursStart}
+                              onChange={(e) => setQuietHoursStart(e.target.value)}
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="quiet-end">To</Label>
+                            <Input
+                              id="quiet-end"
+                              type="time"
+                              value={quietHoursEnd}
+                              onChange={(e) => setQuietHoursEnd(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button type="button" size="sm" onClick={saveQuietHours} disabled={savingQuietHours}>
+                            {savingQuietHours ? "Saving..." : "Save"}
+                          </Button>
+                          {(quietHoursStart || quietHoursEnd) && (
+                            <Button type="button" size="sm" variant="ghost" onClick={clearQuietHours}>
+                              Clear
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
                       {loadingNotif ? (
                         <div className="w-full">
                           <SkeletonForm fields={5} />
                         </div>
                       ) : (
-                        <div className="flex flex-col gap-2">
-                          {notifPrefs.map((pref) => (
-                            <div
-                              key={pref.category}
-                              className="flex items-center justify-between gap-4 rounded-md border border-border p-3"
-                            >
-                              <div>
-                                <p className="text-sm font-medium">{pref.label}</p>
-                                <p className="text-xs text-muted-foreground">{pref.description}</p>
-                              </div>
-                              <ToggleSwitch
-                                checked={pref.inApp}
-                                onChange={(v) => toggleNotifPref(pref.category, v)}
-                                label={`Toggle ${pref.label} notifications`}
-                              />
+                        <div className="flex flex-col gap-4">
+                          {groupNotifPrefs(notifPrefs).map((group) => (
+                            <div key={group.title} className="flex flex-col gap-2">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{group.title}</p>
+                              {group.prefs.map((pref) => (
+                                <div
+                                  key={pref.category}
+                                  className="flex items-center justify-between gap-4 rounded-md border border-border p-3"
+                                >
+                                  <div>
+                                    <p className="text-sm font-medium">{pref.label}</p>
+                                    <p className="text-xs text-muted-foreground">{pref.description}</p>
+                                  </div>
+                                  <ToggleSwitch
+                                    checked={pref.inApp}
+                                    onChange={(v) => toggleNotifPref(pref.category, v)}
+                                    label={`Toggle ${pref.label} notifications`}
+                                  />
+                                </div>
+                              ))}
                             </div>
                           ))}
                         </div>
                       )}
-                      <p className="text-xs text-muted-foreground/70">
-                        Email delivery, digest mode, and quiet hours are coming soon.
-                      </p>
+                      <p className="text-xs text-muted-foreground/70">Email delivery and a daily/weekly digest are coming soon.</p>
                     </>
                   )}
 
@@ -917,6 +1356,24 @@ export function SettingsDialog({
                         <h2 className="text-base font-semibold">Security</h2>
                         <p className="text-sm text-muted-foreground">Manage your password and account security.</p>
                       </div>
+
+                      <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
+                        <div className="flex items-center gap-2.5">
+                          <IconMail className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm font-medium">Email me on a new sign-in</p>
+                            <p className="text-xs text-muted-foreground">
+                              A quick alert to {email || "your email"} whenever this account signs in somewhere new.
+                            </p>
+                          </div>
+                        </div>
+                        <ToggleSwitch
+                          checked={notifyOnNewSignIn}
+                          onChange={toggleNotifyOnNewSignIn}
+                          label="Toggle new sign-in email alerts"
+                        />
+                      </div>
+
                       <div className="flex flex-col gap-3 rounded-md border border-border p-3">
                         <p className="text-sm font-medium">Change password</p>
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1052,17 +1509,293 @@ export function SettingsDialog({
                           </div>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground/70">
-                        Two-factor authentication is coming soon.
-                      </p>
+                      <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">Passkeys</p>
+                            <p className="text-xs text-muted-foreground">
+                              Sign in with this device&apos;s fingerprint, face, or screen unlock instead of a password.
+                            </p>
+                          </div>
+                          {!pendingPasskeyResponse && (
+                            <Button type="button" size="sm" variant="outline" onClick={startAddPasskey} disabled={addingPasskey}>
+                              {addingPasskey ? "Adding..." : "Add a passkey"}
+                            </Button>
+                          )}
+                        </div>
+
+                        {pendingPasskeyResponse && (
+                          <div className="flex flex-col gap-2 rounded-md border border-border/70 p-2.5 sm:flex-row sm:items-end sm:gap-3">
+                            <div className="flex flex-1 flex-col gap-1.5">
+                              <Label htmlFor="passkey-name">Name this passkey</Label>
+                              <Input
+                                id="passkey-name"
+                                value={pendingPasskeyName}
+                                onChange={(e) => setPendingPasskeyName(e.target.value)}
+                                placeholder="e.g. Work laptop"
+                                maxLength={60}
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button type="button" size="sm" onClick={savePendingPasskey} disabled={addingPasskey}>
+                                {addingPasskey ? "Saving..." : "Save"}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setPendingPasskeyResponse(null);
+                                  setPendingPasskeyName("");
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {loadingPasskeys ? (
+                          <div className="w-full">
+                            <SkeletonForm fields={2} />
+                          </div>
+                        ) : passkeys.length === 0 ? (
+                          !pendingPasskeyResponse && (
+                            <p className="text-xs text-muted-foreground">No passkeys added yet.</p>
+                          )
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {passkeys.map((p) => (
+                              <div
+                                key={p.id}
+                                className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2"
+                              >
+                                <div>
+                                  <p className="text-sm">{p.name || "Passkey"}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Added {new Date(p.createdAt).toLocaleDateString()}
+                                    {p.lastUsedAt ? ` · Last used ${timeAgo(p.lastUsedAt)}` : ""}
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => removePasskey(p.id)}
+                                  disabled={removingPasskeyId === p.id}
+                                >
+                                  <IconTrash className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">Two-factor authentication</p>
+                            <p className="text-xs text-muted-foreground">
+                              {totpEnabled
+                                ? "On — password and PIN sign-in also ask for a code from your authenticator app."
+                                : "Add a code from Google Authenticator, Microsoft Authenticator, or similar, as a second step at sign-in."}
+                            </p>
+                          </div>
+                          {!totpEnabled && totpStage === "collapsed" && (
+                            <Button type="button" size="sm" variant="outline" onClick={() => setTotpStage("password")}>
+                              Enable
+                            </Button>
+                          )}
+                        </div>
+
+                        {totpStage === "password" && (
+                          <div className="flex flex-col gap-2.5 rounded-md border border-border/70 p-2.5">
+                            <div className="flex flex-col gap-1.5">
+                              <Label htmlFor="totp-password">Confirm your password</Label>
+                              <Input
+                                id="totp-password"
+                                type="password"
+                                value={totpPassword}
+                                onChange={(e) => setTotpPassword(e.target.value)}
+                                autoComplete="current-password"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button type="button" size="sm" onClick={startTotpSetup} disabled={totpBusy}>
+                                {totpBusy ? "Starting..." : "Continue"}
+                              </Button>
+                              <Button type="button" size="sm" variant="ghost" onClick={cancelTotpSetup}>
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {totpStage === "scan" && (
+                          <div className="flex flex-col gap-3 rounded-md border border-border/70 p-2.5">
+                            <p className="text-xs text-muted-foreground">
+                              Scan this QR code with your authenticator app, or enter the key manually.
+                            </p>
+                            <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
+                              {totpQrCode && (
+                                // eslint-disable-next-line @next/next/no-img-element -- a generated data: URL, not an optimizable remote image
+                                <img
+                                  src={totpQrCode}
+                                  alt="Two-factor authentication QR code"
+                                  className="h-40 w-40 rounded-md border border-border"
+                                />
+                              )}
+                              <div className="flex flex-1 flex-col gap-2">
+                                {totpManualKey && (
+                                  <p className="break-all rounded-md bg-muted px-2.5 py-1.5 font-mono text-xs">{totpManualKey}</p>
+                                )}
+                                <div className="flex flex-col gap-1.5">
+                                  <Label htmlFor="totp-code">6-digit code</Label>
+                                  <Input
+                                    id="totp-code"
+                                    inputMode="numeric"
+                                    maxLength={6}
+                                    className="tracking-[0.3em]"
+                                    value={totpCode}
+                                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+                                  />
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button type="button" size="sm" onClick={confirmTotpSetup} disabled={totpBusy}>
+                                    {totpBusy ? "Verifying..." : "Verify & enable"}
+                                  </Button>
+                                  <Button type="button" size="sm" variant="ghost" onClick={cancelTotpSetup}>
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {totpStage === "codes" && (
+                          <div className="flex flex-col gap-2.5 rounded-md border border-border/70 p-2.5">
+                            <p className="text-xs text-muted-foreground">
+                              Save these backup codes somewhere safe. Each works once to sign in if you lose your
+                              authenticator app. They won&apos;t be shown again.
+                            </p>
+                            <div className="grid grid-cols-2 gap-1.5 rounded-md bg-muted p-2.5 font-mono text-sm">
+                              {totpBackupCodes.map((c) => (
+                                <span key={c}>{c}</span>
+                              ))}
+                            </div>
+                            <Button type="button" size="sm" onClick={finishTotpSetup} className="self-start">
+                              Done
+                            </Button>
+                          </div>
+                        )}
+
+                        {totpEnabled && totpStage === "collapsed" && (
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" size="sm" variant="outline" onClick={() => setShowRegenCodes((v) => !v)}>
+                              Regenerate backup codes
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => setShowDisableTotp((v) => !v)}>
+                              Disable
+                            </Button>
+                          </div>
+                        )}
+
+                        {showRegenCodes && !regenBackupCodes && (
+                          <div className="flex flex-col gap-2.5 rounded-md border border-border/70 p-2.5">
+                            <div className="flex flex-col gap-1.5">
+                              <Label htmlFor="regen-password">Confirm your password</Label>
+                              <Input
+                                id="regen-password"
+                                type="password"
+                                value={regenPassword}
+                                onChange={(e) => setRegenPassword(e.target.value)}
+                                autoComplete="current-password"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button type="button" size="sm" onClick={regenerateBackupCodes} disabled={totpBusy}>
+                                {totpBusy ? "Generating..." : "Regenerate"}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setShowRegenCodes(false);
+                                  setRegenPassword("");
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {regenBackupCodes && (
+                          <div className="flex flex-col gap-2.5 rounded-md border border-border/70 p-2.5">
+                            <p className="text-xs text-muted-foreground">
+                              Your old backup codes no longer work. Save these new ones — they won&apos;t be shown
+                              again.
+                            </p>
+                            <div className="grid grid-cols-2 gap-1.5 rounded-md bg-muted p-2.5 font-mono text-sm">
+                              {regenBackupCodes.map((c) => (
+                                <span key={c}>{c}</span>
+                              ))}
+                            </div>
+                            <Button type="button" size="sm" onClick={() => setRegenBackupCodes(null)} className="self-start">
+                              Done
+                            </Button>
+                          </div>
+                        )}
+
+                        {showDisableTotp && (
+                          <div className="flex flex-col gap-2.5 rounded-md border border-border/70 p-2.5">
+                            <div className="flex flex-col gap-1.5">
+                              <Label htmlFor="disable-totp-password">Confirm your password</Label>
+                              <Input
+                                id="disable-totp-password"
+                                type="password"
+                                value={disableTotpPassword}
+                                onChange={(e) => setDisableTotpPassword(e.target.value)}
+                                autoComplete="current-password"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button type="button" size="sm" variant="destructive" onClick={disableTotp} disabled={totpBusy}>
+                                {totpBusy ? "Disabling..." : "Disable 2FA"}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setShowDisableTotp(false);
+                                  setDisableTotpPassword("");
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </>
                   )}
 
                   {section === "company" && isAdmin && (
                     <>
                       <div>
-                        <h2 className="text-base font-semibold">Company profile</h2>
-                        <p className="text-sm text-muted-foreground">
+                        <h2 className="text-base font-semibold">Workspace</h2>
+                        <p className="text-sm text-muted-foreground">Company-wide configuration and shortcuts.</p>
+                      </div>
+
+                      <WorkspaceLinkGrid links={ADMIN_LINKS} onNavigate={goTo} />
+
+                      <div className="flex flex-col gap-1.5 border-t border-border pt-5">
+                        <h3 className="text-sm font-semibold">Company profile</h3>
+                        <p className="text-xs text-muted-foreground">
                           The default letterhead used on quotations and invoices.
                         </p>
                       </div>
@@ -1171,6 +1904,37 @@ export function SettingsDialog({
                       <Button type="button" onClick={saveCompany} disabled={savingCompany} className="self-start">
                         {savingCompany ? "Saving..." : "Save profile"}
                       </Button>
+                    </>
+                  )}
+
+                  {section === "department" && isDepartmentAdmin && (
+                    <>
+                      <div>
+                        <h2 className="text-base font-semibold">Department</h2>
+                        <p className="text-sm text-muted-foreground">Quick access to what you manage as a Department Admin.</p>
+                      </div>
+
+                      <div className="rounded-md border border-border p-3">
+                        {loadingDepartment ? (
+                          <SkeletonForm fields={1} />
+                        ) : myDepartment ? (
+                          <div>
+                            <p className="text-sm font-medium">{myDepartment.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {myDepartment._count.users} {myDepartment._count.users === 1 ? "person" : "people"}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Couldn&apos;t load your department.</p>
+                        )}
+                      </div>
+
+                      <WorkspaceLinkGrid links={DEPARTMENT_LINKS} onNavigate={goTo} />
+
+                      <p className="text-xs text-muted-foreground/70">
+                        Leave and Expense approvals only show anything if a company Admin has granted you that module
+                        in Permission Manager.
+                      </p>
                     </>
                   )}
                 </motion.div>
