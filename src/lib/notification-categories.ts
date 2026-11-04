@@ -14,6 +14,7 @@ export type NotificationCategory =
   | "quotations"
   | "meetings"
   | "attendance"
+  | "leaves"
   | "social"
   | "calls"
   | "expenses"
@@ -45,8 +46,8 @@ export const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   lunch_break_reminder: "attendance",
   social_client_assigned: "social",
   call_assigned: "calls",
-  leave_requested: "attendance",
-  leave_decided: "attendance",
+  leave_requested: "leaves",
+  leave_decided: "leaves",
   expense_requested: "expenses",
   expense_decided: "expenses",
   expense_paid: "expenses",
@@ -81,6 +82,7 @@ export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: stri
     description: "When a quotation you created is approved or rejected, or one's awaiting your approval",
   },
   { value: "attendance", label: "Attendance", description: "Reminders to check in or check out before your shift window closes" },
+  { value: "leaves", label: "Leaves", description: "When someone applies for leave, or your own leave request is approved or rejected" },
   { value: "social", label: "Social Media", description: "When a social media client is assigned to you" },
   { value: "calls", label: "Calls", description: "When a call is logged with you as the owner" },
   {

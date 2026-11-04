@@ -23,10 +23,13 @@ export async function GET() {
 }
 
 const bodySchema = z.object({
-  // "meetings" and "attendance" were missing here even though both were
-  // already listed in NOTIFICATION_CATEGORIES — toggling either off/on in
-  // Settings would 400 against this route. Same story for "calls" and the
-  // newer "forms"/"billing"/"passwords"/"birthdays".
+  // This list has repeatedly drifted behind NOTIFICATION_CATEGORIES as new
+  // categories were added there — each gap meant toggling that category
+  // off/on in Settings would 400 against this route (first "meetings" and
+  // "attendance", then "calls"/"forms"/"billing"/"passwords"/"birthdays",
+  // now "expenses"/"consulting"/"leaves"). Kept in sync by hand since zod
+  // needs a literal union, not a runtime array of NOTIFICATION_CATEGORIES's
+  // values.
   category: z.enum([
     "leads",
     "tasks",
@@ -34,12 +37,15 @@ const bodySchema = z.object({
     "quotations",
     "meetings",
     "attendance",
+    "leaves",
     "social",
     "calls",
+    "expenses",
     "forms",
     "billing",
     "passwords",
     "birthdays",
+    "consulting",
   ]),
   inApp: z.boolean(),
 });
