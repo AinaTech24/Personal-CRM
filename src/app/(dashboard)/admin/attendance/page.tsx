@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import * as Popover from "@radix-ui/react-popover";
 import type { AttendanceStatus, AttendanceApproval, HalfDayReason } from "@/generated/prisma/enums";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,16 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, useDialogState } from "@/components/ui/dialog";
 import { Tooltip } from "@/components/ui/tooltip";
-import { IconFileSpreadsheet, IconSettings, IconCheck, IconX, IconPencil } from "@/components/icons";
+import { FilterMenu, type FilterFacet } from "@/components/ui/filter-menu";
+import {
+  IconFileSpreadsheet,
+  IconSettings,
+  IconCheck,
+  IconX,
+  IconPencil,
+  IconSearch,
+  IconArrowsUpDown,
+} from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { StatusBadge, ApprovalBadge } from "@/components/attendance/status-badge";
 import { SummaryCards } from "@/components/attendance/summary-cards";
@@ -21,6 +31,7 @@ import { AttendanceSettingsPanel } from "@/components/attendance/attendance-sett
 import { summarize } from "@/lib/attendance";
 import { formatIstTime, formatDuration, HALF_DAY_REASON_LABEL, STATUS_LABEL } from "@/lib/attendance-ui";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
+import { cn } from "@/lib/utils";
 import {
   format,
   startOfWeek,
@@ -50,22 +61,21 @@ interface AdminRecord {
   approvalStatus: AttendanceApproval;
 }
 
-const STATUS_FILTER = [
-  { value: "", label: "All statuses" },
-  { value: "PRESENT", label: "Present" },
-  { value: "HALF_DAY", label: "Half Day" },
-  { value: "ABSENT", label: "Absent" },
-];
-const APPROVAL_FILTER = [
-  { value: "", label: "All approvals" },
-  { value: "PENDING", label: "Pending" },
-  { value: "APPROVED", label: "Approved" },
-  { value: "REJECTED", label: "Rejected" },
-];
 const STATUS_OPTIONS = [
   { value: "PRESENT", label: "Present" },
   { value: "HALF_DAY", label: "Half Day" },
   { value: "ABSENT", label: "Absent" },
+];
+const APPROVAL_OPTIONS = [
+  { value: "PENDING", label: "Pending" },
+  { value: "APPROVED", label: "Approved" },
+  { value: "REJECTED", label: "Rejected" },
+];
+const SORT_OPTIONS = [
+  { value: "date_desc", label: "Date (newest first)" },
+  { value: "date_asc", label: "Date (oldest first)" },
+  { value: "name_asc", label: "Employee (A–Z)" },
+  { value: "name_desc", label: "Employee (Z–A)" },
 ];
 const REASON_OPTIONS = Object.entries(HALF_DAY_REASON_LABEL).map(([value, label]) => ({ value, label }));
 
@@ -87,6 +97,68 @@ const REPORT_PERIODS = [
   { value: "half_yearly", label: "Half-yearly" },
   { value: "annually", label: "Annually" },
 ];
+
+/** A single icon button that opens a popover of options — same compact control used for sorting elsewhere (e.g. the Social Media clients page). */
+function IconOnlyDropdown({
+  icon: Icon,
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <span>
+          <Tooltip label={label}>
+            <button
+              type="button"
+              aria-label={label}
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-md border border-input text-muted-foreground transition-colors hover:border-ring/50 hover:text-foreground",
+                open && "border-ring/50 text-foreground"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          </Tooltip>
+        </span>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="end"
+          sideOffset={6}
+          className="z-50 min-w-40 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+        >
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+              className={cn(
+                "flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-primary/5",
+                opt.value === value && "bg-accent/60"
+              )}
+            >
+              <span className="truncate">{opt.label}</span>
+              {opt.value === value && <IconCheck className="h-3.5 w-3.5 shrink-0 text-primary" />}
+            </button>
+          ))}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
 
 /** The date range for a report preset, relative to today. null = custom (use the manual From/To). */
 function periodRange(period: string): { from: string; to: string } | null {
@@ -121,6 +193,7 @@ export default function AdminAttendancePage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [period, setPeriod] = useState("custom");
+  const [sort, setSort] = useState("date_desc");
   const [editing, setEditing] = useState<AdminRecord | null>(null);
   // Keeps the record around while the dialog animates closed.
   const editingDialog = useDialogState(editing);
@@ -157,6 +230,31 @@ export default function AdminAttendancePage() {
     () => summarize(records.map((r) => ({ status: r.status, approvalStatus: r.approvalStatus }))),
     [records]
   );
+
+  // The server already applies status/approval/date/search filters — sorting
+  // is purely a client-side presentation choice over whatever page of
+  // filtered records came back, so it's cheaper done here than as another
+  // round trip.
+  const sortedRecords = useMemo(() => {
+    const employeeName = (r: AdminRecord) => [r.user.name, r.user.surname].filter(Boolean).join(" ");
+    return [...records].sort((a, b) => {
+      switch (sort) {
+        case "date_asc":
+          return a.date.localeCompare(b.date);
+        case "name_asc":
+          return employeeName(a).localeCompare(employeeName(b));
+        case "name_desc":
+          return employeeName(b).localeCompare(employeeName(a));
+        default:
+          return b.date.localeCompare(a.date);
+      }
+    });
+  }, [records, sort]);
+
+  const filterFacets: FilterFacet[] = [
+    { key: "status", label: "Status", value: status || null, options: STATUS_OPTIONS, onChange: (v) => setStatus((v as string) ?? "") },
+    { key: "approval", label: "Approval", value: approval || null, options: APPROVAL_OPTIONS, onChange: (v) => setApproval((v as string) ?? "") },
+  ];
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -248,6 +346,9 @@ export default function AdminAttendancePage() {
         </DialogContent>
       </Dialog>
 
+      {/* Present / Half / Absent totals for the current filter */}
+      {!loading && records.length > 0 && <SummaryCards summary={summary} />}
+
       {/* Team year overview — hover a day to see present / half day / absent counts */}
       <Card>
         <CardContent className="flex flex-col gap-4 p-4">
@@ -279,71 +380,65 @@ export default function AdminAttendancePage() {
         </CardContent>
       </Card>
 
-      {/* Filters */}
+      {/* Attendance history — search, sort and filter act on the fixed-height
+          table below without needing a separate filters panel above it. */}
       <Card>
-        <CardContent className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="att-q">Search</Label>
-            <Input id="att-q" placeholder="Name or email" value={q} onChange={(e) => setQ(e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Report</Label>
-            <Dropdown value={period} onChange={selectPeriod} options={REPORT_PERIODS} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Status</Label>
-            <Dropdown value={status} onChange={setStatus} options={STATUS_FILTER} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Approval</Label>
-            <Dropdown value={approval} onChange={setApproval} options={APPROVAL_FILTER} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="att-range">Date range</Label>
-            <DateRangePicker
-              id="att-range"
-              from={from}
-              to={to}
-              onChange={(f, t) => {
-                setFrom(f);
-                setTo(t);
-                setPeriod("custom");
-              }}
-              placeholder="Any"
-            />
+        <CardContent className="flex flex-col gap-3 border-b border-border p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
+              <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                aria-label="Search by name or email"
+                placeholder="Name or email"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+            <div className="w-40">
+              <Dropdown size="sm" value={period} onChange={selectPeriod} options={REPORT_PERIODS} />
+            </div>
+            <div className="w-56">
+              <DateRangePicker
+                from={from}
+                to={to}
+                onChange={(f, t) => {
+                  setFrom(f);
+                  setTo(t);
+                  setPeriod("custom");
+                }}
+                placeholder="Any date"
+              />
+            </div>
+            <IconOnlyDropdown icon={IconArrowsUpDown} label="Sort" value={sort} onChange={setSort} options={SORT_OPTIONS} />
+            <FilterMenu facets={filterFacets} />
           </div>
         </CardContent>
-      </Card>
-
-      {/* Present / Half / Absent totals for the current filter */}
-      {!loading && records.length > 0 && <SummaryCards summary={summary} />}
-
-      <Card>
         <CardContent className="p-0">
           {loading ? (
             <div className="flex justify-center min-h-[55vh] flex-1 items-center">
               <SkeletonTable rows={8} columns={6} />
             </div>
-          ) : records.length === 0 ? (
+          ) : sortedRecords.length === 0 ? (
             <p className="px-4 py-12 text-center text-sm text-muted-foreground">No attendance records match these filters.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="max-h-[55vh] overflow-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                    <th className="px-4 py-2 font-medium">Employee</th>
-                    <th className="px-4 py-2 font-medium">Date</th>
-                    <th className="px-4 py-2 font-medium">Status</th>
-                    <th className="px-4 py-2 font-medium">Check In</th>
-                    <th className="px-4 py-2 font-medium">Check Out</th>
-                    <th className="px-4 py-2 font-medium">Duration</th>
-                    <th className="px-4 py-2 font-medium">Break</th>
-                    <th className="px-4 py-2 font-medium">Approval</th>
-                    <th className="px-4 py-2 text-right font-medium">Actions</th>
+                    <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-4 py-2 font-medium">Employee</th>
+                    <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-4 py-2 font-medium">Date</th>
+                    <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-4 py-2 font-medium">Status</th>
+                    <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-4 py-2 font-medium">Check In</th>
+                    <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-4 py-2 font-medium">Check Out</th>
+                    <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-4 py-2 font-medium">Duration</th>
+                    <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-4 py-2 font-medium">Break</th>
+                    <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-4 py-2 font-medium">Approval</th>
+                    <th className="sticky top-0 z-10 whitespace-nowrap bg-card px-4 py-2 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {records.map((r) => (
+                  {sortedRecords.map((r) => (
                     <tr key={r.id} className="border-b border-border/50 last:border-0 align-middle">
                       <td className="px-4 py-2">
                         <p className="font-medium">{[r.user.name, r.user.surname].filter(Boolean).join(" ")}</p>
