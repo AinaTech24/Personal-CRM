@@ -2,8 +2,36 @@ import { db } from "@/lib/db";
 import { dateFromKey } from "@/lib/attendance";
 import { parseWorkingWeekdays, workingDayKeys } from "@/lib/leave-calendar";
 
-/** Paid leave days a person gets each calendar year; Unpaid never draws from it. */
-export const ANNUAL_LEAVE_ALLOWANCE = 12;
+export interface LeavePolicyData {
+  /** Paid leave days allowed per calendar year, pooled across every category except Unpaid. */
+  paidYearlyAllowance: number;
+  /** Paid leave days allowed in any single calendar month, from that same pool. null = no monthly cap. */
+  paidMonthlyAllowance: number | null;
+  /** Unpaid leave days allowed per calendar year. null = unlimited. */
+  unpaidYearlyAllowance: number | null;
+  /** Unpaid leave days allowed in any single calendar month. null = no monthly cap. */
+  unpaidMonthlyAllowance: number | null;
+}
+
+/** The defaults before an admin has ever saved a policy — 12 paid days/year, nothing else capped, matching this app's behavior before LeavePolicy existed. */
+export const DEFAULT_LEAVE_POLICY: LeavePolicyData = {
+  paidYearlyAllowance: 12,
+  paidMonthlyAllowance: null,
+  unpaidYearlyAllowance: null,
+  unpaidMonthlyAllowance: null,
+};
+
+/** The company-wide leave policy — see /api/leave-policy for who can read/write it. */
+export async function getLeavePolicy(): Promise<LeavePolicyData> {
+  const row = await db.leavePolicy.findUnique({ where: { id: "default" } });
+  if (!row) return DEFAULT_LEAVE_POLICY;
+  return {
+    paidYearlyAllowance: row.paidYearlyAllowance,
+    paidMonthlyAllowance: row.paidMonthlyAllowance,
+    unpaidYearlyAllowance: row.unpaidYearlyAllowance,
+    unpaidMonthlyAllowance: row.unpaidMonthlyAllowance,
+  };
+}
 
 /** Working days the leave covers, from the live attendance settings and holiday list. */
 export async function leaveWorkingDays(startKey: string, endKey: string): Promise<string[]> {
@@ -111,28 +139,61 @@ export async function revokeLeaveDay(userId: string, dateKey: string) {
 export interface LeaveSummary {
   /** Approved days this calendar year, every category. */
   taken: number;
-  /** Allowance left after paid (non-Unpaid) approved days. */
+  /** Paid yearly allowance left after paid (non-Unpaid) approved days. */
   balance: number;
   pending: number;
   rejected: number;
+  /** The policy these numbers were computed against, for display (admin-configurable, see getLeavePolicy). */
+  policy: LeavePolicyData;
+  paidTakenThisMonth: number;
+  paidTakenThisYear: number;
+  unpaidTakenThisMonth: number;
+  unpaidTakenThisYear: number;
+  /** Unpaid allowance left for the year — null when unpaidYearlyAllowance is unlimited. */
+  unpaidBalance: number | null;
 }
 
-/** The dashboard numbers for one person's year. */
-export async function leaveSummary(userId: string, year: number): Promise<LeaveSummary> {
-  const rows = await db.leaveRequest.findMany({
-    where: { userId, startDate: { gte: dateFromKey(`${year}-01-01`), lte: dateFromKey(`${year}-12-31`) }, deletedAt: null },
-    select: { status: true, days: true, category: true },
-  });
+/** The dashboard numbers for one person's year — `month` (1–12) defaults to the current calendar month, for the monthly-cap figures. */
+export async function leaveSummary(userId: string, year: number, month?: number): Promise<LeaveSummary> {
+  const [policy, rows] = await Promise.all([
+    getLeavePolicy(),
+    db.leaveRequest.findMany({
+      where: { userId, startDate: { gte: dateFromKey(`${year}-01-01`), lte: dateFromKey(`${year}-12-31`) }, deletedAt: null },
+      select: { status: true, days: true, category: true, startDate: true },
+    }),
+  ]);
+  const currentMonth = month ?? new Date().getUTCMonth() + 1;
   let taken = 0;
-  let paidTaken = 0;
+  let paidTakenThisYear = 0;
+  let paidTakenThisMonth = 0;
+  let unpaidTakenThisYear = 0;
+  let unpaidTakenThisMonth = 0;
   let pending = 0;
   let rejected = 0;
   for (const r of rows) {
     if (r.status === "APPROVED") {
       taken += r.days;
-      if (r.category !== "UNPAID") paidTaken += r.days;
+      const inMonth = r.startDate.getUTCMonth() + 1 === currentMonth;
+      if (r.category !== "UNPAID") {
+        paidTakenThisYear += r.days;
+        if (inMonth) paidTakenThisMonth += r.days;
+      } else {
+        unpaidTakenThisYear += r.days;
+        if (inMonth) unpaidTakenThisMonth += r.days;
+      }
     } else if (r.status === "PENDING") pending++;
     else if (r.status === "REJECTED") rejected++;
   }
-  return { taken, balance: Math.max(0, ANNUAL_LEAVE_ALLOWANCE - paidTaken), pending, rejected };
+  return {
+    taken,
+    balance: Math.max(0, policy.paidYearlyAllowance - paidTakenThisYear),
+    pending,
+    rejected,
+    policy,
+    paidTakenThisMonth,
+    paidTakenThisYear,
+    unpaidTakenThisMonth,
+    unpaidTakenThisYear,
+    unpaidBalance: policy.unpaidYearlyAllowance == null ? null : Math.max(0, policy.unpaidYearlyAllowance - unpaidTakenThisYear),
+  };
 }

@@ -14,6 +14,7 @@ import { RowActionsMenu } from "@/components/ui/row-actions";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { LeavePolicyCard } from "@/components/leave/leave-policy-card";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
@@ -61,6 +62,24 @@ export function LeaveAdminView({
   const [editReason, setEditReason] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingRequest, setDeletingRequest] = useState<LeaveRequestRow | null>(null);
+  // Only the unscoped page (plain Admin > Leave Requests, no teamScope) ever
+  // shows the company-wide policy — a CRM/Social Media team console's own
+  // Leave tab is a team lead's view into their team's requests, not a place
+  // to edit (or even see) a setting that applies to the whole company.
+  const [canEditPolicy, setCanEditPolicy] = useState(false);
+
+  useEffect(() => {
+    if (teamScope) return;
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        const u = d.user;
+        if (!u) return;
+        const isAdmin = u.role === "ADMIN" || u.role === "SUPER_ADMIN";
+        setCanEditPolicy(isAdmin || (!!u.isDepartmentAdmin && (u.modulePermissions ?? []).includes("LEAVE")));
+      })
+      .catch(() => {});
+  }, [teamScope]);
 
   const load = useCallback(async () => {
     const res = await fetch(leaveUrl);
@@ -195,6 +214,8 @@ export function LeaveAdminView({
           options={FILTERS.map((f) => ({ ...f, label: `${f.label} (${counts[f.value] ?? 0})` }))}
         />
       </div>
+
+      {!teamScope && <LeavePolicyCard editable={canEditPolicy} />}
 
       {!requests ? (
         <SkeletonTable rows={5} columns={7} />

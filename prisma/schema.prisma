@@ -1227,6 +1227,33 @@ model UserLeave {
   @@index([date])
 }
 
+/// Company-wide paid/unpaid leave allowances — replaces the old hardcoded
+/// ANNUAL_LEAVE_ALLOWANCE constant (src/lib/leave.ts) so Admin/Super Admin
+/// (or a Department Admin holding a LEAVE module grant with Update — see
+/// /api/leave-policy) can configure it instead of a code change. Everyone
+/// signed in can read it (see getLeavePolicy) so the numbers show the same
+/// way on a Department User's own "My Leave" page as on Admin > Leave
+/// Requests. Singleton row, same id="default" pattern as AttendanceSettings.
+model LeavePolicy {
+  id String @id @default("default")
+
+  /// Paid leave days allowed per calendar year, pooled across every
+  /// LeaveCategory except UNPAID (Casual/Sick/Earned/Other share this one
+  /// number, same as the constant it replaces).
+  paidYearlyAllowance Int @default(12)
+  /// Paid leave days allowed from that same pool in any single calendar
+  /// month. Null = no monthly cap, only the yearly one applies.
+  paidMonthlyAllowance Int?
+  /// Unpaid leave days allowed per calendar year. Null = unlimited — the
+  /// only behavior that existed before this model did.
+  unpaidYearlyAllowance Int?
+  /// Unpaid leave days allowed in any single calendar month. Null = no
+  /// monthly cap.
+  unpaidMonthlyAllowance Int?
+
+  updatedAt DateTime @updatedAt
+}
+
 model AttendanceSettings {
   id                   String   @id @default("default")
   /**
