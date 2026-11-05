@@ -181,14 +181,45 @@ function deviceLabel(userAgent: string | null): string {
   return os ? `${browser} on ${os}` : browser;
 }
 
-export async function newSignInEmailHtml(opts: { name: string; userAgent: string | null; ip: string | null }) {
+/** How the account holder actually authenticated — shown in the new-sign-in alert so they can tell a real passkey/PIN sign-in from one they don't recognize. */
+export type SignInMethod = "password" | "pin" | "passkey" | "email_code";
+
+const SIGN_IN_METHOD_LABEL: Record<SignInMethod, string> = {
+  password: "your email and password",
+  pin: "your mobile number and PIN",
+  passkey: "a passkey",
+  email_code: "an emailed sign-in code",
+};
+
+/**
+ * A small pulsing-ring key graphic for a passkey sign-in — most email clients
+ * (Gmail, Outlook) strip the <style> block and just show the static key in
+ * its resting state; clients that keep it (Apple Mail, Thunderbird, iOS/Mac
+ * Outlook) animate the ring. Either way it degrades to a plain graphic, never
+ * to broken markup.
+ */
+function passkeyGraphic(): string {
+  return `
+    <style>@keyframes pkPulse{0%{transform:scale(.85);opacity:.7}70%{transform:scale(1.6);opacity:0}100%{transform:scale(1.6);opacity:0}}</style>
+    <div style="text-align:center;margin:4px 0 20px;">
+      <div style="position:relative;display:inline-block;width:64px;height:64px;">
+        <div style="position:absolute;inset:0;border-radius:50%;border:2px solid #dc2626;animation:pkPulse 1.8s ease-out infinite;"></div>
+        <div style="position:relative;display:flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:#fef2f2;font-size:30px;line-height:1;">🔑</div>
+      </div>
+    </div>
+  `;
+}
+
+export async function newSignInEmailHtml(opts: { name: string; userAgent: string | null; ip: string | null; method: SignInMethod }) {
   const when = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
   const brand = await getCompanyBrand();
+  const methodLabel = SIGN_IN_METHOD_LABEL[opts.method];
   return emailLayout({
     brand,
     heading: "New sign-in from an unrecognized device",
     bodyHtml: `
-      <p style="margin:0 0 16px;color:#555;">Hi ${opts.name}, your account was just signed in to from ${deviceLabel(opts.userAgent)}${opts.ip ? ` (${opts.ip})` : ""} at ${when} IST — a device we haven't seen you sign in from before.</p>
+      ${opts.method === "passkey" ? passkeyGraphic() : ""}
+      <p style="margin:0 0 16px;color:#555;">Hi ${opts.name}, your account was just signed in to using ${methodLabel}, from ${deviceLabel(opts.userAgent)}${opts.ip ? ` (${opts.ip})` : ""} at ${when} IST — a device we haven't seen you sign in from before.</p>
       <p style="margin:0;color:#555;">If this was you, no action is needed. If it wasn't, change your password right away and review your active sessions under Settings &gt; Security.</p>
     `,
     footerNote: `Turn these alerts off anytime under Settings &gt; Security &gt; "Email me on a new sign-in". This is an automated message from ${brand.name}.`,

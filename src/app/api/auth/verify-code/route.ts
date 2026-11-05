@@ -62,11 +62,11 @@ export async function POST(req: NextRequest) {
     const payload = { userId: user.id, email: user.email, role: user.role, departmentId: user.departmentId };
 
     if (user.totpEnabled) {
-      await createPendingMfaCookie(payload);
+      await createPendingMfaCookie(payload, "email_code");
       return NextResponse.json({ mfaRequired: true });
     }
 
-    await createSessionCookie(payload, req);
+    await createSessionCookie(payload, req, "email_code");
 
     return NextResponse.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role } });
   } catch (err) {

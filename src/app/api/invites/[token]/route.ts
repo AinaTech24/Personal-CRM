@@ -115,7 +115,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       role: user.role,
       departmentId: user.departmentId,
     },
-    req
+    req,
+    "password"
   );
 
   emitToAdmins("user_created", { id: user.id });

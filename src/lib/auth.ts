@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import type { Role } from "@/generated/prisma/enums";
 import { db } from "@/lib/db";
-import { sendMail, newSignInEmailHtml } from "@/lib/mailer";
+import { sendMail, newSignInEmailHtml, type SignInMethod } from "@/lib/mailer";
 
 const SESSION_COOKIE = "aina_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
@@ -92,14 +92,14 @@ function deviceInfoFrom(req?: NextRequest) {
  * configured, and this must never add latency or risk to the sign-in path
  * itself, so its own failures are swallowed here too.
  */
-async function sendNewSignInAlert(userId: string, email: string, userAgent: string | null, ip: string | null) {
+async function sendNewSignInAlert(userId: string, email: string, userAgent: string | null, ip: string | null, method: SignInMethod) {
   try {
     const user = await db.user.findUnique({ where: { id: userId }, select: { name: true, notifyOnNewSignIn: true } });
     if (!user?.notifyOnNewSignIn) return;
     await sendMail({
       to: email,
       subject: "New sign-in to your Aina CRM account",
-      html: await newSignInEmailHtml({ name: user.name, userAgent, ip }),
+      html: await newSignInEmailHtml({ name: user.name, userAgent, ip, method }),
     });
   } catch (err) {
     console.error(`[auth] Failed to send new-sign-in alert to ${email}:`, err);
@@ -109,9 +109,11 @@ async function sendNewSignInAlert(userId: string, email: string, userAgent: stri
 /**
  * Creates a Session row (the revocable record) and an httpOnly JWT cookie whose
  * `sid` claim points at it. Pass the originating request so the session can be
- * labeled with a device/IP in the Security settings list.
+ * labeled with a device/IP in the Security settings list, and the method the
+ * caller actually verified — the new-sign-in alert states it, so the account
+ * holder can tell a real passkey/PIN sign-in from one they don't recognize.
  */
-export async function createSessionCookie(payload: SessionPayload, req?: NextRequest) {
+export async function createSessionCookie(payload: SessionPayload, req: NextRequest | undefined, method: SignInMethod) {
   const { userAgent, ip } = deviceInfoFrom(req);
 
   // Only alert on a device we haven't seen this user sign in from before —
@@ -124,7 +126,7 @@ export async function createSessionCookie(payload: SessionPayload, req?: NextReq
     data: { userId: payload.userId, userAgent, ip },
   });
 
-  if (!isKnownDevice) void sendNewSignInAlert(payload.userId, payload.email, userAgent, ip);
+  if (!isKnownDevice) void sendNewSignInAlert(payload.userId, payload.email, userAgent, ip, method);
 
   const token = await signSessionToken({ ...payload, sid: session.id });
   const cookieStore = await cookies();
@@ -196,14 +198,20 @@ export async function getCurrentSessionId(): Promise<string | null> {
   return decoded?.sid ?? null;
 }
 
+interface PendingMfaPayload extends SessionPayload {
+  method: SignInMethod;
+}
+
 /**
  * Issued by login/login-pin/verify-code in place of a real session cookie
  * when the account has TOTP enabled — proves the password/PIN/email-code
  * check already passed, without granting access until verify-2fa also
- * confirms the authenticator code or a backup code.
+ * confirms the authenticator code or a backup code. Carries which of those
+ * checks it was, so the new-sign-in alert can still name the real method
+ * once verify-2fa finishes the sign-in.
  */
-export async function createPendingMfaCookie(payload: SessionPayload) {
-  const token = await new SignJWT({ ...payload })
+export async function createPendingMfaCookie(payload: SessionPayload, method: SignInMethod) {
+  const token = await new SignJWT({ ...payload, method })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${MFA_PENDING_TTL_SECONDS}s`)
@@ -218,13 +226,13 @@ export async function createPendingMfaCookie(payload: SessionPayload) {
   });
 }
 
-export async function getPendingMfaFromCookies(): Promise<SessionPayload | null> {
+export async function getPendingMfaFromCookies(): Promise<PendingMfaPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(MFA_PENDING_COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, getSecret());
-    return payload as unknown as SessionPayload;
+    return payload as unknown as PendingMfaPayload;
   } catch {
     return null;
   }

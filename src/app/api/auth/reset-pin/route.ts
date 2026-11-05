@@ -71,7 +71,8 @@ export async function POST(req: NextRequest) {
     // user straight in rather than sending them back to a login screen.
     await createSessionCookie(
       { userId: user.id, email: user.email, role: user.role, departmentId: user.departmentId },
-      req
+      req,
+      "pin"
     );
 
     return NextResponse.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role } });
