@@ -32,7 +32,7 @@ export function LoginForm() {
 /** A looping "scanning" ping around a key badge — fills the Passkey tab's otherwise-sparse space and reads as "waiting for your device" rather than a dead end. */
 function PasskeyGraphic() {
   return (
-    <div className="relative flex h-28 items-center justify-center" aria-hidden="true">
+    <div className="relative flex h-[74px] items-center justify-center" aria-hidden="true">
       {[0, 1, 2].map((i) => (
         <motion.span
           key={i}
@@ -387,7 +387,7 @@ function LoginFormInner() {
             )}
 
             <motion.div layout transition={{ duration: 0.25, ease: "easeInOut" }}>
-              <AnimatePresence mode="wait" initial={false}>
+              <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
                   key={mode}
                   initial={{ opacity: 0, y: 6 }}

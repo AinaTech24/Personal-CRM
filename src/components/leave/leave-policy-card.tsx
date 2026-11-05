@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip } from "@/components/ui/tooltip";
+import { IconPencil } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import type { LeavePolicyData } from "@/lib/leave";
 
@@ -126,9 +128,11 @@ export function LeavePolicyCard({
             </p>
           </div>
           {editable && !editing && (
-            <Button type="button" variant="outline" size="sm" onClick={startEditing}>
-              Edit
-            </Button>
+            <Tooltip label="Edit leave policy">
+              <Button type="button" variant="outline" size="icon" onClick={startEditing} aria-label="Edit leave policy">
+                <IconPencil className="h-3.5 w-3.5" />
+              </Button>
+            </Tooltip>
           )}
         </div>
 
