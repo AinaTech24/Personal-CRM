@@ -1,14 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { isAdmin } from "@/lib/permissions";
+import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
+import { moduleAccessScope } from "@/lib/module-permissions-store";
 import { leadListWhere } from "@/lib/leads";
 import { taskListWhere } from "@/lib/tasks";
 import { projectListWhere } from "@/lib/projects";
-import { dateFromKey, istDateKey } from "@/lib/attendance";
+import { noteListWhere } from "@/lib/notes";
+import { socialClientListWhere } from "@/lib/social-media-permissions";
+import { getSocialMembership } from "@/lib/social-media";
+import { canManageForms } from "@/lib/forms";
+import { birthdayInfo, birthdayDateInYear } from "@/lib/birthdays";
+import { toNumber } from "@/lib/billing";
+import { dateFromKey, istDateKey, keyFromDate } from "@/lib/attendance";
 
-type Module = "leads" | "tasks" | "meetings" | "projects" | "attendance" | "quotations" | "invoices";
-const MODULES: Module[] = ["leads", "tasks", "meetings", "projects", "attendance", "quotations", "invoices"];
+type Module =
+  | "leads"
+  | "tasks"
+  | "meetings"
+  | "projects"
+  | "attendance"
+  | "clients"
+  | "notes"
+  | "expenses"
+  | "birthdays"
+  | "leaves"
+  | "forms"
+  | "quotations"
+  | "invoices";
+const MODULES: Module[] = [
+  "leads",
+  "tasks",
+  "meetings",
+  "projects",
+  "attendance",
+  "clients",
+  "notes",
+  "expenses",
+  "birthdays",
+  "leaves",
+  "forms",
+  "quotations",
+  "invoices",
+];
 /** Financial records — shown in the dashboard filter only to admins. */
 const ADMIN_ONLY_MODULES = new Set<Module>(["quotations", "invoices"]);
 
@@ -43,19 +77,26 @@ interface ActivityItem {
   href: string;
   /** Who the record belongs to — assignee for leads/tasks/projects, organiser
    *  for meetings, the record's own owner for attendance. Null when nobody's
-   *  assigned (an unassigned lead or task). */
+   *  assigned (an unassigned lead or task), or the item has no single owner
+   *  (a form submission). */
   user: ActivityUser | null;
 }
 
 /**
  * A flat, period-filtered list of records for one module, for the dashboard's
- * filter. Scoped to what the caller may see — admins get everything, everyone
- * else gets their own — so the same endpoint serves both dashboards.
+ * filter. Scoped to what the caller may see — admins get everything, a
+ * Permission Manager grant (or, for Attendance, simply being a Department
+ * Admin — same floor /api/dashboard/today-timeline already gives that one
+ * module) widens to a department, everyone else gets their own — so the
+ * same endpoint serves every dashboard.
  *
  * `from`/`to` are ISO instants the client computes for today / yesterday /
  * upcoming / a custom range, applied to each module's most meaningful date
- * (due date, start time, created or attendance date). The timezone lives on the
- * client, which knows the viewer's; the server just filters the interval.
+ * (due date, start time, created/submitted date, or attendance date).
+ * Birthdays is the one exception — nobody "creates" a birthday today, so its
+ * window instead picks out whose birthday falls in that range this year.
+ * The timezone lives on the client, which knows the viewer's; the server
+ * just filters the interval.
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -102,10 +143,11 @@ export async function GET(req: NextRequest) {
   let items: ActivityItem[] = [];
 
   if (mod === "leads") {
+    const scope = admin ? ("all" as const) : await moduleAccessScope(user, "LEADS", "READ");
     const rows = await db.lead.findMany({
       where: withDepartment(
         {
-          ...leadListWhere(user),
+          ...leadListWhere(user, null, false, scope),
           ...(targetUserId && { assignedToId: targetUserId }),
           ...(hasRange && { createdAt: range }),
         },
@@ -125,12 +167,13 @@ export async function GET(req: NextRequest) {
       user: l.assignedTo,
     }));
   } else if (mod === "tasks") {
+    const scope = admin ? ("all" as const) : await moduleAccessScope(user, "TASKS", "READ");
     const rows = await db.task.findMany({
       // Tasks have no departmentId column — narrow by whichever side (assignee
       // or creator) belongs to the chosen department instead.
       where: withDepartment(
         {
-          ...taskListWhere(user),
+          ...taskListWhere(user, null, false, scope),
           ...(targetUserId && { assignedToId: targetUserId }),
           ...(hasRange && { dueDate: range }),
         },
@@ -150,13 +193,14 @@ export async function GET(req: NextRequest) {
       user: t.assignedTo,
     }));
   } else if (mod === "meetings") {
+    const scope = admin ? ("all" as const) : await moduleAccessScope(user, "MEETINGS", "READ");
     // A target user's meetings means ones they organised or were invited to —
     // the same definition the personal dashboard uses for "your meetings".
     const where = targetUserId
       ? { OR: [{ organizerId: targetUserId }, { attendees: { some: { id: targetUserId } } }] }
-      : admin
+      : scope === "all"
         ? {}
-        : { OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }] };
+        : { OR: [{ organizerId: user.id }, { attendees: { some: { id: user.id } } }, ...(scope ? [{ organizer: { departmentId: scope.departmentId } }] : [])] };
     const rows = await db.meeting.findMany({
       // No departmentId column on meetings either — scoped to the organizer's department.
       where: withDepartment(
@@ -177,10 +221,11 @@ export async function GET(req: NextRequest) {
       user: m.organizer,
     }));
   } else if (mod === "projects") {
+    const scope = admin ? ("all" as const) : await moduleAccessScope(user, "PROJECTS", "READ");
     const rows = await db.project.findMany({
       where: withDepartment(
         {
-          ...projectListWhere(user),
+          ...projectListWhere(user, null, false, scope),
           ...(targetUserId && {
             OR: [
               { assignedToId: targetUserId },
@@ -216,9 +261,17 @@ export async function GET(req: NextRequest) {
       user: p.assignedTo ?? p.createdBy,
     }));
   } else if (mod === "attendance") {
-    // Users see only their own attendance; admins see everyone's, unless
-    // narrowed to one person.
-    const where = targetUserId ? { userId: targetUserId } : admin ? {} : { userId: user.id };
+    // Users see only their own attendance; admins see everyone's; a
+    // Department Admin sees their own department without needing a
+    // Permission Manager grant — the same floor /api/dashboard/today-timeline
+    // already gives this specific module.
+    const where = targetUserId
+      ? { userId: targetUserId }
+      : admin
+        ? {}
+        : isDepartmentAdmin(user) && user.departmentId
+          ? { user: { departmentId: user.departmentId } }
+          : { userId: user.id };
     // `date` is a @db.Date column — MySQL silently truncates a DATETIME filter
     // against it down to a bare date, dropping the time-of-day. The client's
     // "today" window is a UTC instant pair straddling IST midnight (e.g.
@@ -276,6 +329,176 @@ export async function GET(req: NextRequest) {
         user: a.user,
       };
     });
+  } else if (mod === "clients") {
+    const membership = await getSocialMembership(user.id);
+    const scope = admin ? ("all" as const) : await moduleAccessScope(user, "CLIENTS", "READ");
+    const rows = await db.socialClient.findMany({
+      where: withDepartment(
+        {
+          ...socialClientListWhere(user, membership, scope),
+          ...(targetUserId && { OR: [{ createdById: targetUserId }, { assignedToId: targetUserId }] }),
+          ...(hasRange && { createdAt: range }),
+        },
+        departmentId ? { OR: [{ createdBy: { departmentId } }, { assignedTo: { departmentId } }] } : null
+      ),
+      select: { id: true, name: true, companyName: true, stage: true, createdAt: true, assignedTo: userSelect, createdBy: userSelect },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    items = rows.map((c) => ({
+      id: c.id,
+      title: c.name,
+      subtitle: c.companyName,
+      date: c.createdAt.toISOString(),
+      status: c.stage,
+      href: "/clients",
+      user: c.assignedTo ?? c.createdBy,
+    }));
+  } else if (mod === "notes") {
+    const scope = admin ? ("all" as const) : await moduleAccessScope(user, "NOTES", "READ");
+    const rows = await db.note.findMany({
+      where: withDepartment(
+        {
+          ...noteListWhere(user, scope),
+          ...(targetUserId && { authorId: targetUserId }),
+          ...(hasRange && { createdAt: range }),
+        },
+        departmentId ? { departmentId } : null
+      ),
+      select: { id: true, title: true, content: true, createdAt: true, author: userSelect },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    items = rows.map((n) => ({
+      id: n.id,
+      title: n.title || "Untitled note",
+      subtitle: n.content ? n.content.slice(0, 80) : null,
+      date: n.createdAt.toISOString(),
+      status: null,
+      href: "/notes",
+      user: n.author,
+    }));
+  } else if (mod === "expenses") {
+    // Same three-tier scoping as /api/expenses's own `?scope=all` branch:
+    // company-wide for an admin, department-wide for an EXPENSES grantee
+    // (Department Admin only — the module is admin-page-only), own claims
+    // for everyone else.
+    const moduleScope = admin ? ("all" as const) : await moduleAccessScope(user, "EXPENSES", "READ");
+    const scopeFilter: object =
+      moduleScope === "all" ? {} : moduleScope ? { user: { departmentId: moduleScope.departmentId } } : { userId: user.id };
+    const rows = await db.expense.findMany({
+      where: withDepartment(
+        {
+          ...scopeFilter,
+          ...(targetUserId && { userId: targetUserId }),
+          ...(hasRange && { createdAt: range }),
+          deletedAt: null,
+        },
+        departmentId ? { user: { departmentId } } : null
+      ),
+      select: { id: true, category: true, categoryOther: true, amount: true, status: true, createdAt: true, user: userSelect },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    items = rows.map((e) => ({
+      id: e.id,
+      title: e.category === "OTHER" && e.categoryOther ? e.categoryOther : humanize(e.category),
+      subtitle: `₹${toNumber(e.amount).toLocaleString("en-IN")}`,
+      date: e.createdAt.toISOString(),
+      status: e.status,
+      href: admin ? "/admin/expenses" : "/expenses",
+      user: e.user,
+    }));
+  } else if (mod === "leaves") {
+    // Same three-tier scoping as /api/leave-requests's own `?scope=all` branch.
+    const moduleScope = admin ? ("all" as const) : await moduleAccessScope(user, "LEAVE", "READ");
+    const scopeFilter: object =
+      moduleScope === "all" ? {} : moduleScope ? { user: { departmentId: moduleScope.departmentId } } : { userId: user.id };
+    const rows = await db.leaveRequest.findMany({
+      where: withDepartment(
+        {
+          ...scopeFilter,
+          ...(targetUserId && { userId: targetUserId }),
+          ...(hasRange && { createdAt: range }),
+          deletedAt: null,
+        },
+        departmentId ? { user: { departmentId } } : null
+      ),
+      select: { id: true, category: true, days: true, status: true, createdAt: true, user: userSelect },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    items = rows.map((l) => ({
+      id: l.id,
+      title: `${humanize(l.category)} leave`,
+      subtitle: `${l.days} day${l.days === 1 ? "" : "s"}`,
+      date: l.createdAt.toISOString(),
+      status: l.status,
+      href: admin ? "/admin/leave" : "/leave",
+      user: l.user,
+    }));
+  } else if (mod === "birthdays") {
+    // Not scoped by department/admin at all — a birthday isn't "owned" by the
+    // viewer, and everyone already sees the same company-wide birthday
+    // banner elsewhere on their dashboard.
+    const people = await db.user.findMany({
+      where: { isActive: true, birthday: { not: null }, ...(targetUserId && { id: targetUserId }) },
+      select: { id: true, name: true, surname: true, avatarDataUrl: true, birthday: true },
+    });
+    // The window's start day, in IST, is the reference "today" birthdayInfo
+    // measures from — matches how the client computed `from` for whichever
+    // period (today/yesterday/range) is selected.
+    const refKey = from && !Number.isNaN(from.getTime()) ? istDateKey(from) : istDateKey();
+    // "Upcoming" has no `to` (open-ended) — cap the look-ahead so it doesn't
+    // just list the entire company sorted by nearest birthday.
+    const spanDays =
+      to && !Number.isNaN(to.getTime()) && from ? Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1) : 30;
+    const celebrants = people
+      .map((p) => ({ ...p, info: birthdayInfo(keyFromDate(p.birthday!), refKey) }))
+      .filter((p) => p.info.daysUntil < spanDays)
+      .sort((a, b) => a.info.daysUntil - b.info.daysUntil);
+    items = celebrants.slice(0, 100).map((p) => ({
+      id: p.id,
+      title: `${p.name}${p.surname ? ` ${p.surname}` : ""}`,
+      subtitle: p.info.daysUntil === 0 ? "Today" : p.info.daysUntil === 1 ? "Tomorrow" : `Turning ${p.info.turning}`,
+      date: dateFromKey(birthdayDateInYear(p.info.month, p.info.day, p.info.year)).toISOString(),
+      status: null,
+      href: "/birthdays",
+      user: { name: p.name, avatarDataUrl: p.avatarDataUrl },
+    }));
+  } else if (mod === "forms") {
+    // Forms is a flat, company-wide capability (same as Birthdays) — admins,
+    // department admins (Social Media/CRM lead or a FORMS grant), see every
+    // submission; everyone else only submissions for forms their own
+    // department was explicitly shared on, or that they created themselves.
+    const canSeeAll = await canManageForms(user);
+    const rows = await db.formSubmission.findMany({
+      where: {
+        ...(hasRange && { createdAt: range }),
+        ...(canSeeAll
+          ? {}
+          : {
+              form: {
+                OR: [
+                  { createdById: user.id },
+                  ...(user.departmentId ? [{ viewerDepartments: { some: { departmentId: user.departmentId } } } as object] : []),
+                ],
+              },
+            }),
+      },
+      select: { id: true, createdAt: true, form: { select: { id: true, title: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    items = rows.map((s) => ({
+      id: s.id,
+      title: s.form.title,
+      subtitle: "Form submission",
+      date: s.createdAt.toISOString(),
+      status: null,
+      href: `/forms/${s.form.id}/submissions`,
+      user: null,
+    }));
   } else if (mod === "quotations") {
     // Reachable only by admins (guarded above), so no own-records fallback is
     // needed the way the other modules have one for non-admin callers.
