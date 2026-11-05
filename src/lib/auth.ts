@@ -99,7 +99,7 @@ async function sendNewSignInAlert(userId: string, email: string, userAgent: stri
     await sendMail({
       to: email,
       subject: "New sign-in to your Aina CRM account",
-      html: newSignInEmailHtml({ name: user.name, userAgent, ip }),
+      html: await newSignInEmailHtml({ name: user.name, userAgent, ip }),
     });
   } catch (err) {
     console.error(`[auth] Failed to send new-sign-in alert to ${email}:`, err);
@@ -113,11 +113,18 @@ async function sendNewSignInAlert(userId: string, email: string, userAgent: stri
  */
 export async function createSessionCookie(payload: SessionPayload, req?: NextRequest) {
   const { userAgent, ip } = deviceInfoFrom(req);
+
+  // Only alert on a device we haven't seen this user sign in from before —
+  // an exact user-agent match against any prior session. A missing UA can't
+  // be matched either way, so it's always treated as unrecognized.
+  const isKnownDevice =
+    !!userAgent && (await db.session.findFirst({ where: { userId: payload.userId, userAgent }, select: { id: true } })) !== null;
+
   const session = await db.session.create({
     data: { userId: payload.userId, userAgent, ip },
   });
 
-  void sendNewSignInAlert(payload.userId, payload.email, userAgent, ip);
+  if (!isKnownDevice) void sendNewSignInAlert(payload.userId, payload.email, userAgent, ip);
 
   const token = await signSessionToken({ ...payload, sid: session.id });
   const cookieStore = await cookies();

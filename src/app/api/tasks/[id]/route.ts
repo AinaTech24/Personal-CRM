@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { broadcastTaskChange, canDeleteTask, completedAtFor, getTaskForUser } from "@/lib/tasks";
+import { broadcastTaskChange, canDeleteTask, completedAtFor, emailTaskAssignees, getTaskForUser } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
 import { emitToUser } from "@/lib/socket-emit";
+import { getAppUrl } from "@/lib/app-settings";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -97,6 +98,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         )
       )
     );
+    void getAppUrl().then((appUrl) => emailTaskAssignees(newlyAdded, task, user.name, appUrl ?? req.nextUrl.origin));
   }
 
   broadcastTaskChange("task_updated", task);

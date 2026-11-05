@@ -6,6 +6,7 @@ import type { ModuleAction } from "@/lib/module-permissions";
 import { emitToAdmins, emitToUser } from "@/lib/socket-emit";
 import { socialMediaTeamScopeFor } from "@/lib/social-media";
 import { TRASH_RETENTION_DAYS, trashExpiresAt, type TrashActionResult, type TrashItem } from "@/lib/trash-types";
+import { sendMail, taskAssignedEmailHtml } from "@/lib/mailer";
 
 interface TaskAssigneeShape {
   assignedToId?: string | null;
@@ -159,6 +160,31 @@ export function taskListWhere(
     );
   }
   return { AND: [{ deletedAt: deletedAtWhere }, { OR: or }] };
+}
+
+/**
+ * Best-effort "you've been assigned a task" email to each newly-assigned
+ * user, alongside the in-app notification/push these call sites already
+ * send — never blocks the response, and one recipient's failure doesn't
+ * stop the others.
+ */
+export async function emailTaskAssignees(
+  ids: string[],
+  task: { title: string; dueDate: Date | null },
+  actorName: string,
+  appUrl: string
+) {
+  if (ids.length === 0) return;
+  const recipients = await db.user.findMany({ where: { id: { in: ids } }, select: { name: true, email: true } });
+  const dueDate = task.dueDate ? task.dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : null;
+  await Promise.all(
+    recipients.map(async (r) => {
+      const html = await taskAssignedEmailHtml({ name: r.name, taskTitle: task.title, actorName, dueDate, taskUrl: `${appUrl}/tasks` });
+      return sendMail({ to: r.email, subject: `Task assigned: ${task.title}`, html }).catch((err) =>
+        console.error("[tasks] Assignment email failed:", err)
+      );
+    })
+  );
 }
 
 export function broadcastTaskChange(

@@ -21,6 +21,6 @@ export async function issuePasswordResetCode(user: { id: string; name: string; e
   await sendMail({
     to: user.email,
     subject: "Your Aina CRM sign-in code",
-    html: resetCodeEmailHtml({ name: user.name, code }),
+    html: await resetCodeEmailHtml({ name: user.name, code }),
   });
 }

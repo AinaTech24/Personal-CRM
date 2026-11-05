@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { sendMail } from "@/lib/mailer";
 import { dateFromKey, summarize, type AttendanceSummary } from "@/lib/attendance";
+import { emailLayout, getCompanyBrand, type CompanyBrand } from "@/lib/email-template";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -25,11 +26,6 @@ export function previousMonth(now: Date = new Date()): { year: number; month0: n
   return m === 0 ? { year: y - 1, month0: 11 } : { year: y, month0: m - 1 };
 }
 
-interface CompanyBrand {
-  name: string;
-  logoDataUrl: string | null;
-}
-
 function summaryRow(label: string, value: string, accent?: string) {
   return `<tr>
     <td style="padding:8px 12px;border-bottom:1px solid #eee;color:#555;">${label}</td>
@@ -44,27 +40,22 @@ export function monthlyAttendanceEmailHtml(opts: {
   company: CompanyBrand;
 }): string {
   const { name, monthLabel, summary, company } = opts;
-  const logo = company.logoDataUrl
-    ? `<img src="${company.logoDataUrl}" alt="${company.name}" style="max-height:48px;max-width:180px;object-fit:contain;" />`
-    : `<div style="font-size:20px;font-weight:700;color:#111;">${company.name || "Aina CRM"}</div>`;
-
-  return `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;color:#111;">
-    <div style="padding:20px 0;border-bottom:2px solid #dc2626;">${logo}</div>
-    <h2 style="margin:24px 0 4px;">Attendance summary — ${monthLabel}</h2>
-    <p style="margin:0 0 20px;color:#555;">Hi ${name}, here's your attendance snapshot for ${monthLabel}.</p>
-    <table style="width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:8px;overflow:hidden;">
-      ${summaryRow("Present Days", String(summary.present), "#059669")}
-      ${summaryRow("Half Days", String(summary.halfDay), "#d97706")}
-      ${summaryRow("Absent Days", String(summary.absent), "#dc2626")}
-      ${summaryRow("Pending", String(summary.pending))}
-      ${summaryRow("Working Days", String(summary.workingDays))}
-      ${summaryRow("Attendance", `${summary.attendancePercent.toFixed(1)}%`)}
-    </table>
-    <p style="margin:20px 0 0;font-size:12px;color:#999;">
-      This is an automated monthly report from ${company.name || "Aina CRM"}. Attendance % counts a half day as 0.5.
-    </p>
-  </div>`;
+  return emailLayout({
+    brand: company,
+    heading: `Attendance summary — ${monthLabel}`,
+    bodyHtml: `
+      <p style="margin:0 0 20px;color:#555;">Hi ${name}, here's your attendance snapshot for ${monthLabel}.</p>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #eee;border-radius:8px;overflow:hidden;">
+        ${summaryRow("Present Days", String(summary.present), "#059669")}
+        ${summaryRow("Half Days", String(summary.halfDay), "#d97706")}
+        ${summaryRow("Absent Days", String(summary.absent), "#dc2626")}
+        ${summaryRow("Pending", String(summary.pending))}
+        ${summaryRow("Working Days", String(summary.workingDays))}
+        ${summaryRow("Attendance", `${summary.attendancePercent.toFixed(1)}%`)}
+      </table>
+    `,
+    footerNote: `This is an automated monthly report from ${company.name}. Attendance % counts a half day as 0.5.`,
+  });
 }
 
 export interface MonthlyReportResult {
@@ -83,11 +74,10 @@ export async function sendMonthlyReports(year?: number, month0?: number): Promis
   const target = year != null && month0 != null ? { year, month0 } : previousMonth();
   const { fromKey, toKey, label } = monthRange(target.year, target.month0);
 
-  const [company, users] = await Promise.all([
-    db.companyProfile.findUnique({ where: { id: "default" } }),
+  const [brand, users] = await Promise.all([
+    getCompanyBrand(),
     db.user.findMany({ where: { isActive: true }, select: { id: true, name: true, email: true } }),
   ]);
-  const brand: CompanyBrand = { name: company?.name ?? "Aina CRM", logoDataUrl: company?.logoDataUrl ?? null };
 
   let sent = 0;
   let skippedNoData = 0;

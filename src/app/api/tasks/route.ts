@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { broadcastTaskChange, canDeleteTask, completedAtFor, taskListWhere } from "@/lib/tasks";
+import { broadcastTaskChange, canDeleteTask, completedAtFor, emailTaskAssignees, taskListWhere } from "@/lib/tasks";
 import { notifyAndPush } from "@/lib/notify";
 import { resolveTeamScope } from "@/lib/team-scope";
 import { moduleAccessScope, isModuleBlocked } from "@/lib/module-permissions-store";
 import { parsePageParams } from "@/lib/pagination";
 import { parseFilterParam, UNASSIGNED } from "@/lib/filter-utils";
+import { getAppUrl } from "@/lib/app-settings";
 
 /**
  * Every filter the board's own facets (assignee/status/priority) and
@@ -113,18 +114,18 @@ export async function POST(req: NextRequest) {
     include: { assignees: { select: { id: true } } },
   });
 
+  const notifyIds = assigneeIds.filter((id) => id !== user.id);
   await Promise.all(
-    assigneeIds
-      .filter((id) => id !== user.id)
-      .map((id) =>
-        notifyAndPush(
-          id,
-          "task_assigned",
-          { taskId: task.id, taskTitle: task.title, actorName: user.name },
-          { title: "Task assigned", body: `${user.name} assigned you the task "${task.title}"`, url: "/tasks", tag: "task-assigned" }
-        )
+    notifyIds.map((id) =>
+      notifyAndPush(
+        id,
+        "task_assigned",
+        { taskId: task.id, taskTitle: task.title, actorName: user.name },
+        { title: "Task assigned", body: `${user.name} assigned you the task "${task.title}"`, url: "/tasks", tag: "task-assigned" }
       )
+    )
   );
+  void getAppUrl().then((appUrl) => emailTaskAssignees(notifyIds, task, user.name, appUrl ?? req.nextUrl.origin));
 
   broadcastTaskChange("task_created", task);
 
