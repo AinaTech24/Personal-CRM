@@ -190,18 +190,40 @@ export function TodayTimeline() {
   useEffect(() => {
     setData(null);
     setError(false);
-    const load = () =>
-      fetch(`/api/dashboard/today-timeline?view=${view}`)
+    let cancelled = false;
+    // On a warm connection the API can answer in well under 100ms — fast enough that the
+    // skeleton swaps for real content before it ever registers as "loading" (right after
+    // sign-in, this reads as the widget showing up already populated). Holding the skeleton
+    // up for at least this long makes the loading state something a person can actually see,
+    // without adding any perceptible delay to a response that takes longer anyway.
+    const MIN_SKELETON_MS = 400;
+    const load = () => {
+      const startedAt = Date.now();
+      return fetch(`/api/dashboard/today-timeline?view=${view}`)
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error("request failed"))))
-        .then((d) => {
-          setData({ days: d?.days ?? [], users: d?.users ?? [] });
-          setError(false);
-        })
-        .catch(() => setError(true));
+        .then(
+          (d) =>
+            new Promise<void>((resolve) => {
+              setTimeout(() => {
+                if (!cancelled) {
+                  setData({ days: d?.days ?? [], users: d?.users ?? [] });
+                  setError(false);
+                }
+                resolve();
+              }, Math.max(0, MIN_SKELETON_MS - (Date.now() - startedAt)));
+            })
+        )
+        .catch(() => {
+          if (!cancelled) setError(true);
+        });
+    };
     load();
     // Re-pull every 2 minutes so a task added/edited elsewhere shows up without a manual reload.
     const id = setInterval(load, 120_000);
-    return () => clearInterval(id);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [view]);
 
   // The "now" line — recomputed every minute so it actually moves while the page sits open.
