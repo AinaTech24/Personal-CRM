@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { verifyPassword, createSessionCookie } from "@/lib/auth";
+import { verifyPassword, createSessionCookie, createPendingMfaCookie } from "@/lib/auth";
 import { requestDevice } from "@/lib/request-info";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -59,15 +59,14 @@ export async function POST(req: NextRequest) {
     if (claimed.count === 0) {
       return NextResponse.json({ error: "This code has already been used." }, { status: 409 });
     }
-    await createSessionCookie(
-      {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-        departmentId: user.departmentId,
-      },
-      req
-    );
+    const payload = { userId: user.id, email: user.email, role: user.role, departmentId: user.departmentId };
+
+    if (user.totpEnabled) {
+      await createPendingMfaCookie(payload);
+      return NextResponse.json({ mfaRequired: true });
+    }
+
+    await createSessionCookie(payload, req);
 
     return NextResponse.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role } });
   } catch (err) {

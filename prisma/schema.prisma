@@ -187,6 +187,17 @@ model User {
   pinResetCode          String? // bcrypt hash of the mobile-based PIN-reset OTP
   pinResetCodeExpiresAt DateTime?
 
+  // Two-factor auth (TOTP, authenticator apps like Google/Microsoft
+  // Authenticator) — opt-in, alongside password/PIN/email-code login. Never
+  // required until totpEnabled is true. Secret is encrypted at rest via
+  // src/lib/crypto.ts (same AES-256-GCM key already used for Password
+  // Manager/SMTP secrets), never stored or returned in plaintext after setup.
+  totpSecret          String? @db.Text
+  totpEnabled         Boolean @default(false)
+  // JSON array of bcrypt hashes, one per unused one-time backup code. Each
+  // entry is removed from the array once consumed.
+  totpBackupCodesHash String? @db.Text
+
   // Preferences
   // Fixed app-wide (Asia/Kolkata), not user-editable. Left nullable on purpose:
   // making it required would fail db push against rows that predate the column,
@@ -196,6 +207,19 @@ model User {
   defaultLandingPage String? // e.g. "/leads" — null means the Dashboard default
   density            String  @default("comfortable") // "comfortable" | "compact"
 
+  // Security: emailed whenever a new Session row is created for this account
+  // (src/lib/auth.ts's createSessionCookie) — on by default, matching the
+  // "alert on new sign-in" default most accounts expect.
+  notifyOnNewSignIn Boolean @default(true)
+
+  // "HH:mm" in IST, both null = disabled (the default). When set, push
+  // notifications (not in-app ones — those still land, just silently) are
+  // withheld while the current IST time falls in [start, end); a window that
+  // wraps past midnight (e.g. 22:00–07:00) is supported the same way
+  // src/lib/attendance.ts's withinWindow already handles attendance shifts.
+  quietHoursStart String?
+  quietHoursEnd   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -203,6 +227,7 @@ model User {
   notifications     Notification[]
   notificationPrefs NotificationPreference[]
   sessions          Session[]
+  passkeys          Passkey[]
 
   leadsCreated   Lead[]         @relation("LeadCreatedBy")
   leadsAssigned  Lead[]         @relation("LeadAssignedTo")
@@ -414,6 +439,35 @@ model Session {
   createdAt  DateTime  @default(now())
   lastSeenAt DateTime  @default(now())
   revokedAt  DateTime?
+
+  @@index([userId])
+}
+
+/**
+ * A registered WebAuthn credential (passkey) — lets a user sign in without a
+ * password via a platform authenticator (Windows Hello, Touch/Face ID) or a
+ * security key. `credentialId` and `publicKey` are the values WebAuthn itself
+ * returns; neither is a secret the server generated, so unlike totpSecret
+ * they're stored as-is (the private key never leaves the authenticator).
+ */
+model Passkey {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String    @unique @db.VarChar(255)
+  publicKey    String    @db.Text
+  // Signature counter reported by the authenticator, used to detect cloned
+  // credentials (should only ever increase). BigInt since some authenticators
+  // use a timestamp-like counter rather than a small incrementing integer.
+  counter      BigInt    @default(0)
+  deviceType   String // "singleDevice" | "multiDevice" (passkey synced across a platform account)
+  backedUp     Boolean   @default(false)
+  transports   String? // comma-separated, e.g. "internal,hybrid"
+  // User-chosen label set at registration time (e.g. "Work laptop"), shown in
+  // Settings > Security so multiple passkeys are distinguishable.
+  name         String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
 
   @@index([userId])
 }
@@ -1171,6 +1225,33 @@ model UserLeave {
 
   @@unique([userId, date])
   @@index([date])
+}
+
+/// Company-wide paid/unpaid leave allowances — replaces the old hardcoded
+/// ANNUAL_LEAVE_ALLOWANCE constant (src/lib/leave.ts) so Admin/Super Admin
+/// (or a Department Admin holding a LEAVE module grant with Update — see
+/// /api/leave-policy) can configure it instead of a code change. Everyone
+/// signed in can read it (see getLeavePolicy) so the numbers show the same
+/// way on a Department User's own "My Leave" page as on Admin > Leave
+/// Requests. Singleton row, same id="default" pattern as AttendanceSettings.
+model LeavePolicy {
+  id String @id @default("default")
+
+  /// Paid leave days allowed per calendar year, pooled across every
+  /// LeaveCategory except UNPAID (Casual/Sick/Earned/Other share this one
+  /// number, same as the constant it replaces).
+  paidYearlyAllowance Int @default(12)
+  /// Paid leave days allowed from that same pool in any single calendar
+  /// month. Null = no monthly cap, only the yearly one applies.
+  paidMonthlyAllowance Int?
+  /// Unpaid leave days allowed per calendar year. Null = unlimited — the
+  /// only behavior that existed before this model did.
+  unpaidYearlyAllowance Int?
+  /// Unpaid leave days allowed in any single calendar month. Null = no
+  /// monthly cap.
+  unpaidMonthlyAllowance Int?
+
+  updatedAt DateTime @updatedAt
 }
 
 model AttendanceSettings {

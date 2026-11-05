@@ -119,6 +119,12 @@ interface ModuleDef {
   icon: typeof IconSearch;
 }
 
+/** One Arrow-key-navigable, Enter-activatable row in the palette's current list (recents or live results). */
+interface NavItem {
+  id: string;
+  activate: () => void;
+}
+
 /**
  * The top-level modules worth remembering as "recently visited" — a fixed
  * list rather than importing the sidebar's own nav arrays, which aren't
@@ -191,6 +197,7 @@ export function CommandPalette() {
   const [recentModulesRaw, setRecentModulesRaw] = useState<ModuleDef[]>([]);
   const [blockedModules, setBlockedModules] = useState<string[]>([]);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   // Filtered at render time, not baked into state when loaded — so a blocked/hidden
   // fetch that resolves after the palette is already open still takes effect, without
   // re-running (and resetting) the open-triggered load effect below. Hidden modules
@@ -265,6 +272,7 @@ export function CommandPalette() {
       );
       setQuery("");
       setResults([]);
+      setHighlightedIndex(0);
       setTimeout(() => inputRef.current?.focus(), 30);
     }
   }, [open]);
@@ -273,6 +281,7 @@ export function CommandPalette() {
   // the API's own floor (too broad to be useful, and a single keystroke
   // would otherwise fan out into 16 parallel queries for nothing).
   useEffect(() => {
+    setHighlightedIndex(0);
     const q = query.trim();
     if (q.length < 2) {
       setResults([]);
@@ -322,15 +331,41 @@ export function CommandPalette() {
     setRecentModulesRaw([]);
   }
 
-  function goToModule(mod: ModuleDef) {
-    setOpen(false);
-    router.push(mod.href);
-  }
+  const goToModule = useCallback(
+    (mod: ModuleDef) => {
+      setOpen(false);
+      router.push(mod.href);
+    },
+    [router]
+  );
 
-  // Pressing Enter records the term as a recent search.
   function onInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && query.trim()) {
-      rememberSearch(query.trim());
+    if (e.key === "ArrowDown") {
+      if (navItems.length) {
+        e.preventDefault();
+        setHighlightedIndex((i) => (i + 1) % navItems.length);
+      }
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      if (navItems.length) {
+        e.preventDefault();
+        setHighlightedIndex((i) => (i - 1 + navItems.length) % navItems.length);
+      }
+      return;
+    }
+    if (e.key === "Enter") {
+      // Activating a result already remembers the search term itself (see
+      // `select`) — only do it here when there's nothing to activate, so
+      // free-typed text that matched nothing is still saved as a recent
+      // search instead of silently doing nothing.
+      const item = navItems[highlightedIndex];
+      if (item) {
+        e.preventDefault();
+        item.activate();
+      } else if (query.trim()) {
+        rememberSearch(query.trim());
+      }
     }
   }
 
@@ -346,6 +381,21 @@ export function CommandPalette() {
   );
 
   const showRecents = !query.trim();
+
+  // One flat, render-order-matched list of everything Arrow keys can move
+  // through and Enter can activate — recent searches / pages / modules while
+  // showRecents, otherwise live results. "search" items fill the box rather
+  // than navigating, matching their click behavior below.
+  const navItems: NavItem[] = showRecents
+    ? [
+        ...recentSearches.map((s): NavItem => ({ id: `cmdk-search-${s}`, activate: () => setQuery(s) })),
+        ...recentPages.map((r): NavItem => ({ id: `cmdk-page-${r.type}-${r.id}`, activate: () => select(r) })),
+        ...recentModules.map((mod): NavItem => ({ id: `cmdk-module-${mod.href}`, activate: () => goToModule(mod) })),
+      ]
+    : query.trim().length < 2 || loading
+      ? []
+      : results.map((r): NavItem => ({ id: `cmdk-result-${r.type}-${r.id}`, activate: () => select(r) }));
+  const activeItemId = navItems[highlightedIndex]?.id;
 
   return (
     <>
@@ -372,6 +422,11 @@ export function CommandPalette() {
               <IconSearch className="h-4 w-4 shrink-0 text-muted-foreground" />
               <input
                 ref={inputRef}
+                role="combobox"
+                aria-expanded={open}
+                aria-controls="command-palette-listbox"
+                aria-autocomplete="list"
+                aria-activedescendant={activeItemId}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onInputKeyDown}
@@ -393,7 +448,7 @@ export function CommandPalette() {
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2">
+            <div id="command-palette-listbox" role="listbox" aria-label="Search results" className="flex-1 overflow-y-auto p-2">
               {showRecents ? (
                 <>
                   {recentSearches.length > 0 && (
@@ -415,9 +470,15 @@ export function CommandPalette() {
                       {recentSearches.map((s) => (
                         <button
                           key={s}
+                          id={`cmdk-search-${s}`}
+                          role="option"
+                          aria-selected={activeItemId === `cmdk-search-${s}`}
                           type="button"
                           onClick={() => setQuery(s)}
-                          className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-primary/5"
+                          className={cn(
+                            "flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-primary/5",
+                            activeItemId === `cmdk-search-${s}` && "bg-primary/5"
+                          )}
                         >
                           <IconClock className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <span className="truncate">{s}</span>
@@ -442,7 +503,13 @@ export function CommandPalette() {
                         </button>
                       </div>
                       {recentPages.map((r) => (
-                        <ResultRow key={`${r.type}-${r.id}`} result={r} onSelect={select} />
+                        <ResultRow
+                          key={`${r.type}-${r.id}`}
+                          id={`cmdk-page-${r.type}-${r.id}`}
+                          highlighted={activeItemId === `cmdk-page-${r.type}-${r.id}`}
+                          result={r}
+                          onSelect={select}
+                        />
                       ))}
                     </div>
                   )}
@@ -465,9 +532,15 @@ export function CommandPalette() {
                       {recentModules.map((mod) => (
                         <button
                           key={mod.href}
+                          id={`cmdk-module-${mod.href}`}
+                          role="option"
+                          aria-selected={activeItemId === `cmdk-module-${mod.href}`}
                           type="button"
                           onClick={() => goToModule(mod)}
-                          className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-primary/5"
+                          className={cn(
+                            "flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-primary/5",
+                            activeItemId === `cmdk-module-${mod.href}` && "bg-primary/5"
+                          )}
                         >
                           <mod.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <span className="min-w-0 flex-1 truncate font-medium">{mod.label}</span>
@@ -488,7 +561,16 @@ export function CommandPalette() {
               ) : results.length === 0 ? (
                 <p className="px-2 py-8 text-center text-sm text-muted-foreground">No results for “{query}”</p>
               ) : (
-                results.map((r) => <ResultRow key={`${r.type}-${r.id}`} result={r} onSelect={select} query={query} />)
+                results.map((r) => (
+                  <ResultRow
+                    key={`${r.type}-${r.id}`}
+                    id={`cmdk-result-${r.type}-${r.id}`}
+                    highlighted={activeItemId === `cmdk-result-${r.type}-${r.id}`}
+                    result={r}
+                    onSelect={select}
+                    query={query}
+                  />
+                ))
               )}
             </div>
           </Dialog.Content>
@@ -498,13 +580,31 @@ export function CommandPalette() {
   );
 }
 
-function ResultRow({ result, onSelect, query = "" }: { result: SearchResult; onSelect: (r: SearchResult) => void; query?: string }) {
+function ResultRow({
+  result,
+  onSelect,
+  query = "",
+  id,
+  highlighted = false,
+}: {
+  result: SearchResult;
+  onSelect: (r: SearchResult) => void;
+  query?: string;
+  id?: string;
+  highlighted?: boolean;
+}) {
   const Icon = TYPE_ICON[result.type];
   return (
     <button
+      id={id}
+      role="option"
+      aria-selected={highlighted}
       type="button"
       onClick={() => onSelect(result)}
-      className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-primary/5"
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left text-sm hover:bg-primary/5",
+        highlighted && "bg-primary/5"
+      )}
     >
       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1 truncate">

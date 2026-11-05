@@ -223,7 +223,7 @@ export async function POST(req: NextRequest) {
     await sendMail({
       to: email,
       subject: "You're invited to Aina CRM",
-      html: inviteEmailHtml({ inviterName: user.name, acceptUrl }),
+      html: await inviteEmailHtml({ inviterName: user.name, acceptUrl }),
     });
   } catch (err) {
     console.error("[invites] Failed to send invite email", err);

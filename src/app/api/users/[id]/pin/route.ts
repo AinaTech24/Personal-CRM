@@ -63,7 +63,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   await sendMail({
     to: target.email,
     subject: "Your Aina CRM PIN was reset",
-    html: pinResetByAdminEmailHtml({ name: target.name, adminName: admin.name }),
+    html: await pinResetByAdminEmailHtml({ name: target.name, adminName: admin.name }),
   }).catch((err) => console.error("[api/users/[id]/pin] notification email failed:", err));
 
   // Only returned when the admin didn't supply one themselves — the whole

@@ -48,6 +48,22 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        // The standalone (non-iframe) form export — src/lib/forms/standalone-export.ts
+        // — is a static HTML file meant to be hosted on ANY third-party site, not
+        // just the frame-ancestors allowlist above (that only governs framing, and
+        // this isn't framed at all — it's real <input> fields that fetch() POST
+        // here directly). The route is already public/unauthenticated with no
+        // cookies and its own per-IP rate limit, so `*` doesn't widen what it
+        // exposes; without this, the browser's CORS preflight blocks every
+        // cross-origin submission before it reaches the route at all.
+        source: "/api/forms/by-slug/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS" },
+          { key: "Access-Control-Allow-Headers", value: "Content-Type" },
+        ],
+      },
     ];
   },
 };

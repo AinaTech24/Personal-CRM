@@ -16,7 +16,7 @@ import { SelectionBar } from "@/components/ui/selection-bar";
 import { RowActionsMenu, type RowAction } from "@/components/ui/row-actions";
 import { HorizontalScrollbar } from "@/components/ui/horizontal-scrollbar";
 import { RecencyBadge } from "@/components/ui/recency-badge";
-import { IconPencil, IconTrash, IconBell, IconCopy } from "@/components/icons";
+import { IconPencil, IconTrash, IconBell, IconCopy, IconChevronRight } from "@/components/icons";
 import { NewTaskDialog } from "@/components/tasks/new-task-dialog";
 import { TaskDetailDialog } from "@/components/tasks/task-detail-dialog";
 import { TasksListView } from "@/components/tasks/tasks-list-view";
@@ -336,6 +336,23 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
     if (canManage(task)) {
       actions.push({ key: "edit", label: "Edit", icon: <IconPencil className="h-3.5 w-3.5" />, onSelect: () => setSelectedTask(task) });
       actions.push({ key: "duplicate", label: "Duplicate", icon: <IconCopy className="h-3.5 w-3.5" />, onSelect: () => duplicateTask(task) });
+      // The pipeline's drag-and-drop is native HTML5 DnD, which doesn't fire
+      // from touch input at all — this is the only way to change a task's
+      // status on a phone without opening the full detail dialog.
+      const otherStatuses = TASK_STATUSES.filter((s) => s.value !== task.status);
+      if (otherStatuses.length > 0) {
+        actions.push({
+          key: "move",
+          label: "Move to…",
+          icon: <IconChevronRight className="h-3.5 w-3.5" />,
+          items: otherStatuses.map((s) => ({
+            key: `move-${s.value}`,
+            label: s.label,
+            icon: <IconChevronRight className="h-3.5 w-3.5" />,
+            onSelect: () => moveTask(task.id, s.value),
+          })),
+        });
+      }
     }
     if (fullAccess && taskAssignees(task).some((a) => a.id !== currentUserId)) {
       actions.push({ key: "remind", label: "Send reminder", icon: <IconBell className="h-3.5 w-3.5" />, onSelect: () => remindTask(task) });

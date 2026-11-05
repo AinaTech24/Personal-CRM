@@ -281,7 +281,13 @@ export function UserMenu({ name, email, isAdmin }: { name: string; email: string
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
 
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} isAdmin={isAdmin} onSaved={refreshAvatar} />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        isAdmin={isAdmin}
+        isDepartmentAdmin={isDepartmentAdmin}
+        onSaved={refreshAvatar}
+      />
 
       <ConfirmDialog
         open={logoutOpen}

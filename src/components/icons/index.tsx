@@ -233,6 +233,25 @@ export function IconCheck(props: IconProps) {
   );
 }
 
+/** A single checkmark — the chat "sent" message tick. */
+export function IconTick(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+/** Two overlapping checkmarks — the chat "delivered"/"read" message ticks. */
+export function IconDoubleTick(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M18 6 7 17l-5-5" />
+      <path d="m22 10-7.5 7.5L13 16" />
+    </svg>
+  );
+}
+
 export function IconCalendar(props: IconProps) {
   return (
     <svg {...base(props)}>

@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       await sendMail({
         to: user.email,
         subject: "Reset your Aina CRM PIN",
-        html: pinResetCodeEmailHtml({ name: user.name, code }),
+        html: await pinResetCodeEmailHtml({ name: user.name, code }),
       });
     }
 

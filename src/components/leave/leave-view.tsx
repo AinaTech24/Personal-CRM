@@ -9,6 +9,7 @@ import { IconCalendar, IconCheck, IconClock, IconPlus, IconTrash, IconX } from "
 import { useToast } from "@/components/providers/toast-provider";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { ApplyLeaveDialog } from "@/components/leave/apply-leave-dialog";
+import { LeavePolicyCard } from "@/components/leave/leave-policy-card";
 import {
   categoryLabel,
   fmtApplied,
@@ -24,6 +25,10 @@ interface Summary {
   balance: number;
   pending: number;
   rejected: number;
+  paidTakenThisMonth: number;
+  paidTakenThisYear: number;
+  unpaidTakenThisMonth: number;
+  unpaidTakenThisYear: number;
 }
 
 const pad = (n: number) => (Number.isInteger(n) ? String(n).padStart(2, "0") : n.toFixed(1));
@@ -123,6 +128,17 @@ export function LeaveView() {
           </div>
         )}
       </section>
+
+      {summary && (
+        <LeavePolicyCard
+          usage={{
+            paidTakenThisMonth: summary.paidTakenThisMonth,
+            paidTakenThisYear: summary.paidTakenThisYear,
+            unpaidTakenThisMonth: summary.unpaidTakenThisMonth,
+            unpaidTakenThisYear: summary.unpaidTakenThisYear,
+          }}
+        />
+      )}
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold">Leave request history</h2>

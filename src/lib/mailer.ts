@@ -3,6 +3,7 @@ import net from "node:net";
 import nodemailer from "nodemailer";
 import { db } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
+import { emailButton, emailLayout, getCompanyBrand } from "@/lib/email-template";
 
 interface ResolvedConfig {
   host: string;
@@ -117,47 +118,135 @@ export async function verifySmtp(): Promise<{ ok: boolean; error?: string }> {
   }
 }
 
-export function resetCodeEmailHtml(opts: { name: string; code: string }) {
-  return `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2>Your Aina CRM sign-in code</h2>
-      <p>Hi ${opts.name}, use the code below to sign in:</p>
-      <p style="font-size:30px;font-weight:700;letter-spacing:8px;margin:20px 0;color:#111;">${opts.code}</p>
-      <p>This code expires in 10 minutes. If you didn't request it, you can ignore this email.</p>
-    </div>
-  `;
+export async function resetCodeEmailHtml(opts: { name: string; code: string }) {
+  return emailLayout({
+    brand: await getCompanyBrand(),
+    heading: "Your sign-in code",
+    bodyHtml: `
+      <p style="margin:0 0 16px;color:#555;">Hi ${opts.name}, use the code below to sign in:</p>
+      <p style="font-size:30px;font-weight:700;letter-spacing:8px;margin:0 0 16px;color:#111;">${opts.code}</p>
+      <p style="margin:0;color:#555;">This code expires in 10 minutes. If you didn't request it, you can ignore this email.</p>
+    `,
+  });
 }
 
-export function pinResetCodeEmailHtml(opts: { name: string; code: string }) {
-  return `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2>Reset your Aina CRM PIN</h2>
-      <p>Hi ${opts.name}, use the code below to reset your sign-in PIN:</p>
-      <p style="font-size:30px;font-weight:700;letter-spacing:8px;margin:20px 0;color:#111;">${opts.code}</p>
-      <p>This code expires in 10 minutes. If you didn't request it, you can ignore this email — your PIN stays unchanged.</p>
-    </div>
-  `;
+export async function pinResetCodeEmailHtml(opts: { name: string; code: string }) {
+  return emailLayout({
+    brand: await getCompanyBrand(),
+    heading: "Reset your PIN",
+    bodyHtml: `
+      <p style="margin:0 0 16px;color:#555;">Hi ${opts.name}, use the code below to reset your sign-in PIN:</p>
+      <p style="font-size:30px;font-weight:700;letter-spacing:8px;margin:0 0 16px;color:#111;">${opts.code}</p>
+      <p style="margin:0;color:#555;">This code expires in 10 minutes. If you didn't request it, you can ignore this email — your PIN stays unchanged.</p>
+    `,
+  });
 }
 
 /** Sent to the affected user, not the admin — a security notice, not a credential
  *  (the admin already knows the PIN they just set, and shares it out of band). */
-export function pinResetByAdminEmailHtml(opts: { name: string; adminName: string }) {
-  return `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2>Your Aina CRM PIN was reset</h2>
-      <p>Hi ${opts.name}, ${opts.adminName} reset your sign-in PIN. Ask them for your new PIN if they haven't shared it yet.</p>
-      <p>If this wasn't expected, contact your admin right away.</p>
-    </div>
-  `;
+export async function pinResetByAdminEmailHtml(opts: { name: string; adminName: string }) {
+  return emailLayout({
+    brand: await getCompanyBrand(),
+    heading: "Your PIN was reset",
+    bodyHtml: `
+      <p style="margin:0 0 16px;color:#555;">Hi ${opts.name}, ${opts.adminName} reset your sign-in PIN. Ask them for your new PIN if they haven't shared it yet.</p>
+      <p style="margin:0;color:#555;">If this wasn't expected, contact your admin right away.</p>
+    `,
+  });
 }
 
-export function inviteEmailHtml(opts: { inviterName: string; acceptUrl: string }) {
-  return `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2>You're invited to Aina CRM</h2>
-      <p>${opts.inviterName} has invited you to join Aina CRM.</p>
-      <p><a href="${opts.acceptUrl}" style="display:inline-block;padding:10px 20px;background:#dc2626;color:#fff;border-radius:6px;text-decoration:none;">Accept invite</a></p>
-      <p>This link expires in 7 days.</p>
-    </div>
-  `;
+/** Short "Browser on OS" label from a raw user-agent string — a trimmed-down version of the one the Settings UI uses client-side, since this runs server-side in the mailer. */
+function deviceLabel(userAgent: string | null): string {
+  if (!userAgent) return "an unknown device";
+  const browser = /Edg\//.test(userAgent)
+    ? "Edge"
+    : /Chrome\//.test(userAgent)
+      ? "Chrome"
+      : /Firefox\//.test(userAgent)
+        ? "Firefox"
+        : /Safari\//.test(userAgent)
+          ? "Safari"
+          : "a browser";
+  const os = /Windows/.test(userAgent)
+    ? "Windows"
+    : /Mac OS X/.test(userAgent)
+      ? "macOS"
+      : /Android/.test(userAgent)
+        ? "Android"
+        : /iPhone|iPad/.test(userAgent)
+          ? "iOS"
+          : /Linux/.test(userAgent)
+            ? "Linux"
+            : "";
+  return os ? `${browser} on ${os}` : browser;
+}
+
+export async function newSignInEmailHtml(opts: { name: string; userAgent: string | null; ip: string | null }) {
+  const when = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
+  const brand = await getCompanyBrand();
+  return emailLayout({
+    brand,
+    heading: "New sign-in from an unrecognized device",
+    bodyHtml: `
+      <p style="margin:0 0 16px;color:#555;">Hi ${opts.name}, your account was just signed in to from ${deviceLabel(opts.userAgent)}${opts.ip ? ` (${opts.ip})` : ""} at ${when} IST — a device we haven't seen you sign in from before.</p>
+      <p style="margin:0;color:#555;">If this was you, no action is needed. If it wasn't, change your password right away and review your active sessions under Settings &gt; Security.</p>
+    `,
+    footerNote: `Turn these alerts off anytime under Settings &gt; Security &gt; "Email me on a new sign-in". This is an automated message from ${brand.name}.`,
+  });
+}
+
+export async function inviteEmailHtml(opts: { inviterName: string; acceptUrl: string }) {
+  return emailLayout({
+    brand: await getCompanyBrand(),
+    heading: "You're invited",
+    bodyHtml: `
+      <p style="margin:0 0 20px;color:#555;">${opts.inviterName} has invited you to join. Click below to set your password and get started.</p>
+      <p style="margin:0 0 20px;">${emailButton("Accept invite", opts.acceptUrl)}</p>
+      <p style="margin:0;color:#555;">This link expires in 7 days.</p>
+    `,
+  });
+}
+
+export async function formSubmittedThankYouEmailHtml(opts: { formTitle: string }) {
+  return emailLayout({
+    brand: await getCompanyBrand(),
+    heading: "Thank you for reaching out",
+    bodyHtml: `
+      <p style="margin:0;color:#555;">Thank you for filling out "${opts.formTitle}". We've received your response and will connect with you soon.</p>
+    `,
+  });
+}
+
+export async function leaveDecidedEmailHtml(opts: {
+  name: string;
+  decision: "APPROVED" | "REJECTED";
+  categoryLabel: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  actorName: string;
+}) {
+  const { name, decision, categoryLabel, startDate, endDate, days, actorName } = opts;
+  const approved = decision === "APPROVED";
+  const dateRange = startDate === endDate ? startDate : `${startDate} – ${endDate}`;
+  return emailLayout({
+    brand: await getCompanyBrand(),
+    heading: approved ? "Your leave request was approved" : "Your leave request was rejected",
+    bodyHtml: `
+      <p style="margin:0 0 16px;color:#555;">Hi ${name}, ${actorName} ${approved ? "approved" : "rejected"} your ${categoryLabel.toLowerCase()} leave request for ${dateRange} (${days} day${days === 1 ? "" : "s"}).</p>
+      <p style="margin:0;color:#555;">${approved ? "It's now reflected on your attendance." : "Reach out to your admin if you have questions."}</p>
+    `,
+  });
+}
+
+export async function taskAssignedEmailHtml(opts: { name: string; taskTitle: string; actorName: string; dueDate: string | null; taskUrl: string }) {
+  const { name, taskTitle, actorName, dueDate, taskUrl } = opts;
+  return emailLayout({
+    brand: await getCompanyBrand(),
+    heading: "A new task was assigned to you",
+    bodyHtml: `
+      <p style="margin:0 0 20px;color:#555;">Hi ${name}, ${actorName} assigned you the task "${taskTitle}"${dueDate ? `, due ${dueDate}` : ""}.</p>
+      <p style="margin:0;">${emailButton("View task", taskUrl)}</p>
+    `,
+  });
 }

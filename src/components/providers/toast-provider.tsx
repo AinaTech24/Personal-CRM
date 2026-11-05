@@ -102,11 +102,22 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         offset from the viewport's true top lands the toast right under the
         clock/signal/wifi icons instead of below them.
       */}
-      <div className="pointer-events-none fixed left-1/2 top-[calc(1rem+var(--safe-top,0px))] z-[200] flex w-[380px] max-w-[92vw] -translate-x-1/2 justify-center">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="pointer-events-none fixed left-1/2 top-[calc(1rem+var(--safe-top,0px))] z-[200] flex w-[380px] max-w-[92vw] -translate-x-1/2 justify-center"
+      >
         <div className="relative w-full">
           <AnimatePresence initial={false}>
             {toasts.map((t, index) => {
               const style = VARIANT_STYLES[t.variant];
+              const activate = t.onClick
+                ? () => {
+                    t.onClick?.();
+                    dismiss(t.id);
+                  }
+                : undefined;
               return (
                 <motion.div
                   key={t.id}
@@ -120,18 +131,23 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   exit={{ opacity: 0, y: -24, scale: 0.9 }}
                   transition={{ type: "spring", stiffness: 400, damping: 32 }}
                   style={{ zIndex: 100 - index }}
-                  onClick={
-                    t.onClick
-                      ? () => {
-                          t.onClick?.();
-                          dismiss(t.id);
+                  onClick={activate}
+                  role={activate ? "button" : undefined}
+                  tabIndex={activate ? 0 : undefined}
+                  onKeyDown={
+                    activate
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            activate();
+                          }
                         }
                       : undefined
                   }
                   className={cn(
                     "pointer-events-auto absolute left-0 right-0 top-0 flex gap-3 rounded-lg border bg-popover px-3.5 py-3 text-popover-foreground shadow-lg",
                     t.description ? "items-start" : "items-center",
-                    t.onClick && "cursor-pointer transition-colors hover:bg-primary/5",
+                    activate && "cursor-pointer transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     style.ring
                   )}
                 >

@@ -7,12 +7,16 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "border-transparent bg-primary/15 text-primary",
+        // text-status-*-text, not text-primary/emerald-500/etc directly: those
+        // are tuned to read on a near-black OR near-white solid background,
+        // not on a light tint of themselves in both themes at once — see the
+        // --status-*-text tokens in globals.css for why.
+        default: "border-transparent bg-primary/15 text-status-primary-text",
         secondary: "border-transparent bg-secondary text-secondary-foreground",
         outline: "border-border text-foreground",
-        success: "border-transparent bg-emerald-500/15 text-emerald-500",
-        warning: "border-transparent bg-amber-500/15 text-amber-500",
-        destructive: "border-transparent bg-destructive/15 text-destructive",
+        success: "border-transparent bg-emerald-500/15 text-status-success-text",
+        warning: "border-transparent bg-amber-500/15 text-status-warning-text",
+        destructive: "border-transparent bg-destructive/15 text-status-destructive-text",
       },
     },
     defaultVariants: {

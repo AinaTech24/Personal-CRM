@@ -16,7 +16,8 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useToast } from "@/components/providers/toast-provider";
 import { HelpDialog, HelpSection } from "@/components/ui/help-dialog";
 import { copyTextFromAsync } from "@/lib/clipboard";
-import { IconBuilding, IconCode, IconCopy, IconEye, IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
+import { generateStandaloneFormHtml, type StandaloneFormField } from "@/lib/forms/standalone-export";
+import { IconBuilding, IconCode, IconCopy, IconEye, IconFile, IconFileSpreadsheet, IconPencil, IconPlus, IconTrash } from "@/components/icons";
 
 interface FormRow {
   id: string;
@@ -110,17 +111,56 @@ export function FormsListView() {
   // Uses the form's current slug as-is — unlike copyLink, this never rotates
   // it. An embed is pasted once into someone else's site and left there;
   // rotating the slug on every copy would break every page it's already on.
-  async function copyEmbedCode(row: FormRow) {
+  function embedSrcAndTitle(row: FormRow) {
     const src = `${window.location.origin}/f/${row.slug}?embedded=true`;
     // Escaped beyond just the attribute quote — a title containing "<" or ">" could
     // otherwise close the attribute/tag early and inject markup into whatever page this gets pasted onto.
     const safeTitle = row.title.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return { src, safeTitle };
+  }
+
+  async function copyIframeCode(row: FormRow) {
+    const { src, safeTitle } = embedSrcAndTitle(row);
     const snippet = `<iframe src="${src}" style="width:100%;max-width:640px;height:800px;border:0" title="${safeTitle}"></iframe>`;
     try {
       await navigator.clipboard.writeText(snippet);
-      toast.success("Embed code copied", "Paste it into any page's HTML.");
+      toast.success("Iframe code copied", "Paste it into any page's HTML.");
     } catch {
-      toast.error("Couldn't copy the embed code");
+      toast.error("Couldn't copy the iframe code");
+    }
+  }
+
+  // A genuinely standalone page — real <input>/<select>/etc. fields that
+  // fetch() POST straight to the submit API, not an iframe pointing back at
+  // /f/[slug]. Needed because /f/[slug] can only be framed on ainatech.in/
+  // *.vercel.app (see next.config.ts's frame-ancestors rule) — the iframe
+  // version above simply won't render anywhere else, by design.
+  async function copyStandaloneHtmlPage(row: FormRow) {
+    try {
+      const res = await fetch(`/api/forms/${row.id}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return toast.error("Couldn't load the form", data.error);
+      const form = data.form as {
+        title: string;
+        description: string | null;
+        slug: string;
+        lockSlug: boolean;
+        fields: StandaloneFormField[];
+      };
+      const html = generateStandaloneFormHtml(
+        { title: form.title, description: form.description, slug: form.slug, fields: form.fields },
+        window.location.origin
+      );
+      await navigator.clipboard.writeText(html);
+      toast.success("Standalone HTML copied", "Real form fields, no iframe — host it anywhere.");
+      if (!form.lockSlug) {
+        toast.error(
+          "This form's link isn't locked",
+          "Copying the share link elsewhere could rotate the slug and break the URL baked into this page. Lock it in the form's settings first."
+        );
+      }
+    } catch {
+      toast.error("Couldn't copy the HTML page");
     }
   }
 
@@ -285,10 +325,16 @@ export function FormsListView() {
                                   onSelect: () => copyLink(r),
                                 },
                                 {
-                                  key: "copy-embed",
-                                  label: "Embed code",
+                                  key: "copy-iframe",
+                                  label: "Copy iframe code",
                                   icon: <IconCode className="h-4 w-4" />,
-                                  onSelect: () => copyEmbedCode(r),
+                                  onSelect: () => copyIframeCode(r),
+                                },
+                                {
+                                  key: "copy-standalone-html",
+                                  label: "Copy standalone HTML (no iframe)",
+                                  icon: <IconFile className="h-4 w-4" />,
+                                  onSelect: () => copyStandaloneHtmlPage(r),
                                 },
                                 {
                                   key: "duplicate",

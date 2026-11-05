@@ -21,6 +21,18 @@
   --input: #232329;
   --ring: #dc2626;
   --radius: 0.625rem;
+  /* Status-pill text colors, kept apart from --primary/--destructive: those
+     are fixed brand colors used as solid button backgrounds (paired with a
+     white foreground), not contrast-tuned for use as text on a light tint of
+     themselves. A mid-brightness -500 hue reads fine as text on a near-black
+     tint (this block) but washes out to near-invisible on the near-white tint
+     light mode uses for the same background class — so these need their own
+     per-theme value instead of reusing --primary/--destructive/emerald-500/
+     amber-500 directly. */
+  --status-success-text: #34d399;
+  --status-warning-text: #fbbf24;
+  --status-destructive-text: #f87171;
+  --status-primary-text: #f87171;
 }
 
 :root[data-theme="light"] {
@@ -43,6 +55,10 @@
   --border: #e6e6ea;
   --input: #e6e6ea;
   --ring: #dc2626;
+  --status-success-text: #047857;
+  --status-warning-text: #b45309;
+  --status-destructive-text: #b91c1c;
+  --status-primary-text: #b91c1c;
 }
 
 @theme inline {
@@ -65,6 +81,10 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-status-success-text: var(--status-success-text);
+  --color-status-warning-text: var(--status-warning-text);
+  --color-status-destructive-text: var(--status-destructive-text);
+  --color-status-primary-text: var(--status-primary-text);
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -143,14 +163,21 @@ input[type="radio"] {
   }
 }
 
-/* Compact density — tightens table/card padding app-wide when a user opts in
-   from Settings → Preferences. Applied as a data attribute on <html> by
+/* Compact density — tightens spacing app-wide when a user opts in from
+   Settings → Preferences. Applied as a data attribute on <html> by
    DensityInit (src/components/providers/density-init.tsx) since the value
-   lives on the user record, not something CSS alone can know at load time. */
-html[data-density="compact"] table th,
-html[data-density="compact"] table td {
-  padding-top: 0.375rem;
-  padding-bottom: 0.375rem;
+   lives on the user record, not something CSS alone can know at load time.
+   Overriding --spacing rather than individual components' padding/gap
+   classes works everywhere at once: every p-, m-, gap-, w- and h- utility in
+   Tailwind v4 compiles to calc(var(--spacing) * N), so this one unlayered
+   rule reaches every card, list row, board column and table cell in the app
+   without having to special-case each one — and it's unlayered (outside
+   Tailwind's own `@layer theme`), so it wins regardless of selector
+   specificity, same as the rule it replaces. Previously this only touched
+   `table th/td`, so most of the app (anything built from Cards — the
+   Leads/Tasks pipeline boards foremost) didn't visibly change at all. */
+html[data-density="compact"] {
+  --spacing: 0.2rem;
 }
 
 button:disabled,

@@ -10,6 +10,7 @@ import { grantLeaveDay, leaveWorkingDays, revokeLeaveDay } from "@/lib/leave";
 import { leaveRequestInclude, serializeLeaveRequest, CATEGORY_LABEL, canDeleteLeaveRequest } from "@/lib/leave-requests";
 import { notifyAndPush } from "@/lib/notify";
 import { emitToAdmins } from "@/lib/socket-emit";
+import { sendMail, leaveDecidedEmailHtml } from "@/lib/mailer";
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -151,6 +152,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       { requestId: id, decision: status, actorName: user.name },
       { title: `Leave ${word}`, body: `${user.name} ${word} your leave request`, url: "/leave", tag: "leave-decided" }
     );
+
+    void db.user
+      .findUnique({ where: { id: request.userId }, select: { name: true, email: true } })
+      .then(async (employee) => {
+        if (!employee) return;
+        await sendMail({
+          to: employee.email,
+          subject: `Leave ${word}`,
+          html: await leaveDecidedEmailHtml({
+            name: employee.name,
+            decision: status as "APPROVED" | "REJECTED",
+            categoryLabel: CATEGORY_LABEL[request.category],
+            startDate: keyFromDate(request.startDate),
+            endDate: keyFromDate(request.endDate),
+            days: request.days,
+            actorName: user.name,
+          }),
+        });
+      })
+      .catch((err) => console.error("[leave-requests] Decision email failed:", err));
   }
   emitToAdmins("leave_request_changed", { id });
 

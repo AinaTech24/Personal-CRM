@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogBody, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
@@ -25,6 +25,7 @@ export function ConfirmDialog({
   onConfirm,
 }: ConfirmDialogProps) {
   const [loading, setLoading] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   async function handleConfirm() {
     setLoading(true);
@@ -38,14 +39,23 @@ export function ConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !loading && onOpenChange(v)}>
-      <DialogContent>
+      <DialogContent
+        role="alertdialog"
+        onOpenAutoFocus={(e) => {
+          // Pins focus to Cancel explicitly rather than relying on DOM/tab
+          // order to keep it first — this is a destructive confirmation, so
+          // an Enter press right after opening must land on Cancel, not Delete.
+          e.preventDefault();
+          cancelRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" disabled={loading} onClick={() => onOpenChange(false)}>
+            <Button ref={cancelRef} type="button" variant="outline" disabled={loading} onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="button" variant="destructive" disabled={loading} onClick={handleConfirm}>

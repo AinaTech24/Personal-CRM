@@ -45,6 +45,30 @@ const CATEGORY_OPTIONS = [
   ...Object.entries(NOTIFICATION_CATEGORY_LABEL).map(([value, label]) => ({ value, label })),
 ];
 
+/** The groups people care about most go first; everything else follows in its existing (Settings-page) order. */
+const CATEGORY_PRIORITY = ["tasks", "leads", "meetings", "leaves", "expenses", "attendance"];
+const OTHER_GROUP = "other";
+
+interface NotificationGroup {
+  key: string;
+  label: string;
+  items: Notification[];
+}
+
+/** Buckets the already-filtered list by category, in priority order, preserving each bucket's own (newest-first) order. */
+function groupByCategory(items: Notification[]): NotificationGroup[] {
+  const buckets = new Map<string, Notification[]>();
+  for (const n of items) {
+    const key = NOTIFICATION_CATEGORY[n.type] ?? OTHER_GROUP;
+    (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(n);
+  }
+  const rest = Object.keys(NOTIFICATION_CATEGORY_LABEL).filter((k) => !CATEGORY_PRIORITY.includes(k));
+  const order = [...CATEGORY_PRIORITY, ...rest, OTHER_GROUP];
+  return order
+    .filter((key) => buckets.has(key))
+    .map((key) => ({ key, label: key === OTHER_GROUP ? "Other" : NOTIFICATION_CATEGORY_LABEL[key] ?? key, items: buckets.get(key)! }));
+}
+
 /**
  * The full notification history — the bell only ever shows the latest 30.
  * Tabs filter unread/read, with "Unread" narrowed server-side (via
@@ -140,30 +164,56 @@ export default function NotificationsPage() {
     }
   }
 
+  /** Re-pulls the current tab's scope from the server, discarding whatever optimistic state is in memory. */
+  function resync() {
+    load(tab, tab === "unread" ? "unread" : "all");
+  }
+
+  // Each mutation applies optimistically, then re-syncs from the server on
+  // failure (network error or non-2xx) instead of leaving the UI silently
+  // out of step with what's actually stored.
   async function markRead(n: Notification, read: boolean) {
     setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, readAt: read ? new Date().toISOString() : null } : x)));
     setUnreadCount((c) => Math.max(0, c + (read ? -1 : 1)));
-    await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: n.id, read }),
-    });
+    try {
+      const res = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: n.id, read }),
+      });
+      if (!res.ok) throw new Error("request failed");
+    } catch {
+      toast.error("Couldn't update notification");
+      resync();
+    }
   }
 
   async function markAllRead() {
     setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
     setUnreadCount(0);
-    await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
+    try {
+      const res = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error("request failed");
+    } catch {
+      toast.error("Couldn't mark all as read");
+      resync();
+    }
   }
 
   async function dismiss(n: Notification) {
     setNotifications((prev) => prev.filter((x) => x.id !== n.id));
     if (!n.readAt) setUnreadCount((c) => Math.max(0, c - 1));
-    await fetch(`/api/notifications?id=${n.id}`, { method: "DELETE" });
+    try {
+      const res = await fetch(`/api/notifications?id=${n.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("request failed");
+    } catch {
+      toast.error("Couldn't dismiss notification");
+      resync();
+    }
   }
 
   function openNotification(n: Notification) {
@@ -178,6 +228,7 @@ export default function NotificationsPage() {
     const toDate = to ? parseISO(to) : null;
     return notifications.filter((n) => {
       if (tab === "read" && !n.readAt) return false;
+      if (tab === "unread" && n.readAt) return false;
       if (category && NOTIFICATION_CATEGORY[n.type] !== category) return false;
       const created = parseISO(n.createdAt);
       if (fromDate && created < fromDate) return false;
@@ -186,6 +237,8 @@ export default function NotificationsPage() {
       return true;
     });
   }, [notifications, tab, category, from, to, query]);
+
+  const grouped = useMemo(() => groupByCategory(filtered), [filtered]);
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -265,57 +318,67 @@ export default function NotificationsPage() {
           ) : (
             <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="absolute inset-0 flex flex-col">
               <Card className="flex min-h-0 flex-1 flex-col">
-                <CardContent className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto p-0">
-                <AnimatePresence initial={false}>
-                  {filtered.map((n) => {
-                    const { Icon, badgeClassName, accentClassName } = notificationVisual(n);
-                    return (
-                      <motion.div
-                        key={n.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.15, ease: "easeOut" }}
-                        className={cn(
-                          "flex items-start gap-3 px-4 py-3 transition-colors hover:bg-primary/5",
-                          !n.readAt && "bg-accent/30",
-                          accentClassName
-                        )}
-                      >
-                        <button type="button" onClick={() => openNotification(n)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
-                          <span className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", badgeClassName)}>
-                            <Icon className="h-4 w-4" />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm leading-snug">{notificationMessage(n)}</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground" title={format(parseISO(n.createdAt), "dd MMM yyyy, HH:mm")}>
-                              {formatDistanceToNow(parseISO(n.createdAt), { addSuffix: true })}
-                            </p>
-                          </div>
-                          {!n.readAt && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
-                        </button>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <button
-                            type="button"
-                            aria-label={n.readAt ? "Mark as unread" : "Mark as read"}
-                            onClick={() => markRead(n, !n.readAt)}
-                            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
-                          >
-                            {n.readAt ? <IconMail className="h-4 w-4" /> : <IconMailCheck className="h-4 w-4" />}
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Dismiss"
-                            onClick={() => dismiss(n)}
-                            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive"
-                          >
-                            <IconTrash className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </AnimatePresence>
+                <CardContent className="flex min-h-0 flex-1 flex-col overflow-y-auto p-0">
+                {grouped.map((group) => (
+                  <div key={group.key} className="border-b border-border last:border-b-0">
+                    <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-1.5 text-xs font-semibold text-muted-foreground">
+                      {group.label}
+                      <span className="rounded-full bg-background px-1.5 py-0.5 text-[10px] font-medium leading-none">{group.items.length}</span>
+                    </div>
+                    <div className="divide-y divide-border">
+                      <AnimatePresence initial={false}>
+                        {group.items.map((n) => {
+                          const { Icon, badgeClassName, accentClassName } = notificationVisual(n);
+                          return (
+                            <motion.div
+                              key={n.id}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.15, ease: "easeOut" }}
+                              className={cn(
+                                "flex items-start gap-3 px-4 py-3 transition-colors hover:bg-primary/5",
+                                !n.readAt && "bg-accent/30",
+                                accentClassName
+                              )}
+                            >
+                              <button type="button" onClick={() => openNotification(n)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                                <span className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full", badgeClassName)}>
+                                  <Icon className="h-4 w-4" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm leading-snug">{notificationMessage(n)}</p>
+                                  <p className="mt-0.5 text-xs text-muted-foreground" title={format(parseISO(n.createdAt), "dd MMM yyyy, HH:mm")}>
+                                    {formatDistanceToNow(parseISO(n.createdAt), { addSuffix: true })}
+                                  </p>
+                                </div>
+                                {!n.readAt && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+                              </button>
+                              <div className="flex shrink-0 items-center gap-1">
+                                <button
+                                  type="button"
+                                  aria-label={n.readAt ? "Mark as unread" : "Mark as read"}
+                                  onClick={() => markRead(n, !n.readAt)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-foreground"
+                                >
+                                  {n.readAt ? <IconMail className="h-4 w-4" /> : <IconMailCheck className="h-4 w-4" />}
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label="Dismiss"
+                                  onClick={() => dismiss(n)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/5 hover:text-destructive"
+                                >
+                                  <IconTrash className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
             </motion.div>

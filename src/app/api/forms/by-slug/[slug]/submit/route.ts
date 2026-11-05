@@ -12,6 +12,7 @@ import { requestDevice } from "@/lib/request-info";
 import { rateLimit } from "@/lib/rate-limit";
 import { detectSubmitterName, isFieldVisible, parseFieldOptions, validateFieldValue } from "@/lib/form-fields";
 import { formManagerIds } from "@/lib/form-notify";
+import { sendMail, formSubmittedThankYouEmailHtml } from "@/lib/mailer";
 
 interface PickedFile {
   fileName: string;
@@ -27,6 +28,19 @@ function isPickedFile(v: unknown): v is PickedFile {
 // database and spam every viewer's notification bell/push device.
 const LIMIT = 8;
 const WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * The CORS preflight for a cross-origin fetch() POST (the standalone form
+ * export, hosted on any third-party site, submits here directly — see
+ * src/lib/forms/standalone-export.ts). The actual Access-Control-* response
+ * headers come from next.config.ts's `/api/forms/by-slug/:path*` rule, which
+ * applies to every response from this route including this one; this handler
+ * only needs to exist so the OPTIONS verb itself gets a 2xx instead of the
+ * framework's default 405.
+ */
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204 });
+}
 
 /** Public — no login required. Validates and stores one visitor's answers to a live form. */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
@@ -129,6 +143,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   });
 
   const submitterName = detectSubmitterName(form.fields, (id) => resolvedAnswers[id]);
+
+  // Best-effort "thanks for filling this in" to whoever submitted it — only
+  // possible when the form actually asked for an email address. Never blocks
+  // or fails the submission itself.
+  const emailField = form.fields.find((f) => f.type === "EMAIL" && resolvedAnswers[f.id]);
+  if (emailField) {
+    const submitterEmail = resolvedAnswers[emailField.id];
+    void sendMail({
+      to: submitterEmail,
+      subject: `Thank you for filling out "${form.title}"`,
+      html: await formSubmittedThankYouEmailHtml({ formTitle: form.title }),
+    }).catch((err) => console.error("[forms/submit] Thank-you email failed:", err));
+  }
 
   // Tell whoever can see this form's submissions — its creator, plus anyone
   // in a department it was shared with — that a fresh one's waiting.

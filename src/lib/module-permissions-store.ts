@@ -204,6 +204,37 @@ export async function isModuleBlocked(user: PermissionUser, module: ManagedModul
   return false;
 }
 
+/**
+ * Which of TOGGLEABLE_MODULES (modules.ts) this person can currently reach —
+ * the same hidden/grant-override/blocked rules sidebar.tsx applies to its
+ * own mainNav filter, re-derived here instead of in a client component so a
+ * second caller (the "Default landing page" picker in Settings, see
+ * /api/auth/me) doesn't have to duplicate them. An admin always gets every
+ * one. CLIENTS is deliberately excluded — same reasoning as
+ * MANAGED_MODULE_TOGGLE_KEY above, it isn't a default-on, hide-only module;
+ * its visibility comes entirely from CRM/Social Media membership or its own
+ * grant, which the caller has to check separately.
+ */
+export async function getVisibleToggleableModules(user: PermissionUser): Promise<string[]> {
+  if (isAdmin(user)) return MODULE_KEYS.filter((k) => k !== "clients");
+  const [hidden, blocked, granted] = await Promise.all([
+    getHiddenModules(),
+    getBlockedModules(user.id),
+    getUserModulePermissions(user.id),
+  ]);
+  const blockedSet = new Set(blocked);
+  const grantedSet = new Set(granted);
+  return MODULE_KEYS.filter((key) => {
+    if (key === "clients") return false;
+    const managedModule = (Object.entries(MANAGED_MODULE_TOGGLE_KEY).find(([, k]) => k === key)?.[0]) as
+      | ManagedModule
+      | undefined;
+    if (managedModule && blockedSet.has(managedModule)) return false;
+    if (!hidden.includes(key)) return true;
+    return !!managedModule && HIDE_OVERRIDABLE_BY_GRANT.has(managedModule) && grantedSet.has(managedModule);
+  });
+}
+
 /** Whether this user holds any module grant at all — the floor for reaching the /admin pages that a grant (not just company-admin) can unlock. */
 export async function hasAnyModulePermission(userId: string): Promise<boolean> {
   const row = await db.userModulePermission.findFirst({

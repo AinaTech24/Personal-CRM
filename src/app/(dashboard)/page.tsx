@@ -2,26 +2,27 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin, isDepartmentAdmin } from "@/lib/permissions";
 import { getSocialMembership, isSocialMediaLead } from "@/lib/social-media";
+import { LANDING_PAGE_HREFS } from "@/lib/modules";
 import { BirthdayBanner } from "@/components/birthdays/birthday-banner";
 import { DashboardStats } from "@/components/dashboard/dashboard-stats";
 import { UserDashboard } from "@/components/dashboard/user-dashboard";
 import { TodayTimeline } from "@/components/dashboard/today-timeline";
 import { ClientPipeline } from "@/components/social-media/client-pipeline";
 
-const modules = [
-  { name: "Leads", href: "/leads", description: "Track incoming business opportunities" },
-  { name: "Tasks", href: "/tasks", description: "Centralized task tracking for teams" },
-  { name: "Projects", href: "/projects", description: "Manage client and internal projects" },
-  { name: "Quotations", href: "/quotations", description: "Generate and manage quotations" },
-  { name: "Invoices", href: "/invoices", description: "Manage invoices and payments" },
-];
-
 export default async function DashboardHomePage() {
   const user = await getCurrentUser();
-  // Only redirect to a known module route. Trusting the stored string would let a
-  // stale or hand-written value send users off-site, or loop if it pointed here.
-  const landing = modules.find((m) => m.href === user?.defaultLandingPage);
-  if (landing) redirect(landing.href);
+  // Only redirect to a known module route — LANDING_PAGE_HREFS (modules.ts)
+  // is the full set the Settings picker can ever save, so trusting an exact
+  // match against it is safe. Trusting the stored string directly would let
+  // a stale or hand-written value send users off-site, or loop if it pointed
+  // here. A value the picker offered when saved but this person has since
+  // lost access to (a grant revoked, a module hidden) still matches here and
+  // redirects same as ever — the destination page's own access check is what
+  // actually enforces that, same as a sidebar link to a now-inaccessible page
+  // would.
+  if (user?.defaultLandingPage && LANDING_PAGE_HREFS.includes(user.defaultLandingPage)) {
+    redirect(user.defaultLandingPage);
+  }
   const admin = user ? isAdmin(user) : false;
 
   // Admins keep the cross-module overview; everyone else gets their own day.

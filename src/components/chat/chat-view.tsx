@@ -36,6 +36,8 @@ import {
   IconMic,
   IconStop,
   IconPencil,
+  IconTick,
+  IconDoubleTick,
 } from "@/components/icons";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -1823,9 +1825,21 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
   );
 }
 
+/**
+ * Sent — single tick (the message left this device but hasn't reached the
+ * recipient yet, including while they're offline). Delivered — double tick,
+ * once they're actually online to receive it. Seen — double tick turns blue
+ * once they've opened the conversation past this message's time.
+ */
+const STATUS_LABEL: Record<"sent" | "delivered" | "seen", string> = { sent: "Sent", delivered: "Delivered", seen: "Read" };
+
 function StatusTicks({ status }: { status: "sent" | "delivered" | "seen" }) {
-  if (status === "sent") return <span className="text-[10px] opacity-70">✓</span>;
-  return <span className={cn("text-[10px]", status === "seen" ? "text-sky-300" : "opacity-70")}>✓✓</span>;
+  const Icon = status === "sent" ? IconTick : IconDoubleTick;
+  return (
+    <Tooltip label={STATUS_LABEL[status]}>
+      <Icon className={cn("h-3 w-3 shrink-0", status === "seen" ? "text-sky-400" : "opacity-70")} strokeWidth={2.25} />
+    </Tooltip>
+  );
 }
 
 /**
