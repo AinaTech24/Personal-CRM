@@ -3,12 +3,12 @@
 import { Suspense, useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
-import { IconEye, IconEyeOff } from "@/components/icons";
+import { IconEye, IconEyeOff, IconKey } from "@/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +26,26 @@ export function LoginForm() {
     <Suspense fallback={null}>
       <LoginFormInner />
     </Suspense>
+  );
+}
+
+/** A looping "scanning" ping around a key badge — fills the Passkey tab's otherwise-sparse space and reads as "waiting for your device" rather than a dead end. */
+function PasskeyGraphic() {
+  return (
+    <div className="relative flex h-28 items-center justify-center" aria-hidden="true">
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="absolute h-16 w-16 rounded-full border border-primary/30"
+          initial={{ scale: 0.6, opacity: 0.6 }}
+          animate={{ scale: 1.8, opacity: 0 }}
+          transition={{ duration: 2.2, repeat: Infinity, ease: "easeOut", delay: i * 0.7 }}
+        />
+      ))}
+      <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <IconKey className="h-7 w-7" />
+      </div>
+    </div>
   );
 }
 
@@ -366,290 +386,305 @@ function LoginFormInner() {
               </div>
             )}
 
-            {mode === "login" && (
-              <form onSubmit={onLogin} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@ainatech.in"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
-                    <button
-                      type="button"
-                      onClick={() => switchMode("forgot-email")}
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      autoComplete="current-password"
-                      className="pr-9"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                      className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-                <Button type="submit" disabled={loading} className="mt-2">
-                  {loading ? "Signing in..." : "Sign in"}
-                </Button>
-              </form>
-            )}
-
-            {mode === "login-pin" && (
-              <form onSubmit={onLoginPin} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="login-mobile">Mobile number</Label>
-                  <Input
-                    id="login-mobile"
-                    type="tel"
-                    inputMode="numeric"
-                    autoComplete="tel"
-                    placeholder="98765 43210"
-                    value={mobile}
-                    onChange={(e) => setMobile(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="login-pin">PIN</Label>
-                    <button
-                      type="button"
-                      onClick={() => switchMode("forgot-pin-mobile")}
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      Forgot PIN?
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <Input
-                      id="login-pin"
-                      type={showPin ? "text" : "password"}
-                      inputMode="numeric"
-                      autoComplete="current-password"
-                      maxLength={6}
-                      className="pr-9 tracking-[0.3em]"
-                      value={pin}
-                      onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPin((v) => !v)}
-                      aria-label={showPin ? "Hide PIN" : "Show PIN"}
-                      className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
-                    >
-                      {showPin ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-                <Button type="submit" disabled={loading} className="mt-2">
-                  {loading ? "Signing in..." : "Sign in"}
-                </Button>
-              </form>
-            )}
-
-            {mode === "login-passkey" && (
-              <div className="flex flex-col gap-4">
-                <p className="text-center text-sm text-muted-foreground">
-                  Use the fingerprint, face, or screen unlock already set up on this device.
-                </p>
-                <Button type="button" onClick={onPasskeyLogin} disabled={loading} className="mt-2">
-                  {loading ? "Waiting for passkey..." : "Continue with a passkey"}
-                </Button>
-              </div>
-            )}
-
-            {mode === "mfa" && (
-              <form onSubmit={onVerifyMfa} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="mfa-code">{mfaUseBackupCode ? "Backup code" : "Authenticator code"}</Label>
-                  <Input
-                    id="mfa-code"
-                    inputMode={mfaUseBackupCode ? "text" : "numeric"}
-                    autoComplete="one-time-code"
-                    placeholder={mfaUseBackupCode ? "XXXX-XXXX" : "123456"}
-                    maxLength={mfaUseBackupCode ? 9 : 6}
-                    className="text-center text-lg tracking-[0.3em]"
-                    value={mfaCode}
-                    onChange={(e) =>
-                      setMfaCode(mfaUseBackupCode ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, ""))
-                    }
-                    required
-                    autoFocus
-                  />
-                </div>
-                <Button type="submit" disabled={loading} className="mt-2">
-                  {loading ? "Verifying..." : "Verify & sign in"}
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMfaUseBackupCode((v) => !v);
-                    setMfaCode("");
-                  }}
-                  className="text-center text-xs text-muted-foreground hover:text-foreground"
+            <motion.div layout transition={{ duration: 0.25, ease: "easeInOut" }}>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={mode}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
                 >
-                  {mfaUseBackupCode ? "Use authenticator code instead" : "Use a backup code instead"}
-                </button>
-              </form>
-            )}
 
-            {mode === "forgot-email" && (
-              <form onSubmit={onSendCode} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="forgot-email">Email</Label>
-                  <Input
-                    id="forgot-email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@ainatech.in"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <Button type="submit" disabled={loading} className="mt-2">
-                  {loading ? "Sending code..." : "Send code"}
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => switchMode("login")}
-                  className="text-center text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Back to sign in
-                </button>
-              </form>
-            )}
+                  {mode === "login" && (
+                    <form onSubmit={onLogin} className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          autoComplete="email"
+                          placeholder="you@ainatech.in"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="password">Password</Label>
+                          <button
+                            type="button"
+                            onClick={() => switchMode("forgot-email")}
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Forgot password?
+                          </button>
+                        </div>
+                        <div className="relative">
+                          <Input
+                            id="password"
+                            type={showPassword ? "text" : "password"}
+                            autoComplete="current-password"
+                            className="pr-9"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword((v) => !v)}
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                            className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                          >
+                            {showPassword ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <Button type="submit" disabled={loading} className="mt-2">
+                        {loading ? "Signing in..." : "Sign in"}
+                      </Button>
+                    </form>
+                  )}
 
-            {mode === "forgot-code" && (
-              <form onSubmit={onVerifyCode} className="flex flex-col gap-4">
-                {info && <p className="text-sm text-emerald-500">{info}</p>}
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="code">Verification code</Label>
-                  <Input
-                    id="code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    placeholder="123456"
-                    maxLength={6}
-                    className="text-center text-lg tracking-[0.5em]"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                    required
-                  />
-                </div>
-                <Button type="submit" disabled={loading} className="mt-2">
-                  {loading ? "Verifying..." : "Verify & sign in"}
-                </Button>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <button type="button" onClick={() => switchMode("forgot-email")} className="hover:text-foreground">
-                    Change email
-                  </button>
-                  <button type="button" onClick={onSendCode} className="hover:text-foreground">
-                    Resend code
-                  </button>
-                </div>
-              </form>
-            )}
+                  {mode === "login-pin" && (
+                    <form onSubmit={onLoginPin} className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="login-mobile">Mobile number</Label>
+                        <Input
+                          id="login-mobile"
+                          type="tel"
+                          inputMode="numeric"
+                          autoComplete="tel"
+                          placeholder="98765 43210"
+                          value={mobile}
+                          onChange={(e) => setMobile(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="login-pin">PIN</Label>
+                          <button
+                            type="button"
+                            onClick={() => switchMode("forgot-pin-mobile")}
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Forgot PIN?
+                          </button>
+                        </div>
+                        <div className="relative">
+                          <Input
+                            id="login-pin"
+                            type={showPin ? "text" : "password"}
+                            inputMode="numeric"
+                            autoComplete="current-password"
+                            maxLength={6}
+                            className="pr-9 tracking-[0.3em]"
+                            value={pin}
+                            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPin((v) => !v)}
+                            aria-label={showPin ? "Hide PIN" : "Show PIN"}
+                            className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+                          >
+                            {showPin ? <IconEyeOff className="h-4 w-4" /> : <IconEye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <Button type="submit" disabled={loading} className="mt-2">
+                        {loading ? "Signing in..." : "Sign in"}
+                      </Button>
+                    </form>
+                  )}
 
-            {mode === "forgot-pin-mobile" && (
-              <form onSubmit={onSendPinCode} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="forgot-pin-mobile">Mobile number</Label>
-                  <Input
-                    id="forgot-pin-mobile"
-                    type="tel"
-                    inputMode="numeric"
-                    autoComplete="tel"
-                    placeholder="98765 43210"
-                    value={mobile}
-                    onChange={(e) => setMobile(e.target.value)}
-                    required
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  We&apos;ll email a reset code to the address on your account.
-                </p>
-                <Button type="submit" disabled={loading} className="mt-2">
-                  {loading ? "Sending code..." : "Send code"}
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => switchMode("login-pin")}
-                  className="text-center text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Back to sign in
-                </button>
-              </form>
-            )}
+                  {mode === "login-passkey" && (
+                    <div className="flex flex-col gap-4">
+                      <PasskeyGraphic />
+                      <p className="text-center text-sm text-muted-foreground">
+                        Use the fingerprint, face, or screen unlock already set up on this device.
+                      </p>
+                      <Button type="button" onClick={onPasskeyLogin} disabled={loading} className="mt-2">
+                        {loading ? "Waiting for passkey..." : "Continue with a passkey"}
+                      </Button>
+                    </div>
+                  )}
 
-            {mode === "forgot-pin-code" && (
-              <form onSubmit={onResetPin} className="flex flex-col gap-4">
-                {info && <p className="text-sm text-emerald-500">{info}</p>}
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="pin-reset-code">Verification code</Label>
-                  <Input
-                    id="pin-reset-code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    placeholder="123456"
-                    maxLength={6}
-                    className="text-center text-lg tracking-[0.5em]"
-                    value={pinResetCode}
-                    onChange={(e) => setPinResetCode(e.target.value.replace(/\D/g, ""))}
-                    required
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="new-pin">New PIN</Label>
-                  <Input
-                    id="new-pin"
-                    inputMode="numeric"
-                    autoComplete="new-password"
-                    placeholder="6 digits"
-                    maxLength={6}
-                    className="text-center text-lg tracking-[0.3em]"
-                    value={newPin}
-                    onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
-                    required
-                  />
-                </div>
-                <Button type="submit" disabled={loading} className="mt-2">
-                  {loading ? "Resetting..." : "Reset PIN & sign in"}
-                </Button>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <button type="button" onClick={() => switchMode("forgot-pin-mobile")} className="hover:text-foreground">
-                    Change mobile
-                  </button>
-                  <button type="button" onClick={onSendPinCode} className="hover:text-foreground">
-                    Resend code
-                  </button>
-                </div>
-              </form>
-            )}
+                  {mode === "mfa" && (
+                    <form onSubmit={onVerifyMfa} className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="mfa-code">{mfaUseBackupCode ? "Backup code" : "Authenticator code"}</Label>
+                        <Input
+                          id="mfa-code"
+                          inputMode={mfaUseBackupCode ? "text" : "numeric"}
+                          autoComplete="one-time-code"
+                          placeholder={mfaUseBackupCode ? "XXXX-XXXX" : "123456"}
+                          maxLength={mfaUseBackupCode ? 9 : 6}
+                          className="text-center text-lg tracking-[0.3em]"
+                          value={mfaCode}
+                          onChange={(e) =>
+                            setMfaCode(mfaUseBackupCode ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, ""))
+                          }
+                          required
+                          autoFocus
+                        />
+                      </div>
+                      <Button type="submit" disabled={loading} className="mt-2">
+                        {loading ? "Verifying..." : "Verify & sign in"}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMfaUseBackupCode((v) => !v);
+                          setMfaCode("");
+                        }}
+                        className="text-center text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        {mfaUseBackupCode ? "Use authenticator code instead" : "Use a backup code instead"}
+                      </button>
+                    </form>
+                  )}
+
+                  {mode === "forgot-email" && (
+                    <form onSubmit={onSendCode} className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="forgot-email">Email</Label>
+                        <Input
+                          id="forgot-email"
+                          type="email"
+                          autoComplete="email"
+                          placeholder="you@ainatech.in"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <Button type="submit" disabled={loading} className="mt-2">
+                        {loading ? "Sending code..." : "Send code"}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => switchMode("login")}
+                        className="text-center text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Back to sign in
+                      </button>
+                    </form>
+                  )}
+
+                  {mode === "forgot-code" && (
+                    <form onSubmit={onVerifyCode} className="flex flex-col gap-4">
+                      {info && <p className="text-sm text-emerald-500">{info}</p>}
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="code">Verification code</Label>
+                        <Input
+                          id="code"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          placeholder="123456"
+                          maxLength={6}
+                          className="text-center text-lg tracking-[0.5em]"
+                          value={code}
+                          onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                          required
+                        />
+                      </div>
+                      <Button type="submit" disabled={loading} className="mt-2">
+                        {loading ? "Verifying..." : "Verify & sign in"}
+                      </Button>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <button type="button" onClick={() => switchMode("forgot-email")} className="hover:text-foreground">
+                          Change email
+                        </button>
+                        <button type="button" onClick={onSendCode} className="hover:text-foreground">
+                          Resend code
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {mode === "forgot-pin-mobile" && (
+                    <form onSubmit={onSendPinCode} className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="forgot-pin-mobile">Mobile number</Label>
+                        <Input
+                          id="forgot-pin-mobile"
+                          type="tel"
+                          inputMode="numeric"
+                          autoComplete="tel"
+                          placeholder="98765 43210"
+                          value={mobile}
+                          onChange={(e) => setMobile(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        We&apos;ll email a reset code to the address on your account.
+                      </p>
+                      <Button type="submit" disabled={loading} className="mt-2">
+                        {loading ? "Sending code..." : "Send code"}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => switchMode("login-pin")}
+                        className="text-center text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Back to sign in
+                      </button>
+                    </form>
+                  )}
+
+                  {mode === "forgot-pin-code" && (
+                    <form onSubmit={onResetPin} className="flex flex-col gap-4">
+                      {info && <p className="text-sm text-emerald-500">{info}</p>}
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="pin-reset-code">Verification code</Label>
+                        <Input
+                          id="pin-reset-code"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          placeholder="123456"
+                          maxLength={6}
+                          className="text-center text-lg tracking-[0.5em]"
+                          value={pinResetCode}
+                          onChange={(e) => setPinResetCode(e.target.value.replace(/\D/g, ""))}
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="new-pin">New PIN</Label>
+                        <Input
+                          id="new-pin"
+                          inputMode="numeric"
+                          autoComplete="new-password"
+                          placeholder="6 digits"
+                          maxLength={6}
+                          className="text-center text-lg tracking-[0.3em]"
+                          value={newPin}
+                          onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
+                          required
+                        />
+                      </div>
+                      <Button type="submit" disabled={loading} className="mt-2">
+                        {loading ? "Resetting..." : "Reset PIN & sign in"}
+                      </Button>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <button type="button" onClick={() => switchMode("forgot-pin-mobile")} className="hover:text-foreground">
+                          Change mobile
+                        </button>
+                        <button type="button" onClick={onSendPinCode} className="hover:text-foreground">
+                          Resend code
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                </motion.div>
+              </AnimatePresence>
+            </motion.div>
           </CardContent>
         </Card>
         <p className="mt-4 text-center text-xs text-muted-foreground">
