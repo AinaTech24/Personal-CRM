@@ -6,7 +6,7 @@ import { format, formatDistanceToNowStrict, isToday, isTomorrow, parseISO } from
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { SkeletonTable } from "@/components/ui/skeleton";
+import { Skeleton, SkeletonCards, SkeletonList } from "@/components/ui/skeleton";
 import {
   IconClock,
   IconCheck,
@@ -162,10 +162,45 @@ export function UserDashboard({ firstName }: { firstName: string }) {
     }
   }
 
+  // Shaped to match the real layout below (greeting card, 3 chart cards, 4
+  // stat tiles, 3 panels) rather than one small centered block — otherwise
+  // this leaves most of the page blank while it loads, which reads as
+  // broken next to a sibling widget like Today's Tasks that fills its own
+  // space with a skeleton right away.
   if (loading) {
     return (
-      <div className="flex min-h-[55vh] flex-1 items-center justify-center">
-        <SkeletonTable rows={4} columns={4} />
+      <div className="flex flex-col gap-5" aria-hidden>
+        <div className="flex flex-col gap-3 rounded-xl border border-border p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-3.5 w-36" />
+            <Skeleton className="h-3.5 w-52" />
+          </div>
+          <Skeleton className="h-9 w-28" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="flex flex-col gap-3 rounded-xl border border-border p-4">
+              <Skeleton className="h-3.5 w-24" />
+              <Skeleton className="h-32 w-full rounded-lg" />
+            </div>
+          ))}
+        </div>
+
+        <SkeletonCards count={4} />
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="overflow-hidden rounded-xl border border-border">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <Skeleton className="h-3.5 w-28" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+              <SkeletonList rows={3} />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
