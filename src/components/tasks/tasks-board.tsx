@@ -166,6 +166,20 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
     loadTasks();
   }, [loadTasks]);
 
+  // Pipeline view shows the whole board at once — its columns group by
+  // status, not by a position in one flat list, so a manual "Load more" at
+  // the bottom (which only ever appends to whatever's already loaded, in
+  // whatever order the API returned it) doesn't map onto it the way it does
+  // for the flat List view: a column's badge count would stay wrong, and
+  // clicking it might not even surface anything new for the column someone's
+  // looking at. Auto-fetch every remaining page instead, so switching to
+  // Pipeline always ends up showing the complete board.
+  useEffect(() => {
+    if (view !== "pipeline" || loading || loadingMore || !hasMore) return;
+    loadMoreTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, loading, loadingMore, hasMore, tasks.length]);
+
   // Assignable users and the current user don't depend on any filter —
   // loaded once, not re-fetched every time a filter changes.
   useEffect(() => {
@@ -607,7 +621,7 @@ export function TasksBoard({ scope }: { scope?: "social-media" | "crm" | `team:$
         </div>
       )}
 
-      {!loading && tasks.length > 0 && (
+      {!loading && view === "list" && tasks.length > 0 && (
         <div className="flex shrink-0 items-center justify-center gap-3 py-1">
           <span className="text-xs text-muted-foreground">
             Showing {tasks.length} of {total} task{total === 1 ? "" : "s"}
